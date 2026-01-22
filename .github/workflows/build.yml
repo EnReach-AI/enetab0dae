@@ -313,10 +313,10 @@ jobs:
 # Client App Build Jobs
 # ============================================================
 
-  build-windows-client:
+  build-windows:
     needs: prepare
-    if: false # temporarily disabled
-    name: Build Windows Client
+    if: needs.prepare.outputs.win == 'true'
+    name: Build Windows
     runs-on: windows-latest
     defaults:
       run:
@@ -329,14 +329,13 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: libstudy-windows
-          path: windows-dll/
+          path: ../windows-dll/
       
-      - name: Copy DLL to executable location
+      - name: Copy DLL to project
         if: needs.prepare.outputs.build_core == 'true'
         run: |
-          if (Test-Path "windows-dll/libstudy.dll") {
-            Copy-Item "windows-dll/libstudy.dll" -Destination "." -Force
-            Get-ChildItem "libstudy.dll"
+          if (Test-Path "../windows-dll/libstudy.dll") {
+            Copy-Item "../windows-dll/libstudy.dll" -Destination "." -Force
           }
       
       - uses: subosito/flutter-action@v2
@@ -352,33 +351,8 @@ jobs:
         run: |
           if (Test-Path "libstudy.dll") {
             Copy-Item "libstudy.dll" -Destination "build\windows\x64\runner\Release\" -Force
-            Get-ChildItem "build\windows\x64\runner\Release\libstudy.dll"
           }
       
-      - name: Copy build output to output directory
-        run: |
-          mkdir -p ../../build-output/windows
-          robocopy "build\windows\x64\runner\Release" "../../build-output/windows" /E /IS || exit 0
-      
-      - name: Upload Windows Release
-        uses: actions/upload-artifact@v4
-        with:
-          name: windows-client
-          path: ${{ env.FLUTTER_DIR }}/build/windows/x64/runner/Release/
-          if-no-files-found: warn
-
-  build-windows-installer:
-    needs: [prepare, build-windows-client]
-    if: needs.prepare.outputs.win == 'true'
-    name: Build Windows Installer
-    runs-on: windows-latest
-    steps:
-      - uses: actions/checkout@v4
-      - name: Download Windows build artifacts
-        uses: actions/download-artifact@v4
-        with:
-          name: windows-client
-          path: windows-build/
       - name: Install Inno Setup
         run: |
           choco install innosetup -y
@@ -388,7 +362,7 @@ jobs:
           #define MyAppName "ARO Mining Client"
           #define MyAppVersion "1.0.0"
           #define MyAppExeName "aro_client.exe"
-          #define SourcePath ".\windows-build\"
+          #define SourcePath ".\build\windows\x64\runner\Release\"
           
           [Setup]
           AppId={{12345678-1234-1234-1234-123456789012}
@@ -454,8 +428,7 @@ jobs:
           path: AROClient-Setup.exe
           if-no-files-found: warn
 
-  build-macos-client:
-    needs: prepare
+ 
     if: false # temporarily disabled
     name: Build macOS Client
     runs-on: macos-latest
@@ -509,70 +482,4 @@ jobs:
           path: ${{ env.FLUTTER_DIR }}/build/macos/Build/Products/Release/
           if-no-files-found: warn
 
-  build-linux-client:
-    needs: prepare
-    if: needs.prepare.outputs.linux == 'true'
-    name: Build Linux Client
-    runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: ${{ env.FLUTTER_DIR }}
-    steps:
-      - uses: actions/checkout@v4
-      - run: |
-          sudo apt-get update
-          sudo apt-get install -y \
-            clang \
-            cmake \
-            ninja-build \
-            pkg-config \
-            libgtk-3-dev \
-            liblzma-dev \
-            libwebkit2gtk-4.0-dev \
-            libgstreamer1.0-dev \
-            libgstreamer-plugins-base1.0-dev
-      
-      - name: Download Linux SO if build_core is true
-        if: needs.prepare.outputs.build_core == 'true'
-        uses: actions/download-artifact@v4
-        with:
-          name: libstudy-linux
-          path: linux-so/
-      
-      - name: Copy SO file
-        if: needs.prepare.outputs.build_core == 'true'
-        run: |
-          if [ -f "linux-so/libstudy.so" ]; then
-            cp linux-so/libstudy.so .
-          fi
-      
-      - uses: subosito/flutter-action@v2
-        with:
-          flutter-version: "3.38.5"
-          cache: true
-      - run: flutter pub get
-      - run: flutter config --enable-linux-desktop
-      - run: flutter build linux --release
-      
-      - name: Copy SO file next to executable
-        if: needs.prepare.outputs.build_core == 'true'
-        run: |
-          if [ -f "libstudy.so" ]; then
-            cp libstudy.so build/linux/x64/release/bundle/
-            ls -lh build/linux/x64/release/bundle/libstudy.so
-          fi
-      
-      - name: Copy build output to output directory
-        run: |
-          mkdir -p ../../build-output/linux
-          cp -r build/linux/x64/release/bundle/* ../../build-output/linux/
-      - run: |
-          cd build/linux/x64/release/bundle
-          tar -czf aro_linux.tar.gz *
-      - name: Upload Linux App
-        uses: actions/upload-artifact@v4
-        with:
-          name: linux-client
-          path: build/linux/x64/release/bundle/aro_linux.tar.gz
-
-
+  
