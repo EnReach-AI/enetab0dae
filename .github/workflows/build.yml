@@ -312,9 +312,9 @@ jobs:
 # ============================================================
 # Client App Build Jobs
 # ============================================================
-
   build-windows:
-    needs: prepare
+    needs: [prepare, build-core-windows]
+    if: needs.prepare.outputs.build_core == 'true'
     name: Build Windows
     runs-on: windows-latest
     defaults:
@@ -427,59 +427,5 @@ jobs:
           path: AROClient-Setup.exe
           if-no-files-found: warn
 
-  build-macos-client:
-    needs: prepare
-    if: false # temporarily disabled
-    name: Build macOS Client
-    runs-on: macos-latest
-    defaults:
-      run:
-        working-directory: ${{ env.FLUTTER_DIR }}
-    steps:
-      - uses: actions/checkout@v4
-      
-      - name: Download macOS dylib if build_core is true
-        if: needs.prepare.outputs.build_core == 'true'
-        uses: actions/download-artifact@v4
-        with:
-          name: libstudy-macos
-          path: macos-dylib/
-      
-      - name: Copy dylib to app bundle Frameworks
-        if: needs.prepare.outputs.build_core == 'true'
-        run: |
-          if [ -f "macos-dylib/libstudy.dylib" ]; then
-            # We'll copy after build into the app bundle
-            cp macos-dylib/libstudy.dylib .
-          fi
-      
-      - uses: subosito/flutter-action@v2
-        with:
-          flutter-version: "3.38.5"
-          cache: true
-      - run: flutter pub get
-      - run: flutter config --enable-macos-desktop
-      - run: flutter build macos --release
-      
-      - name: Copy dylib into app bundle
-        if: needs.prepare.outputs.build_core == 'true'
-        run: |
-          if [ -f "libstudy.dylib" ]; then
-            # macOS app bundle structure
-            mkdir -p "build/macos/Build/Products/Release/aro_client.app/Contents/Frameworks"
-            cp libstudy.dylib "build/macos/Build/Products/Release/aro_client.app/Contents/Frameworks/"
-            ls -lh "build/macos/Build/Products/Release/aro_client.app/Contents/Frameworks/libstudy.dylib"
-          fi
-      
-      - name: Copy build output to output directory
-        run: |
-          mkdir -p ../../build-output/macos
-          cp -r build/macos/Build/Products/Release/* ../../build-output/macos/
-      - name: Upload macOS App
-        uses: actions/upload-artifact@v4
-        with:
-          name: macos-client
-          path: ${{ env.FLUTTER_DIR }}/build/macos/Build/Products/Release/
-          if-no-files-found: warn
 
   
