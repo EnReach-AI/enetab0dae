@@ -31,6 +31,8 @@ type ServerConfig struct {
 	BaseWSURL  string
 }
 
+
+
 // InitParams 初始化参数结构体
 type InitParams struct {
 	Config ServerConfig `json:"config"`
