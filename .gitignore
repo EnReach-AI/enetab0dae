@@ -44,7 +44,8 @@ coverage/
 *.dll
 *.so
 *.dylib
-*.h
+# Ignore C header files in core directory (Go FFI generated)
+core/**/*.h
 
 # Ignore Go compiled binaries
 core/bin/
