@@ -92,7 +92,8 @@ jobs:
 
   build-core-linux:
     needs: prepare
-    if: needs.prepare.outputs.build_core == 'true'
+    # if: needs.prepare.outputs.build_core == 'true'
+    if: false
     name: Build Core Linux x64
     runs-on: ubuntu-latest
     
@@ -126,7 +127,7 @@ jobs:
 
   build-core-linux-arm64:
     needs: prepare
-    if: needs.prepare.outputs.build_core == 'true'
+    if: false
     name: Build Core Linux ARM64
     runs-on: ubuntu-latest
     
@@ -342,6 +343,8 @@ jobs:
           flutter-version: "3.38.5"
           cache: true
       
+      - run: flutter config --enable-windows-desktop
+      - run: flutter precache --windows
       - run: flutter clean
       - run: flutter pub get
       - run: flutter build windows --release
