@@ -1,0 +1,79 @@
+# Node
+node_modules/
+
+# Dependency directories
+pnpm-lock.yaml
+yarn.lock
+package-lock.json
+
+# Build output
+dist/
+build/
+out/
+test/
+*.log
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# VSCode
+.vscode/
+
+# Env
+.env
+.env.*
+
+# Misc
+*.swp
+*.swo
+*.tmp
+
+# Ignore coverage
+coverage/
+
+# Ignore IDE
+.idea/
+*.iml
+
+# Ignore test output
+*.test-results
+
+# Ignore compiled files
+*.exe
+*.dll
+*.so
+*.dylib
+*.h
+
+# Ignore Go compiled binaries
+core/bin/
+core/test_proxy_worker
+core/cmd/test_proxy_worker/test_proxy_worker
+plugins/*/libstudy.*
+
+# Ignore archives
+*.zip
+*.tar.gz
+*.tgz
+*.rar
+
+# Ignore background and temp files
+*.bak
+*.tmp
+
+# Ignore extension build artifacts
+aro-ext-app/dist/
+aro-ext-app/.next/
+aro-ext-app/.turbo/
+aro-ext-app/.cache/
+aro-ext-app/coverage/
+.env
+aro-ext-app/core/.env
+
+# Ignore RSA key files
+core/aro_rsa
+core/aro_rsa.pub
+
+
+.history

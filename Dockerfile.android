@@ -1,0 +1,20 @@
+# 用于编译 Android 版本的 Go 动态库
+FROM golang:1.25-alpine
+
+# 安装 Android NDK
+RUN apk add --no-cache curl unzip && \
+    curl -L https://dl.google.com/android/repository/android-ndk-r25c-linux.zip -o /tmp/ndk.zip && \
+    unzip /tmp/ndk.zip -d /opt && \
+    rm /tmp/ndk.zip
+
+ENV ANDROID_NDK_ROOT=/opt/android-ndk-r25c
+
+WORKDIR /build
+COPY core /build
+
+RUN CC="$ANDROID_NDK_ROOT/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android21-clang" \
+    CGO_ENABLED=1 GOOS=android GOARCH=arm64 go build \
+    -buildmode=c-shared -o /build/libstudy.so ./pkg/libstudy && \
+    cp /build/pkg/libstudy/libstudy.h /build/
+
+CMD ["echo", "Android build complete"]

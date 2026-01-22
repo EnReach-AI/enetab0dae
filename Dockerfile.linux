@@ -1,0 +1,15 @@
+# 用于编译 Linux 版本的 Go 动态库
+FROM golang:1.25-alpine
+
+RUN apk add --no-cache gcc musl-dev
+
+WORKDIR /build
+COPY core /build
+
+RUN CGO_ENABLED=1 GOOS=linux GOARCH=amd64 go build -buildmode=c-shared \
+    -o /build/libstudy.so ./pkg/libstudy
+
+# 确保头文件可以被复制
+RUN cp /build/pkg/libstudy/libstudy.h /build/
+
+CMD ["echo", "Linux build complete"]

@@ -1,0 +1,44 @@
+name: aro_client
+description: A new Flutter project.
+
+publish_to: "none" # Remove this line if you wish to publish to pub.dev
+
+version: 0.0.1+1
+
+environment:
+  sdk: ">=3.0.0 <4.0.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+  provider: ^6.0.0
+  window_manager: ^0.3.7
+
+  ffi: ^2.0.0
+  s_webview: ^2.0.0
+  webview_flutter: ^4.0.0
+  path_provider: ^2.1.5
+  flutter_launcher_icons: ^0.13.1
+  webview_flutter_wkwebview: ^3.23.5
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^2.0.0
+
+dependency_overrides:
+  path: ^1.9.1 # Use a compatible version of the path package
+
+flutter:
+  uses-material-design: true
+  generate: true
+
+  assets:
+    - lib/assets/app_icon.png
+    - lib/assets/app_icon_1024.png
+
+
+flutter_icons:
+  android: true
+  ios: true
+  image_path: "lib/assets/app_icon_1024.png"

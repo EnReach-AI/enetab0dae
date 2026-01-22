@@ -1,0 +1,130 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "ARO Configuration Schema",
+  "type": "object",
+  "description": "统一的配置架构，定义所有支持的配置项及其验证规则",
+  
+  "definitions": {
+    "apiConfig": {
+      "type": "object",
+      "properties": {
+        "API_URL": {
+          "type": "string",
+          "format": "uri",
+          "description": "API 服务器地址",
+          "examples": ["https://testnet-api.aro.network", "https://api.aro.network"]
+        },
+        "WS_URL": {
+          "type": "string",
+          "format": "uri",
+          "description": "WebSocket 服务器地址",
+          "examples": ["https://testnet-ws.aro.network", "wss://ws.aro.network"]
+        }
+      }
+    },
+    
+    "logConfig": {
+      "type": "object",
+      "properties": {
+        "LOG_LEVEL": {
+          "type": "string",
+          "enum": ["debug", "info", "warn", "error"],
+          "default": "info",
+          "description": "日志级别"
+        },
+        "LOG_FILE": {
+          "type": "string",
+          "description": "日志文件路径（空则输出到控制台）",
+          "examples": ["./logs/app.log", "/var/log/aro/app.log"]
+        }
+      }
+    },
+    
+    "storageConfig": {
+      "type": "object",
+      "properties": {
+        "KEYPAIR_PATH": {
+          "type": "string",
+          "description": "密钥对存储路径",
+          "examples": [".", "./keys", "/etc/aro/keys"]
+        },
+        "STORAGE_PATH": {
+          "type": "string",
+          "description": "本地存储路径",
+          "examples": [".", "./data", "/var/lib/aro"]
+        }
+      }
+    },
+    
+    "networkConfig": {
+      "type": "object",
+      "properties": {
+        "TIMEOUT": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 300,
+          "default": 30,
+          "description": "请求超时时间（秒）"
+        },
+        "RETRY_COUNT": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 10,
+          "default": 3,
+          "description": "重试次数"
+        },
+        "RETRY_INTERVAL": {
+          "type": "integer",
+          "minimum": 100,
+          "maximum": 60000,
+          "default": 1000,
+          "description": "重试间隔（毫秒）"
+        }
+      }
+    },
+    
+    "environmentConfig": {
+      "type": "object",
+      "properties": {
+        "ENV": {
+          "type": "string",
+          "enum": ["testnet", "mainnet"],
+          "default": "testnet",
+          "description": "运行环境"
+        },
+        "PROGRAM_APP": {
+          "type": "string",
+          "default": "aro-ext",
+          "description": "应用名称"
+        },
+        "DEBUG": {
+          "type": "boolean",
+          "default": false,
+          "description": "调试模式"
+        }
+      }
+    }
+  },
+  
+  "properties": {
+    "API_URL": { "$ref": "#/definitions/apiConfig/properties/API_URL" },
+    "WS_URL": { "$ref": "#/definitions/apiConfig/properties/WS_URL" },
+    "LOG_LEVEL": { "$ref": "#/definitions/logConfig/properties/LOG_LEVEL" },
+    "LOG_FILE": { "$ref": "#/definitions/logConfig/properties/LOG_FILE" },
+    "KEYPAIR_PATH": { "$ref": "#/definitions/storageConfig/properties/KEYPAIR_PATH" },
+    "STORAGE_PATH": { "$ref": "#/definitions/storageConfig/properties/STORAGE_PATH" },
+    "TIMEOUT": { "$ref": "#/definitions/networkConfig/properties/TIMEOUT" },
+    "RETRY_COUNT": { "$ref": "#/definitions/networkConfig/properties/RETRY_COUNT" },
+    "RETRY_INTERVAL": { "$ref": "#/definitions/networkConfig/properties/RETRY_INTERVAL" },
+    "ENV": { "$ref": "#/definitions/environmentConfig/properties/ENV" },
+    "PROGRAM_APP": { "$ref": "#/definitions/environmentConfig/properties/PROGRAM_APP" },
+    "DEBUG": { "$ref": "#/definitions/environmentConfig/properties/DEBUG" }
+  },
+  
+  "additionalProperties": {
+    "type": "string",
+    "description": "允许自定义配置项"
+  },
+  
+  "required": ["API_URL", "WS_URL"]
+}
