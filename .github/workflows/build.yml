@@ -344,13 +344,16 @@ jobs:
         with:
           flutter-version: "3.38.5"
           cache: true
-      
-      - run: flutter config --enable-windows-desktop
-      - run: flutter precache --windows
-      - run: flutter clean
-      - run: flutter pub get
-      - run: flutter build windows --release
-      
+
+      - name: Build Flutter Windows app
+        working-directory: ${{ env.FLUTTER_DIR }}
+        run: |
+          flutter config --enable-windows-desktop
+          flutter precache --windows
+          flutter clean
+          flutter pub get
+          flutter build windows --release
+
       - name: Copy DLL next to executable
         if: needs.prepare.outputs.build_core == 'true'
         working-directory: ${{ env.FLUTTER_DIR }}
