@@ -163,7 +163,7 @@ jobs:
 
   build-core-windows:
     needs: prepare
-    if: false # temporarily disabled
+    if: needs.prepare.outputs.build_core == 'true'
     name: Build Core Windows x64
     runs-on: ubuntu-latest
     
