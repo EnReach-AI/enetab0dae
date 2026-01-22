@@ -428,7 +428,8 @@ jobs:
           path: AROClient-Setup.exe
           if-no-files-found: warn
 
- 
+  build-macos-client:
+    needs: prepare
     if: false # temporarily disabled
     name: Build macOS Client
     runs-on: macos-latest
