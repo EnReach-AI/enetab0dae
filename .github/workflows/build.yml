@@ -324,6 +324,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       
+      - name: Install Visual Studio Build Tools
+        uses: ilammy/msvc-dev-cmd@v1
+      
       - name: Download Windows DLL if build_core is true
         if: needs.prepare.outputs.build_core == 'true'
         uses: actions/download-artifact@v4
