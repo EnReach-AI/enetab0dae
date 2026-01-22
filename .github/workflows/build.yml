@@ -318,9 +318,6 @@ jobs:
     if: needs.prepare.outputs.build_core == 'true'
     name: Build Windows
     runs-on: windows-latest
-    defaults:
-      run:
-        working-directory: ${{ env.FLUTTER_DIR }}
     steps:
       - uses: actions/checkout@v4
 
@@ -333,9 +330,10 @@ jobs:
         with:
           name: libstudy-windows
           path: ../windows-dll/
-
+      
       - name: Copy DLL to project
         if: needs.prepare.outputs.build_core == 'true'
+        working-directory: ${{ env.FLUTTER_DIR }}
         run: |
           if (Test-Path "../windows-dll/libstudy.dll") {
             New-Item -ItemType Directory -Force -Path "lib/ffi/windows"
@@ -346,15 +344,16 @@ jobs:
         with:
           flutter-version: "3.38.5"
           cache: true
-
+      
       - run: flutter config --enable-windows-desktop
       - run: flutter precache --windows
       - run: flutter clean
       - run: flutter pub get
       - run: flutter build windows --release
-
+      
       - name: Copy DLL next to executable
         if: needs.prepare.outputs.build_core == 'true'
+        working-directory: ${{ env.FLUTTER_DIR }}
         run: |
           if (Test-Path "lib/ffi/windows/libstudy.dll") {
             Copy-Item "lib/ffi/windows/libstudy.dll" -Destination "build\windows\x64\runner\Release\" -Force
@@ -364,6 +363,7 @@ jobs:
         run: |
           choco install innosetup -y
       - name: Create installer script
+        working-directory: ${{ env.FLUTTER_DIR }}
         run: |
           $installerScript = @"
           #define MyAppName "ARO Mining Client"
@@ -426,11 +426,12 @@ jobs:
 
           Set-Content -Path "aro_installer.iss" -Value $installerScript
       - name: Build installer with Inno Setup
+        working-directory: ${{ env.FLUTTER_DIR }}
         run: |
           & "C:\Program Files (x86)\Inno Setup 6\iscc.exe" aro_installer.iss
       - name: Upload Windows Installer
         uses: actions/upload-artifact@v4
         with:
           name: windows-installer
-          path: AROClient-Setup.exe
+          path: ${{ env.FLUTTER_DIR }}/AROClient-Setup.exe
           if-no-files-found: warn
