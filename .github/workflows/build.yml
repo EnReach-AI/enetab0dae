@@ -4,14 +4,14 @@ on:
   push:
     branches: ["main"]
     paths:
-      - 'core/**'
-      - 'apps/aro_client/**'
-      - 'Dockerfile.*'
-      - '.github/workflows/build.yml'
+      - "core/**"
+      - "apps/aro_client/**"
+      - "Dockerfile.*"
+      - ".github/workflows/build.yml"
   pull_request:
     paths:
-      - 'core/**'
-      - 'apps/aro_client/**'
+      - "core/**"
+      - "apps/aro_client/**"
   workflow_dispatch:
 
 env:
@@ -86,9 +86,9 @@ jobs:
 
           exit 0
 
-# ============================================================
-# Core Library Build Jobs
-# ============================================================
+  # ============================================================
+  # Core Library Build Jobs
+  # ============================================================
 
   build-core-linux:
     needs: prepare
@@ -96,15 +96,15 @@ jobs:
     if: false
     name: Build Core Linux x64
     runs-on: ubuntu-latest
-    
+
     steps:
       - uses: actions/checkout@v3
-      
+
       - name: Set up Go
         uses: actions/setup-go@v4
         with:
-          go-version: '1.25'
-      
+          go-version: "1.25"
+
       - name: Build Linux x64
         run: |
           cd core
@@ -112,13 +112,13 @@ jobs:
             -buildmode=c-shared -trimpath -ldflags="-s -w -buildid=" \
             -o ../plugins/linux/libstudy.so ./pkg/libstudy
           ls -lh ../plugins/linux/libstudy.so
-      
+
       - name: Copy library to Flutter FFI directory
         run: |
           mkdir -p apps/aro_client/lib/ffi/linux
           cp plugins/linux/libstudy.so apps/aro_client/lib/ffi/linux/
           ls -lh apps/aro_client/lib/ffi/linux/libstudy.so
-      
+
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
@@ -130,18 +130,18 @@ jobs:
     if: false
     name: Build Core Linux ARM64
     runs-on: ubuntu-latest
-    
+
     steps:
       - uses: actions/checkout@v3
-      
+
       - name: Set up Go
         uses: actions/setup-go@v4
         with:
-          go-version: '1.25'
-      
+          go-version: "1.25"
+
       - name: Install ARM64 cross-compiler
         run: sudo apt-get update && sudo apt-get install -y gcc-aarch64-linux-gnu
-      
+
       - name: Build Linux ARM64
         run: |
           cd core
@@ -149,13 +149,13 @@ jobs:
             -buildmode=c-shared -trimpath -ldflags="-s -w -buildid=" \
             -o ../plugins/linux-arm64/libstudy.so ./pkg/libstudy
           ls -lh ../plugins/linux-arm64/libstudy.so
-      
+
       - name: Copy library to Flutter FFI directory
         run: |
           mkdir -p apps/aro_client/lib/ffi/linux-arm64
           cp plugins/linux-arm64/libstudy.so apps/aro_client/lib/ffi/linux-arm64/
           ls -lh apps/aro_client/lib/ffi/linux-arm64/libstudy.so
-      
+
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
@@ -167,18 +167,18 @@ jobs:
     if: needs.prepare.outputs.build_core == 'true'
     name: Build Core Windows x64
     runs-on: ubuntu-latest
-    
+
     steps:
       - uses: actions/checkout@v3
-      
+
       - name: Set up Go
         uses: actions/setup-go@v4
         with:
-          go-version: '1.25'
-      
+          go-version: "1.25"
+
       - name: Install MinGW
         run: sudo apt-get update && sudo apt-get install -y mingw-w64
-      
+
       - name: Build Windows x64
         run: |
           cd core
@@ -186,13 +186,13 @@ jobs:
             -buildmode=c-shared -trimpath -ldflags="-s -w -buildid=" \
             -o ../plugins/windows/libstudy.dll ./pkg/libstudy
           ls -lh ../plugins/windows/libstudy.dll
-      
+
       - name: Copy library to Flutter FFI directory
         run: |
           mkdir -p apps/aro_client/lib/ffi/windows
           cp plugins/windows/libstudy.dll apps/aro_client/lib/ffi/windows/
           ls -lh apps/aro_client/lib/ffi/windows/libstudy.dll
-      
+
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
@@ -204,15 +204,15 @@ jobs:
     if: false # temporarily disabled
     name: Build Core macOS
     runs-on: macos-latest
-    
+
     steps:
       - uses: actions/checkout@v3
-      
+
       - name: Set up Go
         uses: actions/setup-go@v4
         with:
-          go-version: '1.25'
-      
+          go-version: "1.25"
+
       - name: Build macOS ARM64
         run: |
           cd core
@@ -220,13 +220,13 @@ jobs:
             -buildmode=c-shared -trimpath -ldflags="-s -w -buildid=" \
             -o ../plugins/macos/libstudy.dylib ./pkg/libstudy
           ls -lh ../plugins/macos/libstudy.dylib
-      
+
       - name: Copy library to Flutter FFI directory
         run: |
           mkdir -p apps/aro_client/lib/ffi/macos
           cp plugins/macos/libstudy.dylib apps/aro_client/lib/ffi/macos/
           ls -lh apps/aro_client/lib/ffi/macos/libstudy.dylib
-      
+
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
@@ -238,20 +238,20 @@ jobs:
     if: false # temporarily disabled
     name: Build Core Android ARM64
     runs-on: ubuntu-latest
-    
+
     steps:
       - uses: actions/checkout@v3
-      
+
       - name: Set up Go
         uses: actions/setup-go@v4
         with:
-          go-version: '1.25'
-      
+          go-version: "1.25"
+
       - name: Set up Android NDK
         uses: nttld/setup-ndk@v1
         with:
           ndk-version: r25c
-      
+
       - name: Build Android ARM64
         run: |
           cd core
@@ -260,13 +260,13 @@ jobs:
             -buildmode=c-shared -trimpath -ldflags="-s -w -buildid=" \
             -o ../plugins/android/libstudy.so ./pkg/libstudy
           ls -lh ../plugins/android/libstudy.so
-      
+
       - name: Copy library to Flutter FFI directory
         run: |
           mkdir -p apps/aro_client/lib/ffi/android
           cp plugins/android/libstudy.so apps/aro_client/lib/ffi/android/
           ls -lh apps/aro_client/lib/ffi/android/libstudy.so
-      
+
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
@@ -278,15 +278,15 @@ jobs:
     if: false # temporarily disabled
     name: Build Core iOS
     runs-on: macos-latest
-    
+
     steps:
       - uses: actions/checkout@v3
-      
+
       - name: Set up Go
         uses: actions/setup-go@v4
         with:
-          go-version: '1.25'
-      
+          go-version: "1.25"
+
       - name: Build iOS ARM64
         run: |
           cd core
@@ -297,22 +297,22 @@ jobs:
             -trimpath -ldflags="-s -w -buildid=" \
             -o ../plugins/ios/libstudy.a ./pkg/libstudy
           ls -lh ../plugins/ios/libstudy.a
-      
+
       - name: Copy library to Flutter FFI directory
         run: |
           mkdir -p apps/aro_client/lib/ffi/ios
           cp plugins/ios/libstudy.a apps/aro_client/lib/ffi/ios/
           ls -lh apps/aro_client/lib/ffi/ios/libstudy.a
-      
+
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
           name: libstudy-ios
           path: plugins/ios/
 
-# ============================================================
-# Client App Build Jobs
-# ============================================================
+  # ============================================================
+  # Client App Build Jobs
+  # ============================================================
   build-windows:
     needs: [prepare, build-core-windows]
     if: needs.prepare.outputs.build_core == 'true'
@@ -323,42 +323,43 @@ jobs:
         working-directory: ${{ env.FLUTTER_DIR }}
     steps:
       - uses: actions/checkout@v4
-      
+
       - name: Install Visual Studio Build Tools
         uses: ilammy/msvc-dev-cmd@v1
-      
+
       - name: Download Windows DLL if build_core is true
         if: needs.prepare.outputs.build_core == 'true'
         uses: actions/download-artifact@v4
         with:
           name: libstudy-windows
           path: ../windows-dll/
-      
+
       - name: Copy DLL to project
         if: needs.prepare.outputs.build_core == 'true'
         run: |
           if (Test-Path "../windows-dll/libstudy.dll") {
-            Copy-Item "../windows-dll/libstudy.dll" -Destination "." -Force
+            New-Item -ItemType Directory -Force -Path "lib/ffi/windows"
+            Copy-Item "../windows-dll/libstudy.dll" -Destination "lib/ffi/windows/" -Force
           }
-      
+
       - uses: subosito/flutter-action@v2
         with:
           flutter-version: "3.38.5"
           cache: true
-      
+
       - run: flutter config --enable-windows-desktop
       - run: flutter precache --windows
       - run: flutter clean
       - run: flutter pub get
       - run: flutter build windows --release
-      
+
       - name: Copy DLL next to executable
         if: needs.prepare.outputs.build_core == 'true'
         run: |
-          if (Test-Path "libstudy.dll") {
-            Copy-Item "libstudy.dll" -Destination "build\windows\x64\runner\Release\" -Force
+          if (Test-Path "lib/ffi/windows/libstudy.dll") {
+            Copy-Item "lib/ffi/windows/libstudy.dll" -Destination "build\windows\x64\runner\Release\" -Force
           }
-      
+
       - name: Install Inno Setup
         run: |
           choco install innosetup -y
@@ -369,7 +370,7 @@ jobs:
           #define MyAppVersion "1.0.0"
           #define MyAppExeName "aro_client.exe"
           #define SourcePath ".\build\windows\x64\runner\Release\"
-          
+
           [Setup]
           AppId={{12345678-1234-1234-1234-123456789012}
           AppName={#MyAppName}
@@ -390,39 +391,39 @@ jobs:
           UninstallFilesDir={app}\uninstall
           CreateUninstallRegKey=yes
           Uninstallable=yes
-          
+
           [Languages]
           Name: "english"; MessagesFile: "compiler:Default.isl"
           Name: "chinese"; MessagesFile: "compiler:Languages\ChineseSimplified.isl"
-          
+
           [Tasks]
           Name: "desktopicon"; Description: "{cm:CreateDesktopIconTask}"; GroupDescription: "{cm:AdditionalIcons}"; Flags: unchecked
           Name: "quicklaunchicon"; Description: "{cm:CreateQuickLaunchIconTask}"; GroupDescription: "{cm:AdditionalIcons}"; Flags: unchecked; OnlyBelowVersion: 6.1
           Name: "startmenu"; Description: "Create Start Menu shortcuts"; GroupDescription: "{cm:AdditionalIcons}"; Flags: checked
           Name: "autostart"; Description: "Run at startup"; GroupDescription: "Launch options"; Flags: unchecked
           Name: "contextmenu"; Description: "Add context menu shortcuts"; GroupDescription: "Shell integration"; Flags: unchecked
-          
+
           [Files]
           Source: "{#SourcePath}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
-          
+
           [Icons]
           Name: "{group}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"
           Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; Tasks: desktopicon
           Name: "{userappdata}\Microsoft\Internet Explorer\Quick Launch\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; Tasks: quicklaunchicon
           Name: "{group}\Uninstall {#MyAppName}"; Filename: "{uninstallexe}"
-          
+
           [Run]
           Filename: "{app}\{#MyAppExeName}"; Description: "{cm:LaunchProgram,{#StringChange(MyAppName, '&', '&&')}}"; Flags: nowait postinstall skipifsilent
-          
+
           [Registry]
           Root: "HKCU"; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; ValueName: "{#MyAppName}"; ValueType: string; ValueData: "{app}\{#MyAppExeName}"; Flags: uninsdeletevalue; Tasks: autostart
           Root: "HKCU"; Subkey: "Software\Classes\*\shell\Open with {#MyAppName}"; ValueType: string; ValueData: "Open with {#MyAppName}"; Tasks: contextmenu; Flags: uninsdeletekey
           Root: "HKCU"; Subkey: "Software\Classes\*\shell\Open with {#MyAppName}\command"; ValueType: string; ValueData: """{app}\{#MyAppExeName}"" ""%1"""; Tasks: contextmenu
-          
+
           [UninstallDelete]
           Type: dirifempty; Name: "{app}"
           "@
-          
+
           Set-Content -Path "aro_installer.iss" -Value $installerScript
       - name: Build installer with Inno Setup
         run: |
@@ -433,6 +434,3 @@ jobs:
           name: windows-installer
           path: AROClient-Setup.exe
           if-no-files-found: warn
-
-
-  
