@@ -24,6 +24,7 @@ import (
 	"aro-ext-app/core/internal/ws_client"
 )
 
+
 // ServerConfig 结构体用于管理服务器配置参数
 type ServerConfig struct {
 	BaseAPIURL string
