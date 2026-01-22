@@ -315,7 +315,6 @@ jobs:
 
   build-windows:
     needs: prepare
-    if: needs.prepare.outputs.win == 'true'
     name: Build Windows
     runs-on: windows-latest
     defaults:
