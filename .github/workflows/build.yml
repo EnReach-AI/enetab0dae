@@ -329,15 +329,14 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: libstudy-windows
-          path: ../windows-dll/
+          path: windows-dll
       
       - name: Copy DLL to project
         if: needs.prepare.outputs.build_core == 'true'
-        working-directory: ${{ env.FLUTTER_DIR }}
         run: |
-          if (Test-Path "../windows-dll/libstudy.dll") {
-            New-Item -ItemType Directory -Force -Path "lib/ffi/windows"
-            Copy-Item "../windows-dll/libstudy.dll" -Destination "lib/ffi/windows/" -Force
+          if (Test-Path "windows-dll/libstudy.dll") {
+            New-Item -ItemType Directory -Force -Path "${{ env.FLUTTER_DIR }}/lib/ffi/windows"
+            Copy-Item "windows-dll/libstudy.dll" -Destination "${{ env.FLUTTER_DIR }}/lib/ffi/windows/" -Force
           }
 
       - uses: subosito/flutter-action@v2
