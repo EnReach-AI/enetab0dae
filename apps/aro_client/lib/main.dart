@@ -216,7 +216,7 @@ class _MyHomePageState extends State<MyHomePage> {
     try {
       final appDir = await getAppSupportDir();
       print('Generate file directory 123: $appDir');
-      final service = StudyService.instance;
+      // final service = StudyService.instance; // Remove local variable to avoid confusion
       final initResult = service.nodeInit(appDir, {
         "config": {
           "BaseAPIURL": "https://staging-dashboard.aro.network",
@@ -225,10 +225,11 @@ class _MyHomePageState extends State<MyHomePage> {
       });
 
       LoggerService().info('Init result: $initResult ------- ');
+      service.nodeSignUp(); // Move inside try block
     } catch (e) {
       print('Error initializing node: $e');
+      LoggerService().error('Error initializing node', e);
     }
-    service.nodeSignUp();
   }
 
   void sendToWeb(Map<String, dynamic> data) {
