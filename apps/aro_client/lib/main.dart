@@ -86,7 +86,7 @@ class MyHomePage extends StatefulWidget {
 
 class _MyHomePageState extends State<MyHomePage> {
   late final WebViewController _controller;
-  final service = StudyService.instance;
+  // final service = StudyService.instance;
 
   // void sendToWeb(Map<String, dynamic> data) {
   //   final json = jsonEncode(data);
@@ -189,24 +189,24 @@ class _MyHomePageState extends State<MyHomePage> {
     }
   }
 
-  Future<void> initNode() async {
-    try {
-      final appDir = await getAppSupportDir();
-      print('Generate file directory 123: $appDir');
-      final service = StudyService.instance;
-      final initResult = service.nodeInit(appDir, {
-        "config": {
-          "BaseAPIURL": "https://staging-dashboard.aro.network",
-          "BaseWSURL": "wss://staging-ws.aro.network"
-        }
-      });
+  // Future<void> initNode() async {
+  //   try {
+  //     final appDir = await getAppSupportDir();
+  //     print('Generate file directory 123: $appDir');
+  //     final service = StudyService.instance;
+  //     final initResult = service.nodeInit(appDir, {
+  //       "config": {
+  //         "BaseAPIURL": "https://staging-dashboard.aro.network",
+  //         "BaseWSURL": "wss://staging-ws.aro.network"
+  //       }
+  //     });
 
-      LoggerService().info('Init result: $initResult ------- ');
-    } catch (e) {
-      print('Error initializing node: $e');
-    }
-    final status = service.nodeSignUp();
-  }
+  //     LoggerService().info('Init result: $initResult ------- ');
+  //   } catch (e) {
+  //     print('Error initializing node: $e');
+  //   }
+  //   final status = service.nodeSignUp();
+  // }
 
   void sendToWeb(Map<String, dynamic> data) {
     final json = jsonEncode(data);
@@ -219,9 +219,9 @@ class _MyHomePageState extends State<MyHomePage> {
   void initState() {
     super.initState();
     // Initialize node in background, don't block UI
-    initNode().catchError((e) {
-      print('initNode error caught: $e');
-    });
+    // initNode().catchError((e) {
+    //   print('initNode error caught: $e');
+    // });
     _controller = WebViewController()
       ..setJavaScriptMode(JavaScriptMode.unrestricted)
       ..addJavaScriptChannel(
