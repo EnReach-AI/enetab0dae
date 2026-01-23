@@ -95,15 +95,10 @@ class StudyService {
 
   String _handleResult(Pointer<Utf8> ptr) {
     if (ptr == nullptr) return '';
-    try {
-      final str = ptr.toDartString();
-      return str;
-    } finally {
-      print('Freeing memory for pointer: $ptr');
-      // Free the memory allocated by C
-      // We use malloc.free because the C string is expected to be allocated on the heap.
-      // If it was allocated with a different allocator, this might crash, but standard C/Go FFI uses malloc.
-      malloc.free(ptr);
-    }
+    // 直接转换字符串，不释放内存
+    // Go 的 C.CString() 分配的内存由 Go 运行时管理
+    // 不能用 Dart 的 malloc.free() 释放，否则 Windows 会崩溃
+    final str = ptr.toDartString();
+    return str;
   }
 }
