@@ -223,6 +223,7 @@ func InitLibstudy(initParamsJSON *C.char) *C.char {
 		}
 	}
 
+	
 	// 加载或创建密钥对
 	var err error
 	keyPair, err = crypto.GetOrCreateKeyPair("")
