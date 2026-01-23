@@ -163,13 +163,16 @@ class _MyHomePageState extends State<MyHomePage> {
     }
   }
 
-  void initNode() async {
-    final appDir = await getAppSupportDir();
-    print('Generate file directory 123: $appDir');
-    final service = StudyService.instance;
-    final initResult = service.nodeInit(appDir);
-
-    print('Init result: $initResult ------- ');
+  Future<void> initNode() async {
+    try {
+      final appDir = await getAppSupportDir();
+      print('Generate file directory 123: $appDir');
+      final service = StudyService.instance;
+      final initResult = service.nodeInit(appDir);
+      print('Init result: $initResult ------- ');
+    } catch (e) {
+      print('Error initializing node: $e');
+    }
   }
 
   void sendToWeb(Map<String, dynamic> data) {
@@ -182,7 +185,10 @@ class _MyHomePageState extends State<MyHomePage> {
   @override
   void initState() {
     super.initState();
-    initNode();
+    // Initialize node in background, don't block UI
+    initNode().catchError((e) {
+      print('initNode error caught: $e');
+    });
     _controller = WebViewController()
       ..setJavaScriptMode(JavaScriptMode.unrestricted)
       ..addJavaScriptChannel(
