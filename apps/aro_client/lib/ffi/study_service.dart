@@ -45,7 +45,10 @@ class StudyService {
     final configJson = jsonEncode(config);
     final configPtr = configJson.toNativeUtf8();
     final ptr = StudyBindings.initLibstudy(configPtr);
+
+    malloc.free(ptr);
     malloc.free(configPtr);
+
     // const configJson = "{"
     //     "\"sn\": \"NLYN2Q0PYRAFQOWHK5R\","
     //     "\"token\": \"1\","

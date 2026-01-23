@@ -1,5 +1,12 @@
 import 'dart:ffi';
 import 'dart:io';
+import 'package:ffi/ffi.dart';
+
+// Win32 MessageBox API
+typedef MessageBoxC = Int32 Function(
+    IntPtr hWnd, Pointer<Utf8> lpText, Pointer<Utf8> lpCaption, Uint32 uType);
+typedef MessageBoxDart = int Function(
+    int hWnd, Pointer<Utf8> lpText, Pointer<Utf8> lpCaption, int uType);
 
 class StudyLibrary {
   StudyLibrary._internal();
@@ -11,6 +18,41 @@ class StudyLibrary {
     _lib ??= _open();
     _initOnce();
     return _lib!;
+  }
+
+  static void ensureInitialized() {
+    try {
+      if (_lib == null) {
+        _lib = _open();
+        _initOnce();
+      }
+    } catch (e) {
+      if (Platform.isWindows) {
+        _showWindowsErrorDialog(
+            'Failed to load core library (libstudy.dll).\n\n'
+            'Please ensure libstudy.dll is in the same directory as the executable.\n\n'
+            'Error details:\n$e');
+      }
+      rethrow;
+    }
+  }
+
+  static void _showWindowsErrorDialog(String message) {
+    try {
+      final user32 = DynamicLibrary.open('user32.dll');
+      final messageBox =
+          user32.lookupFunction<MessageBoxC, MessageBoxDart>('MessageBoxA');
+
+      final text = message.toNativeUtf8();
+      final caption = 'Error'.toNativeUtf8();
+
+      const uType = 0x00000000 | 0x00000010 | 0x00040000;
+
+      messageBox(0, text, caption, uType);
+
+      malloc.free(text);
+      malloc.free(caption);
+    } catch (_) {}
   }
 
   static DynamicLibrary _open() {

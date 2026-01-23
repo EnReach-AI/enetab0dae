@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:aro_client/components/path_provider.dart';
+import 'package:aro_client/ffi/study_lib.dart';
 import 'package:aro_client/ffi/study_service.dart';
 import 'package:aro_client/services/AppServiceStarter.dart';
 import 'package:aro_client/services/logger_service.dart';
@@ -18,6 +19,17 @@ void main() async {
 
     await LoggerService().initialize();
     LoggerService().info('App starting...');
+
+    // 尽早检查原生库依赖，如果缺失会弹窗提示（仅限Windows）
+    try {
+      StudyLibrary.ensureInitialized();
+    } catch (e) {
+      LoggerService().error('Native library initialization failed', e);
+      // 继续抛出，以便 runZonedGuarded 也能捕获（虽然这里已经记录了日志）
+      // 或者我们可以选择吞掉异常让应用尝试运行（但很可能会再次崩溃）
+      // 考虑到弹窗已经提示用户，这里记录日志后继续执行可能会导致后续更混乱的错误
+      // 但为了让日志文件能完整写入，我们不强行退出。
+    }
 
     FlutterError.onError = (FlutterErrorDetails details) {
       FlutterError.presentError(details);
