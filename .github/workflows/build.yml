@@ -396,7 +396,6 @@ jobs:
 
           [Languages]
           Name: "english"; MessagesFile: "compiler:Default.isl"
-          Name: "chinese"; MessagesFile: "compiler:Languages\ChineseSimplified.isl"
 
           [Tasks]
           Name: "desktopicon"; Description: "{cm:CreateDesktopIconTask}"; GroupDescription: "{cm:AdditionalIcons}"; Flags: unchecked
