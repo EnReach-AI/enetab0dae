@@ -18,11 +18,28 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"os"
 
 	"aro-ext-app/core/internal/api_client"
 	"aro-ext-app/core/internal/crypto"
 	"aro-ext-app/core/internal/ws_client"
 )
+
+// goStringFromC 安全地将 C 字符串转换为 Go 字符串，处理 NULL 指针
+func goStringFromC(s *C.char) string {
+	if s == nil {
+		return ""
+	}
+	return C.GoString(s)
+}
+
+// recoverAndLog 捕获 panic 并返回错误 JSON
+func recoverAndLog(funcName string) {
+	if r := recover(); r != nil {
+		log.Printf("%s panic recovered: %v", funcName, r)
+		os.Stderr.Sync() // 确保错误日志写入
+	}
+}
 
 // ServerConfig 结构体用于管理服务器配置参数
 type ServerConfig struct {
@@ -86,7 +103,11 @@ const (
 //
 //export NodeSignUp
 func NodeSignUp() *C.char {
+	defer recoverAndLog("NodeSignUp")
 	log.Println("NodeSignUp called")
+	if apiClient == nil {
+		return C.CString(`{"error":"apiClient not initialized, call InitLibstudy first"}`)
+	}
 	resp, err := apiClient.NodeSignUp()
 	if err != nil {
 		return C.CString(fmt.Sprintf(`{"error":"%s"}`, err.Error()))
@@ -103,9 +124,13 @@ func NodeSignUp() *C.char {
 //
 //export NodeReportBaseInfo
 func NodeReportBaseInfo(sysInfoJSON *C.char) *C.char {
+	defer recoverAndLog("NodeReportBaseInfo")
 	log.Println("NodeReportBaseInfo called")
+	if apiClient == nil {
+		return C.CString(`{"error":"apiClient not initialized, call InitLibstudy first"}`)
+	}
 	var sysInfo api_client.NodeReportBaseInfoRequest
-	if err := json.Unmarshal([]byte(C.GoString(sysInfoJSON)), &sysInfo); err != nil {
+	if err := json.Unmarshal([]byte(goStringFromC(sysInfoJSON)), &sysInfo); err != nil {
 		return C.CString(fmt.Sprintf(`{"error":"JSON parsing failed: %s"}`, err.Error()))
 	}
 
@@ -124,7 +149,11 @@ func NodeReportBaseInfo(sysInfoJSON *C.char) *C.char {
 //
 //export GetNodeStat
 func GetNodeStat() *C.char {
+	defer recoverAndLog("GetNodeStat")
 	log.Println("GetNodeStat called")
+	if apiClient == nil {
+		return C.CString(`{"error":"apiClient not initialized, call InitLibstudy first"}`)
+	}
 	resp, err := apiClient.GetNodeStat()
 	if err != nil {
 		return C.CString(fmt.Sprintf(`{"error":"%s"}`, err.Error()))
@@ -140,7 +169,11 @@ func GetNodeStat() *C.char {
 //
 //export GetRewards
 func GetRewards() *C.char {
+	defer recoverAndLog("GetRewards")
 	log.Println("GetRewards called")
+	if apiClient == nil {
+		return C.CString(`{"error":"apiClient not initialized, call InitLibstudy first"}`)
+	}
 	resp, err := apiClient.GetRewards()
 	if err != nil {
 		return C.CString(fmt.Sprintf(`{"error":"%s"}`, err.Error()))
@@ -158,7 +191,9 @@ func GetRewards() *C.char {
 //
 //export InitLibstudy
 func InitLibstudy(initParamsJSON *C.char) *C.char {
+	defer recoverAndLog("InitLibstudy")
 	log.Println("InitLibstudy called")
+
 	result := map[string]interface{}{
 		"success": true,
 		"message": "Libstudy initialized successfully",
@@ -168,7 +203,8 @@ func InitLibstudy(initParamsJSON *C.char) *C.char {
 
 	// 解析初始化参数
 	var initParams InitParams
-	paramsStr := C.GoString(initParamsJSON)
+	paramsStr := goStringFromC(initParamsJSON)
+	log.Printf("InitLibstudy params: %s", paramsStr)
 	if paramsStr != "" {
 		if err := json.Unmarshal([]byte(paramsStr), &initParams); err != nil {
 			result["success"] = false
@@ -215,6 +251,7 @@ func InitLibstudy(initParamsJSON *C.char) *C.char {
 	data, _ := json.Marshal(result)
 	cstr := C.CString(string(data))
 	log.Println("InitLibstudy result: ", string(data))
+	os.Stderr.Sync() // 确保日志完全写入
 	return cstr
 }
 
@@ -222,13 +259,17 @@ func InitLibstudy(initParamsJSON *C.char) *C.char {
 //
 //export GetCurrentVersion
 func GetCurrentVersion() *C.char {
+	defer recoverAndLog("GetCurrentVersion")
 	log.Println("GetCurrentVersion called")
 	// 从 core/version 包读取注入的版本信息
-	return C.CString(string(Version))
+	cstr := C.CString(string(Version))
+	os.Stderr.Sync()
+	return cstr
 }
 
 //export GetLastVersion
 func GetLastVersion() *C.char {
+	defer recoverAndLog("GetLastVersion")
 	log.Println("GetLastVersion called")
 	apiResponse, err := api_client.GetLastVersion(constant.PROGRAM_APP, constant.ENV)
 	if err != nil {
@@ -260,11 +301,12 @@ func GetLastVersion() *C.char {
 //
 //export StartProxyWorker
 func StartProxyWorker(configJSON *C.char) *C.char {
+	defer recoverAndLog("StartProxyWorker")
 	log.Println("StartProxyWorker called")
 	var config proxy_worker.ProxyWorkerConfig
 
 	// 解析 JSON 配置
-	if err := json.Unmarshal([]byte(C.GoString(configJSON)), &config); err != nil {
+	if err := json.Unmarshal([]byte(goStringFromC(configJSON)), &config); err != nil {
 		return C.CString(fmt.Sprintf(`{"success":false,"error":"JSON parsing failed: %s"}`, err.Error()))
 	}
 
@@ -296,6 +338,7 @@ func StartProxyWorker(configJSON *C.char) *C.char {
 //
 //export StopProxyWorker
 func StopProxyWorker() *C.char {
+	defer recoverAndLog("StopProxyWorker")
 	log.Println("StopProxyWorker called")
 	manager := proxy_worker.GetManager()
 
@@ -325,6 +368,7 @@ func StopProxyWorker() *C.char {
 //
 //export GetProxyWorkerStatus
 func GetProxyWorkerStatus() *C.char {
+	defer recoverAndLog("GetProxyWorkerStatus")
 	log.Println("GetProxyWorkerStatus called")
 	manager := proxy_worker.GetManager()
 	status := manager.GetStatus()
@@ -340,6 +384,7 @@ func GetProxyWorkerStatus() *C.char {
 //
 //export RestartProxyWorker
 func RestartProxyWorker() *C.char {
+	defer recoverAndLog("RestartProxyWorker")
 	log.Println("RestartProxyWorker called")
 	manager := proxy_worker.GetManager()
 
@@ -367,6 +412,7 @@ func RestartProxyWorker() *C.char {
 //
 //export IsProxyWorkerRunning
 func IsProxyWorkerRunning() *C.char {
+	defer recoverAndLog("IsProxyWorkerRunning")
 	log.Println("IsProxyWorkerRunning called")
 	manager := proxy_worker.GetManager()
 	isRunning := manager.IsRunning()
@@ -377,6 +423,44 @@ func IsProxyWorkerRunning() *C.char {
 
 	data, _ := json.Marshal(result)
 	log.Println("IsProxyWorkerRunning result: ", string(data))
+	return C.CString(string(data))
+}
+
+// Cleanup 清理所有资源，在应用退出前调用
+// 停止所有后台任务，关闭连接，释放资源
+// 返回：JSON 格式的响应
+//
+//export Cleanup
+func Cleanup() *C.char {
+	defer recoverAndLog("Cleanup")
+	log.Println("Cleanup called")
+
+	result := map[string]interface{}{
+		"success": true,
+		"message": "Cleanup completed",
+	}
+
+	// 停止 proxy worker（如果在运行）
+	manager := proxy_worker.GetManager()
+	if manager.IsRunning() {
+		if err := manager.Stop(); err != nil {
+			log.Printf("Cleanup: failed to stop proxy worker: %v", err)
+			result["proxy_worker_stop_error"] = err.Error()
+		} else {
+			log.Println("Cleanup: proxy worker stopped")
+		}
+	}
+
+	// 清空全局变量
+	apiClient = nil
+	wsClient = nil
+	keyPair = nil
+	clientID = ""
+
+	log.Println("Cleanup: all resources cleaned")
+	os.Stderr.Sync() // 确保日志写入
+
+	data, _ := json.Marshal(result)
 	return C.CString(string(data))
 }
 
