@@ -10,6 +10,10 @@ type ProxyWorkerConfig struct {
 	LocalPort       int    `json:"local_port"`
 	NatType         int    `json:"nat_type"`
 	FixedPort       int    `json:"fixed_port"`
+	// TLS 相关配置
+	DisableTLS bool   `json:"disable_tls"` // 是否禁用 TLS，默认 false（即默认使用 wss）
+	TLSSecure  bool   `json:"tls_secure"`  // 是否验证服务器证书，默认 false（跳过验证）
+	ServerName string `json:"server_name"` // TLS ServerName，用于证书验证，为空时使用 ProxyServerIP
 }
 
 // WorkerStatus 工作节点状态

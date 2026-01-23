@@ -24,14 +24,11 @@ import (
 	"aro-ext-app/core/internal/ws_client"
 )
 
-
 // ServerConfig 结构体用于管理服务器配置参数
 type ServerConfig struct {
 	BaseAPIURL string
 	BaseWSURL  string
 }
-
-
 
 // InitParams 初始化参数结构体
 type InitParams struct {
@@ -154,7 +151,6 @@ func GetRewards() *C.char {
 	return C.CString(string(data))
 }
 
-
 // InitLibstudy 初始化 libstudy 库
 // 加载或创建密钥对、初始化 API 客户端和 WebSocket 客户端
 // 参数：initParamsJSON - JSON 格式的初始化参数，包含 ServerConfig
@@ -255,6 +251,9 @@ func GetLastVersion() *C.char {
 //   - local_port: 本地端口
 //   - nat_type: NAT 类型 (0: 动态IP, 1: 静态IP)
 //   - fixed_port: 固定端口（仅用于静态 IP）
+//   - disable_tls: 是否禁用 TLS（可选，默认 false，即默认使用 wss 加密连接）
+//   - tls_secure: 是否验证服务器证书（可选，默认 false，即跳过证书验证）
+//   - server_name: TLS ServerName（可选，用于证书验证，为空时使用 proxy_server_ip）
 //
 // 返回：JSON 格式的响应，包含成功状态和错误信息
 //

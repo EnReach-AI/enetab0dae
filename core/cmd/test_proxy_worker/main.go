@@ -11,6 +11,8 @@ func main() {
 	log.Println("Testing Proxy Worker (Embedded GOST Mode)...")
 
 	// 创建测试配置
+	// 默认使用 tunnel+wss（TLS 加密连接）
+	// 如果需要使用明文 ws，设置 DisableTLS: true
 	config := proxy_worker.ProxyWorkerConfig{
 		SN:              "NLYN2Q0PYRAFQOWHK5R",
 		Token:           "1",
@@ -20,6 +22,10 @@ func main() {
 		LocalPort:       10800,
 		NatType:         1, // 动态 IP
 		FixedPort:       10800,
+		// TLS 配置（默认值）:
+		// DisableTLS: false,  // 默认启用 TLS (wss)
+		// TLSSecure:  false,  // 默认跳过证书验证（适用于自签名证书）
+		// ServerName: "",     // 默认使用 ProxyServerIP
 	}
 
 	// 获取管理器

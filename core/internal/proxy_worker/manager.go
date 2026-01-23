@@ -230,10 +230,30 @@ func (m *Manager) buildGostConfig(config *ProxyWorkerConfig) (*config.Config, er
 		}
 	}
 
+	// 默认使用 tunnel+wss 通过 TLS 加密的 WebSocket 连接到 proxy-server
+	// 可通过 config.DisableTLS=true 回退到明文 ws
+	protocol := "tunnel+wss"
+	if config.DisableTLS {
+		protocol = "tunnel+ws"
+	}
+
+	// 构建 TLS 参数
+	tlsParams := ""
+	if !config.DisableTLS {
+		// secure=false 表示跳过证书验证（InsecureSkipVerify=true）
+		if !config.TLSSecure {
+			tlsParams = "&secure=false"
+		}
+		// 如果指定了 ServerName，添加到参数中
+		if config.ServerName != "" {
+			tlsParams += fmt.Sprintf("&servername=%s", config.ServerName)
+		}
+	}
+
 	// 构建转发节点（chain node）
 	nodeStrs = []string{
-		fmt.Sprintf("tunnel+ws://%s:%s@%s:%d?tunnel.id=%s",
-			config.SN, config.Token, config.ProxyServerIP, config.ProxyServerPort, config.TunnelID),
+		fmt.Sprintf("%s://%s:%s@%s:%d?tunnel.id=%s%s",
+			protocol, config.SN, config.Token, config.ProxyServerIP, config.ProxyServerPort, config.TunnelID, tlsParams),
 	}
 
 	// 使用 cmd.BuildConfigFromCmd 从命令行字符串构建配置
@@ -245,7 +265,7 @@ func (m *Manager) buildGostConfig(config *ProxyWorkerConfig) (*config.Config, er
 	// ⚠️ 关键修复：正确设置 chain
 	// 架构说明（基于成功测试的两个独立进程模式）：
 	// - 进程1: auto://:24443 (无 -F) → auto handler 直接连接互联网，不需要 chain
-	// - 进程2: rtcp://:0/:24443 -F tunnel+ws://... → rtcp listener 通过 tunnel 建立反向隧道
+	// - 进程2: rtcp://:0/:24443 -F tunnel+wss://... → rtcp listener 通过 tunnel 建立反向隧道
 	//
 	// 合并到一个进程时：
 	// - auto handler: 不需要 chain（直接连接互联网）
