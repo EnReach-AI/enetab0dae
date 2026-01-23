@@ -8,6 +8,7 @@ import 'dart:io';
 import 'package:s_webview/s_webview.dart';
 import 'package:webview_flutter/webview_flutter.dart';
 import 'dart:convert';
+import 'dart:async';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -29,7 +30,17 @@ void main() async {
     AppServiceStarter.startForegroundService();
   }
 
-  runApp(const MyApp());
+  runZonedGuarded(() {
+    runApp(MyApp());
+  }, (error, stackTrace) async {
+    final logDir = Directory('${Directory.current.path}\\logs');
+    if (!logDir.existsSync()) logDir.createSync(recursive: true);
+    final logFile = File('${logDir.path}\\error.log');
+    await logFile.writeAsString(
+      '${DateTime.now()}: $error\n$stackTrace\n\n',
+      mode: FileMode.append,
+    );
+  });
 }
 
 class MyApp extends StatelessWidget {
