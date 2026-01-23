@@ -213,8 +213,9 @@ func InitLibstudy(initParamsJSON *C.char) *C.char {
 	details["api_client_status"] = "initialized"
 
 	data, _ := json.Marshal(result)
+	cstr := C.CString(string(data))
 	log.Println("InitLibstudy result: ", string(data))
-	return C.CString(string(data))
+	return cstr
 }
 
 // 返回：版本号字符串（C 字符串，调用方需要 free）
