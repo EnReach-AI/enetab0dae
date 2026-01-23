@@ -12,6 +12,7 @@ import 'package:window_manager/window_manager.dart';
 import 'dart:io';
 import 'package:s_webview/s_webview.dart';
 import 'package:webview_flutter/webview_flutter.dart';
+import 'package:desktop_webview_window/desktop_webview_window.dart';
 import 'dart:convert';
 
 void main() async {
@@ -108,8 +109,13 @@ class MyHomePage extends StatefulWidget {
 }
 
 class _MyHomePageState extends State<MyHomePage> {
-  late final WebViewController _controller;
+  // 移动平台使用 webview_flutter
+  WebViewController? _mobileController;
+  // 桌面平台使用 desktop_webview_window
+  Webview? _desktopWebview;
   final service = StudyService.instance;
+  
+  bool get _isDesktop => Platform.isWindows || Platform.isLinux || Platform.isMacOS;
 
   // void sendToWeb(Map<String, dynamic> data) {
   //   final json = jsonEncode(data);
@@ -120,9 +126,12 @@ class _MyHomePageState extends State<MyHomePage> {
 
   void sendMessageToWeb(Map<String, dynamic> data) {
     final json = jsonEncode(data);
-    _controller.runJavaScript('''
-    window.onFlutterMessage && window.onFlutterMessage($json);
-  ''');
+    final script = 'window.onFlutterMessage && window.onFlutterMessage($json);';
+    if (_isDesktop) {
+      _desktopWebview?.evaluateJavaScript(script);
+    } else {
+      _mobileController?.runJavaScript(script);
+    }
   }
 
   void connectWS() {
@@ -234,9 +243,12 @@ class _MyHomePageState extends State<MyHomePage> {
 
   void sendToWeb(Map<String, dynamic> data) {
     final json = jsonEncode(data);
-    _controller.runJavaScript(
-      'window.onFlutterMessage($json);',
-    );
+    final script = 'window.onFlutterMessage($json);';
+    if (_isDesktop) {
+      _desktopWebview?.evaluateJavaScript(script);
+    } else {
+      _mobileController?.runJavaScript(script);
+    }
   }
 
   @override
@@ -246,40 +258,92 @@ class _MyHomePageState extends State<MyHomePage> {
     initNode().catchError((e) {
       print('initNode error caught: $e');
     });
-    _controller = WebViewController()
-      ..setJavaScriptMode(JavaScriptMode.unrestricted)
-      ..addJavaScriptChannel(
-        'Flutter',
-        onMessageReceived: (JavaScriptMessage message) {
-          print('Received Web message: $message');
-          handleWebMessage(message.message);
-        },
-      )
-      ..setNavigationDelegate(
-        NavigationDelegate(
-          onPageFinished: (_) {
-            print('[FLUTTER] page finished');
-
-            // sendToWeb({
-            //   'type': 'nodeInfo',
-            //   'payload': jsonDecode(service.getNodeStat()),
-            // });
-            // sendToWeb({
-            //   'type': 'nodeRewards',
-            //   'payload': jsonDecode(res),
-            // });
+    
+    if (_isDesktop) {
+      // 桌面平台使用 desktop_webview_window
+      _initDesktopWebview();
+    } else {
+      // 移动平台使用 webview_flutter
+      _mobileController = WebViewController()
+        ..setJavaScriptMode(JavaScriptMode.unrestricted)
+        ..addJavaScriptChannel(
+          'Flutter',
+          onMessageReceived: (JavaScriptMessage message) {
+            print('Received Web message: $message');
+            handleWebMessage(message.message);
           },
+        )
+        ..setNavigationDelegate(
+          NavigationDelegate(
+            onPageFinished: (_) {
+              print('[FLUTTER] page finished');
+            },
+          ),
+        )
+        ..loadRequest(
+            Uri.parse('https://0ee63895-262b.ipproxy.aro.network/desktop'));
+    }
+  }
+  
+  Future<void> _initDesktopWebview() async {
+    try {
+      _desktopWebview = await WebviewWindow.create(
+        configuration: CreateConfiguration(
+          windowWidth: 360,
+          windowHeight: 640,
+          title: 'Aro Client',
+          titleBarTopPadding: Platform.isMacOS ? 20 : 0,
         ),
-      )
-      ..loadRequest(
-          Uri.parse('https://0ee63895-262b.ipproxy.aro.network/desktop'));
-    // Uri.parse('http://192.168.50.179:3000'));
+      );
+      
+      _desktopWebview?.addOnWebMessageReceivedCallback((message) {
+        print('Received Web message: $message');
+        handleWebMessage(message);
+      });
+      
+      _desktopWebview?.launch('https://0ee63895-262b.ipproxy.aro.network/desktop');
+    } catch (e) {
+      print('Failed to create desktop webview: $e');
+    }
+  }
+
+  @override
+  void dispose() {
+    _desktopWebview?.close();
+    super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
+    if (_isDesktop) {
+      // 桌面平台：desktop_webview_window 在单独窗口运行
+      // 这里显示一个占位 UI
+      return Scaffold(
+        body: Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const CircularProgressIndicator(),
+              const SizedBox(height: 16),
+              const Text('WebView 正在独立窗口中运行...'),
+              const SizedBox(height: 16),
+              ElevatedButton(
+                onPressed: () {
+                  _desktopWebview?.launch('https://0ee63895-262b.ipproxy.aro.network/desktop');
+                },
+                child: const Text('重新打开 WebView'),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+    
+    // 移动平台使用嵌入式 WebView
     return Scaffold(
-      body: WebViewWidget(controller: _controller),
+      body: _mobileController != null 
+          ? WebViewWidget(controller: _mobileController!)
+          : const Center(child: CircularProgressIndicator()),
     );
   }
 }

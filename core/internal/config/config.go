@@ -171,6 +171,7 @@ func (c *Config) SetAndSave(key, value string) error {
 		configPath = ".env"
 	}
 
+	
 	// 确保目录存在
 	dir := filepath.Dir(configPath)
 	if err := os.MkdirAll(dir, 0755); err != nil {
