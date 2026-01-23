@@ -165,7 +165,7 @@ class _MyHomePageState extends State<MyHomePage> {
 
   void initNode() async {
     final appDir = await getAppSupportDir();
-    print('Generate file directory: $appDir');
+    print('Generate file directory 123: $appDir');
     final service = StudyService.instance;
     final initResult = service.nodeInit(appDir);
 

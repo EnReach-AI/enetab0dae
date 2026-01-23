@@ -398,11 +398,11 @@ jobs:
           Name: "english"; MessagesFile: "compiler:Default.isl"
 
           [Tasks]
-          Name: "desktopicon"; Description: "Create a desktop icon"; GroupDescription: "Additional icons"; Flags: unchecked
+          Name: "desktopicon"; Description: "Create a desktop icon"; GroupDescription: "Additional icons";
           Name: "quicklaunchicon"; Description: "Create a Quick Launch icon"; GroupDescription: "Additional icons"; Flags: unchecked; OnlyBelowVersion: 6.1
-          Name: "startmenu"; Description: "Create Start Menu shortcuts"; GroupDescription: "Additional icons"; Flags: checked
-          Name: "autostart"; Description: "Run at startup"; GroupDescription: "Launch options"; Flags: unchecked
-          Name: "contextmenu"; Description: "Add context menu shortcuts"; GroupDescription: "Shell integration"; Flags: unchecked
+          Name: "startmenu"; Description: "Create Start Menu shortcuts"; GroupDescription: "Additional icons";
+          Name: "autostart"; Description: "Run at startup"; GroupDescription: "Launch options"; 
+          Name: "contextmenu"; Description: "Add context menu shortcuts"; GroupDescription: "Shell integration";
 
 
 
