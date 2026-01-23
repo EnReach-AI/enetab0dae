@@ -7,6 +7,7 @@ import 'package:aro_client/ffi/study_lib.dart';
 import 'package:aro_client/ffi/study_service.dart';
 import 'package:aro_client/services/AppServiceStarter.dart';
 import 'package:aro_client/services/logger_service.dart';
+import 'package:aro_client/utils/native_dialog.dart';
 import 'package:window_manager/window_manager.dart';
 import 'dart:io';
 import 'package:s_webview/s_webview.dart';
@@ -38,10 +39,13 @@ void main() async {
         details.exception,
         details.stack,
       );
+      // 在严重错误时尝试弹窗提示 (可选，避免太频繁)
+      // NativeDialog.show('Flutter Error:\n${details.exception}');
     };
 
     PlatformDispatcher.instance.onError = (error, stack) {
       LoggerService().error('Async Error: $error', error, stack);
+      // NativeDialog.show('Async Error:\n$error');
       return true;
     };
 
@@ -67,6 +71,13 @@ void main() async {
     );
   }, (error, stack) {
     LoggerService().error('Uncaught Error: $error', error, stack);
+
+    // 关键：对于未捕获的异常，尤其是启动时的崩溃，使用原生弹窗提示用户
+    // 这样即使日志没写进去，用户也能看到报错
+    NativeDialog.show(
+        'Uncaught Error (Crash):\n$error\n\n'
+        'Log file path: ${LoggerService().logFilePath}',
+        title: 'Application Crash');
   });
 }
 
