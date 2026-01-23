@@ -368,9 +368,9 @@ jobs:
         working-directory: ${{ env.FLUTTER_DIR }}
         run: |
           $installerScript = @"
-          #define MyAppName "ARO Mining Client"
+          #define MyAppName "ARO Desktop"
           #define MyAppVersion "1.0.0"
-          #define MyAppExeName "aro_client.exe"
+          #define MyAppExeName "aro_desktop.exe"
           #define SourcePath ".\build\windows\x64\runner\Release\"
 
           [Setup]
