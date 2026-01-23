@@ -5,8 +5,8 @@ import 'package:path_provider/path_provider.dart';
 class LoggerService {
   static final LoggerService _instance = LoggerService._internal();
   Logger? _logger;
-  late File _logFile;
-  late String _logFilePath;
+  String? _logFilePath;
+  File? _logFile;
 
   LoggerService._internal();
 
@@ -26,9 +26,9 @@ class LoggerService {
       final timestamp =
           DateTime.now().toString().replaceAll(':', '-').split('.')[0];
       _logFilePath = '${logDir.path}/app_$timestamp.log';
-      _logFile = File(_logFilePath);
+      _logFile = File(_logFilePath!);
 
-      await _logFile.create(recursive: true);
+      await _logFile!.create(recursive: true);
 
       _logger = Logger(
         filter: ProductionFilter(),
@@ -39,7 +39,7 @@ class LoggerService {
           colors: false,
           printEmojis: false,
         ),
-        output: _FileOutput(_logFile),
+        output: _FileOutput(_logFile!),
       );
 
       print('Logger initialized on ${_getPlatformName()}');
@@ -61,7 +61,7 @@ class LoggerService {
     return 'Unknown';
   }
 
-  String get logFilePath => _logFilePath;
+  String get logFilePath => _logFilePath ?? 'Not initialized';
 
   Future<String> getLogDirectory() async {
     final appDir = await getApplicationSupportDirectory();
