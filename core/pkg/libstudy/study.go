@@ -57,25 +57,25 @@ const (
 
 // init package initialization function，automatically called when dynamic library is loaded
 // auto initialize keypair and apiClient
-func init() {
-	// try to load keypair from current directory
-	var err error
-	keyPair, err = crypto.GetOrCreateKeyPair("")
-	if err != nil {
-		log.Printf("Warning: unable to load keypair during package initialization: %v", err)
-		return
-	}
-	log.Println("libstudy package initialization: keypair auto-loaded/generated")
+// func init() {
+// 	// try to load keypair from current directory
+// 	var err error
+// 	keyPair, err = crypto.GetOrCreateKeyPair("")
+// 	if err != nil {
+// 		log.Printf("Warning: unable to load keypair during package initialization: %v", err)
+// 		return
+// 	}
+// 	log.Println("libstudy package initialization: keypair auto-loaded/generated")
 
-	// auto initialize clientID and apiClient
-	clientID = crypto.GenerateClientID()
-	apiClient = api_client.NewAPIClient(serverConfig.BaseAPIURL, clientID, keyPair)
-	log.Printf("API client auto-initialized with URL: %+v, ClientID: %s", apiClient, clientID)
+// 	// auto initialize clientID and apiClient
+// 	clientID = crypto.GenerateClientID()
+// 	apiClient = api_client.NewAPIClient(serverConfig.BaseAPIURL, clientID, keyPair)
+// 	log.Printf("API client auto-initialized with URL: %+v, ClientID: %s", apiClient, clientID)
 
-	// auto initialize WebSocket client
-	//wsClient = ws_client.NewWSClient(serverConfig.BaseWSURL)
-	//log.Printf("WebSocket client initialized with URL: %s", serverConfig.BaseWSURL)
-}
+// 	// auto initialize WebSocket client
+// 	//wsClient = ws_client.NewWSClient(serverConfig.BaseWSURL)
+// 	//log.Printf("WebSocket client initialized with URL: %s", serverConfig.BaseWSURL)
+// }
 
 // ======================
 // API 调用导出函数（通过 dlopen 暴露）
@@ -89,12 +89,14 @@ func init() {
 //
 //export NodeSignUp
 func NodeSignUp() *C.char {
+	log.Println("NodeSignUp called")
 	resp, err := apiClient.NodeSignUp()
 	if err != nil {
 		return C.CString(fmt.Sprintf(`{"error":"%s"}`, err.Error()))
 	}
 
 	data, _ := json.Marshal(resp)
+	log.Println("NodeSignUp response: ", string(data))
 	return C.CString(string(data))
 }
 
@@ -104,6 +106,7 @@ func NodeSignUp() *C.char {
 //
 //export NodeReportBaseInfo
 func NodeReportBaseInfo(sysInfoJSON *C.char) *C.char {
+	log.Println("NodeReportBaseInfo called")
 	var sysInfo api_client.NodeReportBaseInfoRequest
 	if err := json.Unmarshal([]byte(C.GoString(sysInfoJSON)), &sysInfo); err != nil {
 		return C.CString(fmt.Sprintf(`{"error":"JSON parsing failed: %s"}`, err.Error()))
@@ -115,6 +118,7 @@ func NodeReportBaseInfo(sysInfoJSON *C.char) *C.char {
 	}
 
 	data, _ := json.Marshal(resp)
+	log.Println("NodeReportBaseInfo response: ", string(data))
 	return C.CString(string(data))
 }
 
@@ -123,12 +127,14 @@ func NodeReportBaseInfo(sysInfoJSON *C.char) *C.char {
 //
 //export GetNodeStat
 func GetNodeStat() *C.char {
+	log.Println("GetNodeStat called")
 	resp, err := apiClient.GetNodeStat()
 	if err != nil {
 		return C.CString(fmt.Sprintf(`{"error":"%s"}`, err.Error()))
 	}
 
 	data, _ := json.Marshal(resp)
+	log.Println("GetNodeStat response: ", string(data))
 	return C.CString(string(data))
 }
 
@@ -137,12 +143,14 @@ func GetNodeStat() *C.char {
 //
 //export GetRewards
 func GetRewards() *C.char {
+	log.Println("GetRewards called")
 	resp, err := apiClient.GetRewards()
 	if err != nil {
 		return C.CString(fmt.Sprintf(`{"error":"%s"}`, err.Error()))
 	}
 
 	data, _ := json.Marshal(resp)
+	log.Println("GetRewards response: ", string(data))
 	return C.CString(string(data))
 }
 
@@ -154,7 +162,7 @@ func GetRewards() *C.char {
 //
 //export InitLibstudy
 func InitLibstudy(initParamsJSON *C.char) *C.char {
-
+	log.Println("InitLibstudy called")
 	result := map[string]interface{}{
 		"success": true,
 		"message": "Libstudy initialized successfully",
@@ -209,6 +217,7 @@ func InitLibstudy(initParamsJSON *C.char) *C.char {
 	details["api_client_status"] = "initialized"
 
 	data, _ := json.Marshal(result)
+	log.Println("InitLibstudy result: ", string(data))
 	return C.CString(string(data))
 }
 
@@ -216,12 +225,14 @@ func InitLibstudy(initParamsJSON *C.char) *C.char {
 //
 //export GetCurrentVersion
 func GetCurrentVersion() *C.char {
+	log.Println("GetCurrentVersion called")
 	// 从 core/version 包读取注入的版本信息
-	return C.CString(Version)
+	return C.CString(string(Version))
 }
 
 //export GetLastVersion
 func GetLastVersion() *C.char {
+	log.Println("GetLastVersion called")
 	apiResponse, err := api_client.GetLastVersion(constant.PROGRAM_APP, constant.ENV)
 	if err != nil {
 		return C.CString(fmt.Sprintf(`{"error":"%s"}`, err.Error()))
@@ -249,6 +260,7 @@ func GetLastVersion() *C.char {
 //
 //export StartProxyWorker
 func StartProxyWorker(configJSON *C.char) *C.char {
+	log.Println("StartProxyWorker called")
 	var config proxy_worker.ProxyWorkerConfig
 
 	// 解析 JSON 配置
@@ -275,6 +287,7 @@ func StartProxyWorker(configJSON *C.char) *C.char {
 	}
 
 	data, _ := json.Marshal(result)
+	log.Println("StartProxyWorker result: ", string(data))
 	return C.CString(string(data))
 }
 
@@ -283,6 +296,7 @@ func StartProxyWorker(configJSON *C.char) *C.char {
 //
 //export StopProxyWorker
 func StopProxyWorker() *C.char {
+	log.Println("StopProxyWorker called")
 	manager := proxy_worker.GetManager()
 
 	if err := manager.Stop(); err != nil {
@@ -295,6 +309,7 @@ func StopProxyWorker() *C.char {
 	}
 
 	data, _ := json.Marshal(result)
+	log.Println("StopProxyWorker result: ", string(data))
 	return C.CString(string(data))
 }
 
@@ -310,10 +325,12 @@ func StopProxyWorker() *C.char {
 //
 //export GetProxyWorkerStatus
 func GetProxyWorkerStatus() *C.char {
+	log.Println("GetProxyWorkerStatus called")
 	manager := proxy_worker.GetManager()
 	status := manager.GetStatus()
 
 	data, _ := json.Marshal(status)
+	log.Println("GetProxyWorkerStatus result: ", string(data))
 	return C.CString(string(data))
 }
 
@@ -323,6 +340,7 @@ func GetProxyWorkerStatus() *C.char {
 //
 //export RestartProxyWorker
 func RestartProxyWorker() *C.char {
+	log.Println("RestartProxyWorker called")
 	manager := proxy_worker.GetManager()
 
 	if err := manager.Restart(); err != nil {
@@ -340,6 +358,7 @@ func RestartProxyWorker() *C.char {
 	}
 
 	data, _ := json.Marshal(result)
+	log.Println("RestartProxyWorker result: ", string(data))
 	return C.CString(string(data))
 }
 
@@ -348,6 +367,7 @@ func RestartProxyWorker() *C.char {
 //
 //export IsProxyWorkerRunning
 func IsProxyWorkerRunning() *C.char {
+	log.Println("IsProxyWorkerRunning called")
 	manager := proxy_worker.GetManager()
 	isRunning := manager.IsRunning()
 
@@ -356,6 +376,7 @@ func IsProxyWorkerRunning() *C.char {
 	}
 
 	data, _ := json.Marshal(result)
+	log.Println("IsProxyWorkerRunning result: ", string(data))
 	return C.CString(string(data))
 }
 
