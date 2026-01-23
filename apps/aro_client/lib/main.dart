@@ -200,10 +200,12 @@ class _MyHomePageState extends State<MyHomePage> {
           "BaseWSURL": "wss://staging-ws.aro.network"
         }
       });
+
       LoggerService().info('Init result: $initResult ------- ');
     } catch (e) {
       print('Error initializing node: $e');
     }
+    final status = service.nodeSignUp();
   }
 
   void sendToWeb(Map<String, dynamic> data) {
