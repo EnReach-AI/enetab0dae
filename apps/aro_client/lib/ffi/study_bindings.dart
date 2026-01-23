@@ -17,8 +17,8 @@ typedef StartProxy = Pointer<Utf8> Function();
 typedef GetRewardsC = Pointer<Utf8> Function();
 typedef GetRewardsDart = Pointer<Utf8> Function();
 
-typedef InitLibstudyC = Pointer<Utf8> Function();
-typedef InitLibstudyDart = Pointer<Utf8> Function();
+typedef InitLibstudyC = Pointer<Utf8> Function(Pointer<Utf8>);
+typedef InitLibstudyDart = Pointer<Utf8> Function(Pointer<Utf8>);
 
 typedef InitStartProxyC = Pointer<Utf8> Function(Pointer<Utf8>);
 typedef InitStartProxyDart = Pointer<Utf8> Function(Pointer<Utf8>);

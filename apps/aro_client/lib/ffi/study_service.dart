@@ -1,5 +1,6 @@
 import 'dart:ffi';
 import 'dart:io';
+import 'dart:convert';
 import 'package:ffi/ffi.dart';
 import 'study_bindings.dart';
 
@@ -29,11 +30,9 @@ class StudyService {
     return _handleResult(ptr);
   }
 
-  // Modified to match usage in main.dart but implementation calls no-arg InitLibstudy
-  // because header defines it as void.
-  String nodeInit(String dirPath) {
-    // Note: The C header defines InitLibstudy as taking no arguments.
-    // The dirPath argument is currently ignored by InitLibstudy, but we use it to set CWD.
+  // Modified to match usage in main.dart
+  String nodeInit(String dirPath, Map<String, dynamic> config) {
+    // Note: The C header defines InitLibstudy as taking arguments.
 
     // Change current working directory to dirPath to allow libstudy to write files
     try {
@@ -43,7 +42,10 @@ class StudyService {
       print('Error changing directory: $e');
     }
 
-    final ptr = StudyBindings.initLibstudy();
+    final configJson = jsonEncode(config);
+    final configPtr = configJson.toNativeUtf8();
+    final ptr = StudyBindings.initLibstudy(configPtr);
+    malloc.free(configPtr);
     // const configJson = "{"
     //     "\"sn\": \"NLYN2Q0PYRAFQOWHK5R\","
     //     "\"token\": \"1\","

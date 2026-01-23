@@ -1,8 +1,11 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:aro_client/components/path_provider.dart';
 import 'package:aro_client/ffi/study_service.dart';
 import 'package:aro_client/services/AppServiceStarter.dart';
+import 'package:aro_client/services/logger_service.dart';
 import 'package:window_manager/window_manager.dart';
 import 'dart:io';
 import 'package:s_webview/s_webview.dart';
@@ -10,28 +13,49 @@ import 'package:webview_flutter/webview_flutter.dart';
 import 'dart:convert';
 
 void main() async {
-  WidgetsFlutterBinding.ensureInitialized();
+  runZonedGuarded(() async {
+    WidgetsFlutterBinding.ensureInitialized();
 
-  if (Platform.isMacOS || Platform.isWindows || Platform.isLinux) {
-    await windowManager.ensureInitialized();
+    await LoggerService().initialize();
+    LoggerService().info('App starting...');
 
-    WindowOptions windowOptions = const WindowOptions(
-      size: Size(360, 640),
-      minimumSize: Size(360, 640),
-      maximumSize: Size(360, 640),
+    FlutterError.onError = (FlutterErrorDetails details) {
+      FlutterError.presentError(details);
+      LoggerService().error(
+        'Flutter Error: ${details.exception}',
+        details.exception,
+        details.stack,
+      );
+    };
+
+    PlatformDispatcher.instance.onError = (error, stack) {
+      LoggerService().error('Async Error: $error', error, stack);
+      return true;
+    };
+
+    if (Platform.isMacOS || Platform.isWindows || Platform.isLinux) {
+      await windowManager.ensureInitialized();
+
+      WindowOptions windowOptions = const WindowOptions(
+        size: Size(360, 640),
+        minimumSize: Size(360, 640),
+        maximumSize: Size(360, 640),
+      );
+
+      windowManager.waitUntilReadyToShow(windowOptions, () async {
+        await windowManager.show();
+      });
+    }
+    if (Platform.isAndroid) {
+      AppServiceStarter.startForegroundService();
+    }
+
+    runApp(
+      const MyApp(),
     );
-
-    windowManager.waitUntilReadyToShow(windowOptions, () async {
-      await windowManager.show();
-    });
-  }
-  if (Platform.isAndroid) {
-    AppServiceStarter.startForegroundService();
-  }
-
-  runApp(
-    const MyApp(),
-  );
+  }, (error, stack) {
+    LoggerService().error('Uncaught Error: $error', error, stack);
+  });
 }
 
 class MyApp extends StatelessWidget {
@@ -170,8 +194,13 @@ class _MyHomePageState extends State<MyHomePage> {
       final appDir = await getAppSupportDir();
       print('Generate file directory 123: $appDir');
       final service = StudyService.instance;
-      final initResult = service.nodeInit(appDir);
-      print('Init result: $initResult ------- ');
+      final initResult = service.nodeInit(appDir, {
+        "config": {
+          "BaseAPIURL": "https://api.example.com",
+          "BaseWSURL": "wss://ws.example.com"
+        }
+      });
+      LoggerService().info('Init result: $initResult ------- ');
     } catch (e) {
       print('Error initializing node: $e');
     }

@@ -20,6 +20,7 @@ dependencies:
   path_provider: ^2.1.5
   flutter_launcher_icons: ^0.13.1
   webview_flutter_wkwebview: ^3.23.5
+  logger: ^2.4.0
 
 dev_dependencies:
   flutter_test:
