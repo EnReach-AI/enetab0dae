@@ -314,36 +314,37 @@ jobs:
   # Client App Build Jobs
   # ============================================================
   build-linux:
-    needs: [prepare, build-core-linux]
-    if: needs.prepare.outputs.linux == 'true'
-    name: Build Linux Client
+    name: Build Linux Client Packages
+    strategy:
+      matrix:
+        distro: [debian:11, ubuntu:20.04, centos:8]  
     runs-on: ubuntu-latest
+    container:
+      image: ${{ matrix.distro }}
+
+    env:
+      FLUTTER_DIR: apps/aro_client
+
     steps:
       - uses: actions/checkout@v4
 
-      - name: Download Linux Library
-        uses: actions/download-artifact@v4
-        with:
-          name: libstudy-linux
-          path: linux-lib
-
-      - name: Copy Library to Project
+      - name: Install Dependencies
         run: |
-          mkdir -p ${{ env.FLUTTER_DIR }}/lib/ffi/linux
-          cp linux-lib/libstudy.so ${{ env.FLUTTER_DIR }}/lib/ffi/linux/
+          if [ -f /etc/debian_version ]; then
+            apt-get update
+            DEBIAN_FRONTEND=noninteractive apt-get install -y \
+              clang cmake ninja-build pkg-config libgtk-3-dev libwebkit2gtk-4.1-dev ruby-dev fpm
+          else
+            yum install -y epel-release
+            yum install -y clang cmake ninja-build gtk3-devel webkit2gtk-devel ruby-devel rubygems fpm
+          fi
 
       - uses: subosito/flutter-action@v2
         with:
           flutter-version: "3.38.5"
           cache: true
 
-      - name: Install Dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y clang cmake ninja-build pkg-config libgtk-3-dev liblzma-dev ruby-dev rpm libwebkit2gtk-4.1-dev
-          sudo gem install fpm
-
-      - name: Build Flutter Linux app
+      - name: Build Flutter Linux App
         working-directory: ${{ env.FLUTTER_DIR }}
         run: |
           flutter config --enable-linux-desktop
@@ -351,23 +352,24 @@ jobs:
           flutter pub get
           flutter build linux --release
 
-      - name: Prepare Package
-        working-directory: ${{ env.FLUTTER_DIR }}
+      - name: Copy FFI Libraries
         run: |
-          # Copy libstudy.so to bundle
-          cp lib/ffi/linux/libstudy.so build/linux/x64/release/bundle/lib/
+          mkdir -p build/linux/x64/release/bundle/lib
+          cp lib/ffi/linux/*.so build/linux/x64/release/bundle/lib/ || true
 
-          # Create .desktop file
+      - name: Create Desktop Entry
+        run: |
           cat <<EOF > aro-client.desktop
           [Desktop Entry]
           Name=ARO Client
-          Exec=/opt/aro-client/aro_mobile
+          Exec=/opt/aro-client/aro_client
           Icon=/opt/aro-client/data/flutter_assets/lib/assets/app_icon_1024.png
           Type=Application
           Categories=Utility;
           EOF
 
-      - name: Package Deb
+      - name: Package DEB
+        if: matrix.distro != 'centos:8'
         working-directory: ${{ env.FLUTTER_DIR }}
         run: |
           VERSION=$(grep 'version:' pubspec.yaml | cut -d ' ' -f 2 | cut -d '+' -f 1)
@@ -380,7 +382,8 @@ jobs:
             build/linux/x64/release/bundle/=/opt/aro-client/ \
             aro-client.desktop=/usr/share/applications/aro-client.desktop
 
-      - name: Package Rpm
+      - name: Package RPM
+        if: matrix.distro != 'debian:11' && matrix.distro != 'ubuntu:20.04'
         working-directory: ${{ env.FLUTTER_DIR }}
         run: |
           VERSION=$(grep 'version:' pubspec.yaml | cut -d ' ' -f 2 | cut -d '+' -f 1)
@@ -389,10 +392,11 @@ jobs:
             -v "$VERSION" \
             --description "ARO Client" \
             --depends gtk3 \
+            --depends webkit2gtk \
             build/linux/x64/release/bundle/=/opt/aro-client/ \
             aro-client.desktop=/usr/share/applications/aro-client.desktop
 
-      - name: Upload Artifacts
+      - name: Upload Packages
         uses: actions/upload-artifact@v4
         with:
           name: linux-packages
