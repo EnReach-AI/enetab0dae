@@ -92,8 +92,8 @@ jobs:
 
   build-core-linux:
     needs: prepare
-    # if: needs.prepare.outputs.build_core == 'true'
-    if: false
+    if: needs.prepare.outputs.build_core == 'true'
+    # if: false
     name: Build Core Linux x64
     runs-on: ubuntu-latest
 
@@ -127,7 +127,7 @@ jobs:
 
   build-core-linux-arm64:
     needs: prepare
-    if: false
+    if: true
     name: Build Core Linux ARM64
     runs-on: ubuntu-latest
 
