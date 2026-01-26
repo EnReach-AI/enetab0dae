@@ -376,6 +376,7 @@ jobs:
             -v "$VERSION" \
             --description "ARO Client" \
             --depends libgtk-3-0 \
+            --depends libwebkit2gtk-4.1-0 \
             build/linux/x64/release/bundle/=/opt/aro-client/ \
             aro-client.desktop=/usr/share/applications/aro-client.desktop
 
