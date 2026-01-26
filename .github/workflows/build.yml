@@ -335,7 +335,7 @@ jobs:
             # Debian / Ubuntu
             apt-get update
             DEBIAN_FRONTEND=noninteractive apt-get install -y \
-              clang cmake ninja-build pkg-config libgtk-3-dev ruby ruby-dev build-essential jq
+              curl jq clang cmake ninja-build pkg-config libgtk-3-dev ruby ruby-dev build-essential
             # WebKitGTK 版本判断
             VERSION=$(cut -d. -f1 /etc/debian_version)
             if [ "$VERSION" -ge 12 ]; then
@@ -347,11 +347,11 @@ jobs:
           else
             # Rocky Linux 9
             dnf install -y epel-release
-            # GTK / WebKitGTK / 基础开发工具
-            dnf install -y gtk3-devel webkit2gtk3-devel ruby ruby-devel rubygems
+            dnf install -y curl jq gtk3-devel webkit2gtk3-devel ruby ruby-devel rubygems
             dnf groupinstall -y "Development Tools"
             gem install --no-document fpm
           fi
+
 
       # 安装 Flutter
       - uses: subosito/flutter-action@v2
