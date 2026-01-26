@@ -56,6 +56,12 @@ class StudyLibrary {
         // Windows PATH lookup
         'libstudy',
       ];
+      LoggerService().info(
+        'candidates:',
+        candidates,
+      );
+      LoggerService().info('exePath:', exePath);
+      LoggerService().info('exeDir:', exeDir);
 
       for (final dllPath in candidates) {
         final file = File(dllPath);
