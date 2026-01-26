@@ -347,8 +347,9 @@ jobs:
           else
             # Rocky Linux 9
             dnf install -y epel-release
-            dnf install -y clang cmake pkgconf-pkg-config make automake gcc gcc-c++ ruby ruby-devel rubygems
-            dnf install -y gtk3-devel webkit2gtk3-devel ninja
+            # GTK / WebKitGTK / 基础开发工具
+            dnf install -y gtk3-devel webkit2gtk3-devel ruby ruby-devel rubygems
+            dnf groupinstall -y "Development Tools"
             gem install --no-document fpm
           fi
 
