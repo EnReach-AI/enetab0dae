@@ -1,5 +1,6 @@
 import 'dart:ffi';
 import 'dart:io';
+import 'package:aro_client/services/logger_service.dart';
 import 'package:ffi/ffi.dart';
 
 // Win32 MessageBox API
@@ -21,12 +22,16 @@ class StudyLibrary {
   }
 
   static void ensureInitialized() {
+    LoggerService().info('initializing StudyLibrary FFI');
+
     try {
       if (_lib == null) {
         _lib = _open();
         _initOnce();
       }
     } catch (e) {
+      LoggerService().info('initializing error StudyLibrary FFI', e);
+
       if (Platform.isWindows) {
         _showWindowsErrorDialog(
             'Failed to load core library (libstudy.dll).\n\n'
@@ -204,6 +209,8 @@ class StudyLibrary {
       final init =
           _lib!.lookupFunction<Void Function(), void Function()>('InitLibrary');
       init();
-    } catch (_) {}
+    } catch (e) {
+      LoggerService().info('initializing error _initOnce', e);
+    }
   }
 }

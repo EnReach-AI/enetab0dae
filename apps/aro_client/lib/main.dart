@@ -12,7 +12,7 @@ import 'package:window_manager/window_manager.dart';
 import 'dart:io';
 import 'package:s_webview/s_webview.dart';
 import 'package:webview_flutter/webview_flutter.dart';
-import 'package:desktop_webview_window/desktop_webview_window.dart';
+import 'package:webview_windows/webview_windows.dart' as win;
 import 'dart:convert';
 
 void main() async {
@@ -109,13 +109,11 @@ class MyHomePage extends StatefulWidget {
 }
 
 class _MyHomePageState extends State<MyHomePage> {
-  // 移动平台使用 webview_flutter
-  WebViewController? _mobileController;
-  // 桌面平台使用 desktop_webview_window
-  Webview? _desktopWebview;
+  WebViewController? _controller;
+  win.WebviewController? _winController;
+  bool _isWindowsInit = false;
+
   final service = StudyService.instance;
-  
-  bool get _isDesktop => Platform.isWindows || Platform.isLinux || Platform.isMacOS;
 
   // void sendToWeb(Map<String, dynamic> data) {
   //   final json = jsonEncode(data);
@@ -126,11 +124,13 @@ class _MyHomePageState extends State<MyHomePage> {
 
   void sendMessageToWeb(Map<String, dynamic> data) {
     final json = jsonEncode(data);
-    final script = 'window.onFlutterMessage && window.onFlutterMessage($json);';
-    if (_isDesktop) {
-      _desktopWebview?.evaluateJavaScript(script);
+    final script = '''
+    window.onFlutterMessage && window.onFlutterMessage($json);
+  ''';
+    if (Platform.isWindows) {
+      _winController?.executeScript(script);
     } else {
-      _mobileController?.runJavaScript(script);
+      _controller?.runJavaScript(script);
     }
   }
 
@@ -244,10 +244,10 @@ class _MyHomePageState extends State<MyHomePage> {
   void sendToWeb(Map<String, dynamic> data) {
     final json = jsonEncode(data);
     final script = 'window.onFlutterMessage($json);';
-    if (_isDesktop) {
-      _desktopWebview?.evaluateJavaScript(script);
+    if (Platform.isWindows) {
+      _winController?.executeScript(script);
     } else {
-      _mobileController?.runJavaScript(script);
+      _controller?.runJavaScript(script);
     }
   }
 
@@ -258,91 +258,88 @@ class _MyHomePageState extends State<MyHomePage> {
     initNode().catchError((e) {
       print('initNode error caught: $e');
     });
-    
-    if (_isDesktop) {
-      // 桌面平台使用 desktop_webview_window
-      _initDesktopWebview();
+
+    if (Platform.isWindows) {
+      _initWindowsWebView();
     } else {
-      // 移动平台使用 webview_flutter
-      _mobileController = WebViewController()
-        ..setJavaScriptMode(JavaScriptMode.unrestricted)
-        ..addJavaScriptChannel(
-          'Flutter',
-          onMessageReceived: (JavaScriptMessage message) {
-            print('Received Web message: $message');
-            handleWebMessage(message.message);
-          },
-        )
-        ..setNavigationDelegate(
-          NavigationDelegate(
-            onPageFinished: (_) {
-              print('[FLUTTER] page finished');
-            },
-          ),
-        )
-        ..loadRequest(
-            Uri.parse('https://0ee63895-262b.ipproxy.aro.network/desktop'));
-    }
-  }
-  
-  Future<void> _initDesktopWebview() async {
-    try {
-      _desktopWebview = await WebviewWindow.create(
-        configuration: CreateConfiguration(
-          windowWidth: 360,
-          windowHeight: 640,
-          title: 'Aro Client',
-          titleBarTopPadding: Platform.isMacOS ? 20 : 0,
-        ),
-      );
-      
-      _desktopWebview?.addOnWebMessageReceivedCallback((message) {
-        print('Received Web message: $message');
-        handleWebMessage(message);
-      });
-      
-      _desktopWebview?.launch('https://0ee63895-262b.ipproxy.aro.network/desktop');
-    } catch (e) {
-      print('Failed to create desktop webview: $e');
+      _initMobileWebView();
     }
   }
 
-  @override
-  void dispose() {
-    _desktopWebview?.close();
-    super.dispose();
+  Future<void> _initWindowsWebView() async {
+    _winController = win.WebviewController();
+    try {
+      await _winController!.initialize();
+
+      // Handle messages from JS
+      _winController!.webMessage.listen((message) {
+        print('Received Web message (Windows): $message');
+        if (message is String) {
+          handleWebMessage(message);
+        } else if (message is Map) {
+          handleWebMessage(jsonEncode(message));
+        }
+      });
+
+      // Provide a way for JS to call "Flutter.postMessage" if needed
+      // webview_windows exposes "window.chrome.webview.postMessage"
+      // You might need to inject a polyfill if your JS specifically uses "Flutter.postMessage"
+      await _winController!.addScriptToExecuteOnDocumentCreated('''
+        if (!window.Flutter) {
+          window.Flutter = {
+            postMessage: function(msg) {
+              window.chrome.webview.postMessage(msg);
+            }
+          };
+        }
+      ''');
+
+      await _winController!
+          .loadUrl('https://0ee63895-262b.ipproxy.aro.network/desktop');
+
+      if (mounted) {
+        setState(() {
+          _isWindowsInit = true;
+        });
+      }
+    } catch (e) {
+      LoggerService().error('Failed to initialize Windows WebView', e);
+    }
+  }
+
+  void _initMobileWebView() {
+    _controller = WebViewController()
+      ..setJavaScriptMode(JavaScriptMode.unrestricted)
+      ..addJavaScriptChannel(
+        'Flutter',
+        onMessageReceived: (JavaScriptMessage message) {
+          print('Received Web message: $message');
+          handleWebMessage(message.message);
+        },
+      )
+      ..setNavigationDelegate(
+        NavigationDelegate(
+          onPageFinished: (_) {
+            print('[FLUTTER] page finished');
+          },
+        ),
+      )
+      ..loadRequest(
+          Uri.parse('https://0ee63895-262b.ipproxy.aro.network/desktop'));
   }
 
   @override
   Widget build(BuildContext context) {
-    if (_isDesktop) {
-      // 桌面平台：desktop_webview_window 在单独窗口运行
-      // 这里显示一个占位 UI
+    if (Platform.isWindows) {
       return Scaffold(
-        body: Center(
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              const CircularProgressIndicator(),
-              const SizedBox(height: 16),
-              const Text('WebView 正在独立窗口中运行...'),
-              const SizedBox(height: 16),
-              ElevatedButton(
-                onPressed: () {
-                  _desktopWebview?.launch('https://0ee63895-262b.ipproxy.aro.network/desktop');
-                },
-                child: const Text('重新打开 WebView'),
-              ),
-            ],
-          ),
-        ),
+        body: _isWindowsInit
+            ? win.Webview(_winController!)
+            : const Center(child: CircularProgressIndicator()),
       );
     }
-    
-    // 移动平台使用嵌入式 WebView
     return Scaffold(
-      body: _mobileController != null 
-          ? WebViewWidget(controller: _mobileController!)
+      body: _controller != null
+          ? WebViewWidget(controller: _controller!)
           : const Center(child: CircularProgressIndicator()),
     );
   }
