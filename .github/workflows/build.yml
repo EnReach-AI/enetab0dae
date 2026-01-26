@@ -317,7 +317,7 @@ jobs:
     name: Build Linux Client Packages
     strategy:
       matrix:
-        distro: [ubuntu:22.04, debian:11, centos:9]  
+        distro: [ubuntu:22.04, debian:11, centos:8]  
     runs-on: ubuntu-latest
     container:
       image: ${{ matrix.distro }}
