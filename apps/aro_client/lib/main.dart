@@ -15,7 +15,12 @@ import 'package:webview_flutter/webview_flutter.dart';
 import 'package:webview_windows/webview_windows.dart' as win;
 import 'dart:convert';
 
-void main() async {
+import 'package:desktop_webview_window/desktop_webview_window.dart';
+
+void main(List<String> args) async {
+  if (runWebViewTitleBarWidget(args)) {
+    return;
+  }
   runZonedGuarded(() async {
     WidgetsFlutterBinding.ensureInitialized();
 

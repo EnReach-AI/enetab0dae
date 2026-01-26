@@ -347,11 +347,10 @@ jobs:
           else
             # Rocky Linux 9
             dnf install -y epel-release
-            dnf install -y curl jq gtk3-devel webkit2gtk3-devel ruby ruby-devel rubygems
+            dnf install -y --allowerasing curl jq gtk3-devel webkit2gtk3-devel ruby ruby-devel rubygems
             dnf groupinstall -y "Development Tools"
             gem install --no-document fpm
           fi
-
 
       # 安装 Flutter
       - uses: subosito/flutter-action@v2
@@ -424,7 +423,6 @@ jobs:
           path: |
             ${{ env.FLUTTER_DIR }}/*.deb
             ${{ env.FLUTTER_DIR }}/*.rpm
-
   build-windows:
     needs: [prepare, build-core-windows]
     if: needs.prepare.outputs.build_core == 'true'
