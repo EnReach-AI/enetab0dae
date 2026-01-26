@@ -17,7 +17,6 @@ class StudyLibrary {
 
   static DynamicLibrary get instance {
     _lib ??= _open();
-    _initOnce();
     return _lib!;
   }
 
@@ -25,10 +24,7 @@ class StudyLibrary {
     LoggerService().info('initializing StudyLibrary FFI');
 
     try {
-      if (_lib == null) {
-        _lib = _open();
-        _initOnce();
-      }
+      _lib ??= _open();
     } catch (e) {
       LoggerService().info('initializing error StudyLibrary FFI', e);
 
@@ -40,24 +36,6 @@ class StudyLibrary {
       }
       rethrow;
     }
-  }
-
-  static void _showWindowsErrorDialog(String message) {
-    try {
-      final user32 = DynamicLibrary.open('user32.dll');
-      final messageBox =
-          user32.lookupFunction<MessageBoxC, MessageBoxDart>('MessageBoxA');
-
-      final text = message.toNativeUtf8();
-      final caption = 'Error'.toNativeUtf8();
-
-      const uType = 0x00000000 | 0x00000010 | 0x00040000;
-
-      messageBox(0, text, caption, uType);
-
-      malloc.free(text);
-      malloc.free(caption);
-    } catch (_) {}
   }
 
   static DynamicLibrary _open() {
@@ -201,16 +179,21 @@ class StudyLibrary {
         'Executable dir: ${exeDir.path}');
   }
 
-  static void _initOnce() {
-    if (_inited) return;
-    _inited = true;
-
+  static void _showWindowsErrorDialog(String message) {
     try {
-      final init =
-          _lib!.lookupFunction<Void Function(), void Function()>('InitLibrary');
-      init();
-    } catch (e) {
-      LoggerService().info('initializing error _initOnce', e);
-    }
+      final user32 = DynamicLibrary.open('user32.dll');
+      final messageBox =
+          user32.lookupFunction<MessageBoxC, MessageBoxDart>('MessageBoxA');
+
+      final text = message.toNativeUtf8();
+      final caption = 'Error'.toNativeUtf8();
+
+      const uType = 0x00000000 | 0x00000010 | 0x00040000;
+
+      messageBox(0, text, caption, uType);
+
+      malloc.free(text);
+      malloc.free(caption);
+    } catch (_) {}
   }
 }
