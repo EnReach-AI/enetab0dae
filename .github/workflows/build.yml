@@ -317,7 +317,7 @@ jobs:
     name: Build Linux Client Packages
     strategy:
       matrix:
-        distro: [ubuntu:22.04, debian:11, rockylinux:9]  
+        distro: [ubuntu:22.04, debian:11, rockylinux:9]  # 系统矩阵
     runs-on: ubuntu-latest
     container:
       image: ${{ matrix.distro }}
@@ -328,6 +328,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # 安装系统依赖和 fpm
       - name: Install Dependencies
         run: |
           if [ -f /etc/debian_version ]; then
@@ -344,17 +345,20 @@ jobs:
             fi
             gem install --no-document fpm
           else
-            # CentOS 9
-            yum install -y epel-release
-            yum install -y clang cmake ninja-build gtk3-devel webkit2gtk-devel ruby-devel rubygems
+            # Rocky Linux 9
+            dnf install -y epel-release
+            dnf install -y clang cmake pkgconf-pkg-config make automake gcc gcc-c++ ruby ruby-devel rubygems
+            dnf install -y gtk3-devel webkit2gtk3-devel ninja-build
             gem install --no-document fpm
           fi
 
+      # 安装 Flutter
       - uses: subosito/flutter-action@v2
         with:
           flutter-version: "3.38.5"
           cache: true
 
+      # Flutter build
       - name: Build Flutter Linux App
         working-directory: ${{ env.FLUTTER_DIR }}
         run: |
@@ -363,11 +367,13 @@ jobs:
           flutter pub get
           flutter build linux --release
 
+      # Copy FFI libraries（如果有）
       - name: Copy FFI Libraries
         run: |
           mkdir -p build/linux/x64/release/bundle/lib
           cp lib/ffi/linux/*.so build/linux/x64/release/bundle/lib/ || true
 
+      # Create .desktop file
       - name: Create Desktop Entry
         run: |
           cat <<EOF > aro-client.desktop
@@ -379,8 +385,9 @@ jobs:
           Categories=Utility;
           EOF
 
+      # Package as DEB (Ubuntu/Debian)
       - name: Package DEB
-        if: matrix.distro != 'centos:9'
+        if: matrix.distro != 'rockylinux:9'
         working-directory: ${{ env.FLUTTER_DIR }}
         run: |
           VERSION=$(grep 'version:' pubspec.yaml | cut -d ' ' -f 2 | cut -d '+' -f 1)
@@ -393,8 +400,9 @@ jobs:
             build/linux/x64/release/bundle/=/opt/aro-client/ \
             aro-client.desktop=/usr/share/applications/aro-client.desktop
 
+      # Package as RPM (Rocky Linux)
       - name: Package RPM
-        if: matrix.distro == 'centos:9'
+        if: matrix.distro == 'rockylinux:9'
         working-directory: ${{ env.FLUTTER_DIR }}
         run: |
           VERSION=$(grep 'version:' pubspec.yaml | cut -d ' ' -f 2 | cut -d '+' -f 1)
@@ -403,10 +411,11 @@ jobs:
             -v "$VERSION" \
             --description "ARO Client" \
             --depends gtk3 \
-            --depends webkit2gtk \
+            --depends webkit2gtk3 \
             build/linux/x64/release/bundle/=/opt/aro-client/ \
             aro-client.desktop=/usr/share/applications/aro-client.desktop
 
+      # Upload artifacts
       - name: Upload Packages
         uses: actions/upload-artifact@v4
         with:
