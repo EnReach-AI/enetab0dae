@@ -335,7 +335,7 @@ jobs:
             # Debian / Ubuntu
             apt-get update
             DEBIAN_FRONTEND=noninteractive apt-get install -y \
-              clang cmake ninja-build pkg-config libgtk-3-dev ruby ruby-dev build-essential
+              clang cmake ninja-build pkg-config libgtk-3-dev ruby ruby-dev build-essential jq
             # WebKitGTK 版本判断
             VERSION=$(cut -d. -f1 /etc/debian_version)
             if [ "$VERSION" -ge 12 ]; then
