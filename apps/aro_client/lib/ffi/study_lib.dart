@@ -67,14 +67,21 @@ class StudyLibrary {
         final file = File(dllPath);
         final exists = file.existsSync();
         print('[StudyLib] Trying DLL at: $dllPath (exists: $exists)');
+        LoggerService()
+            .info('[StudyLib] Trying DLL at: $dllPath (exists: $exists)');
 
         if (exists) {
           try {
             final lib = DynamicLibrary.open(dllPath);
             print('[StudyLib] Successfully loaded from: $dllPath');
+            LoggerService()
+                .info('[StudyLib] Successfully loaded from: $dllPath');
+
             return lib;
           } catch (e) {
             print('[StudyLib] Failed to load from $dllPath: $e');
+            LoggerService().info('[StudyLib] Failed to load from $dllPath: $e');
+
             continue;
           }
         }
@@ -88,6 +95,8 @@ class StudyLibrary {
         return lib;
       } catch (e) {
         print('[StudyLib] Failed to load libstudy.dll: $e');
+        LoggerService().info('[StudyLib] Failed to load libstudy.dll: $e');
+
         throw UnsupportedError(
             'libstudy.dll not found. Tried:\n${candidates.join('\n')}\n'
             'Executable path: $exePath\n'
