@@ -317,7 +317,7 @@ jobs:
     name: Build Linux Client Packages
     strategy:
       matrix:
-        distro: [ubuntu:22.04, debian:11, rockylinux:9]  # 系统矩阵
+        distro: [ubuntu:22.04, debian:11, rockylinux:9]
     runs-on: ubuntu-latest
     container:
       image: ${{ matrix.distro }}
@@ -348,7 +348,7 @@ jobs:
             # Rocky Linux 9
             dnf install -y epel-release
             dnf install -y clang cmake pkgconf-pkg-config make automake gcc gcc-c++ ruby ruby-devel rubygems
-            dnf install -y gtk3-devel webkit2gtk3-devel ninja-build
+            dnf install -y gtk3-devel webkit2gtk3-devel ninja
             gem install --no-document fpm
           fi
 
