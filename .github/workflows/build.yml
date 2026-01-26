@@ -317,7 +317,7 @@ jobs:
     name: Build Linux Client Packages
     strategy:
       matrix:
-        distro: [debian:11, ubuntu:20.04, centos:8]  
+        distro: [ubuntu:22.04, debian:11, centos:9] 
     runs-on: ubuntu-latest
     container:
       image: ${{ matrix.distro }}
@@ -333,8 +333,16 @@ jobs:
           if [ -f /etc/debian_version ]; then
             apt-get update
             DEBIAN_FRONTEND=noninteractive apt-get install -y \
-              clang cmake ninja-build pkg-config libgtk-3-dev libwebkit2gtk-4.1-dev ruby-dev fpm
+              clang cmake ninja-build pkg-config libgtk-3-dev ruby-dev fpm
+            # WebKitGTK 版本判断
+            VERSION=$(cut -d. -f1 /etc/debian_version)
+            if [ "$VERSION" -ge 12 ]; then
+              apt-get install -y libwebkit2gtk-4.1-dev
+            else
+              apt-get install -y libwebkit2gtk-4.0-dev
+            fi
           else
+            # CentOS 9
             yum install -y epel-release
             yum install -y clang cmake ninja-build gtk3-devel webkit2gtk-devel ruby-devel rubygems fpm
           fi
@@ -362,14 +370,14 @@ jobs:
           cat <<EOF > aro-client.desktop
           [Desktop Entry]
           Name=ARO Client
-          Exec=/opt/aro-client/aro_client
+          Exec=/opt/aro-client/aro_mobile
           Icon=/opt/aro-client/data/flutter_assets/lib/assets/app_icon_1024.png
           Type=Application
           Categories=Utility;
           EOF
 
       - name: Package DEB
-        if: matrix.distro != 'centos:8'
+        if: matrix.distro != 'centos:9'
         working-directory: ${{ env.FLUTTER_DIR }}
         run: |
           VERSION=$(grep 'version:' pubspec.yaml | cut -d ' ' -f 2 | cut -d '+' -f 1)
@@ -378,12 +386,12 @@ jobs:
             -v "$VERSION" \
             --description "ARO Client" \
             --depends libgtk-3-0 \
-            --depends libwebkit2gtk-4.1-0 \
+            --depends libwebkit2gtk-4.0-0 \
             build/linux/x64/release/bundle/=/opt/aro-client/ \
             aro-client.desktop=/usr/share/applications/aro-client.desktop
 
       - name: Package RPM
-        if: matrix.distro != 'debian:11' && matrix.distro != 'ubuntu:20.04'
+        if: matrix.distro == 'centos:9'
         working-directory: ${{ env.FLUTTER_DIR }}
         run: |
           VERSION=$(grep 'version:' pubspec.yaml | cut -d ' ' -f 2 | cut -d '+' -f 1)
