@@ -353,10 +353,16 @@ jobs:
           elif command -v dnf >/dev/null 2>&1; then
             dnf install -y epel-release dnf-plugins-core
             dnf config-manager --set-enabled powertools || dnf config-manager --set-enabled PowerTools || true
+            dnf -y module reset ruby || true
+            dnf -y module enable ruby:3.1 || dnf -y module enable ruby:3.0 || true
             dnf makecache
             dnf install -y git curl jq which gtk3-devel webkit2gtk3-devel ruby ruby-devel rubygems unzip cmake clang rpm-build
             dnf groupinstall -y "Development Tools"
-            gem install --no-document fpm
+            if ruby -e 'exit(RUBY_VERSION.to_f >= 2.6 ? 0 : 1)'; then
+              gem install --no-document fpm
+            else
+              gem install --no-document fpm -v 1.15.1
+            fi
 
             # install ninja binary
             if ! command -v ninja &> /dev/null; then
@@ -424,6 +430,7 @@ jobs:
           cp lib/ffi/linux/*.so build/linux/x64/release/bundle/lib/ || true
 
       - name: Create Desktop Entry
+        working-directory: ${{ env.FLUTTER_DIR }}
         run: |
           cat <<EOF > aro-client.desktop
           [Desktop Entry]
@@ -470,7 +477,8 @@ jobs:
 
   build-windows:
     needs: [prepare, build-core-windows]
-    if: needs.prepare.outputs.build_core == 'true'
+    # if: needs.prepare.outputs.build_core == 'true'
+    if: false
     name: Build Windows
     runs-on: windows-latest
     steps:
