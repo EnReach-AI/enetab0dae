@@ -331,6 +331,10 @@ jobs:
       FLUTTER_DIR: apps/aro_client
       FLUTTER_VERSION: 3.38.5
 
+    defaults:
+      run:
+        shell: bash
+
     steps:
       - uses: actions/checkout@v4
 
@@ -369,6 +373,16 @@ jobs:
         with:
           flutter-version: ${{ env.FLUTTER_VERSION }}
           cache: true
+
+      - name: Mark Flutter directory as safe for git
+        run: |
+          set -euo pipefail
+          if command -v flutter >/dev/null 2>&1; then
+            FLUTTER_BIN="$(command -v flutter)"
+            FLUTTER_ROOT="$(cd "$(dirname "$FLUTTER_BIN")/.." && pwd)"
+            git config --global --add safe.directory "$FLUTTER_ROOT"
+          fi
+          git config --global --add safe.directory "/__t/flutter/stable-${{ env.FLUTTER_VERSION }}-x64" || true
 
       # Flutter build
       - name: Build Flutter Linux App
