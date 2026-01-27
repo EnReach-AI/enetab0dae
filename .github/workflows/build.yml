@@ -318,10 +318,10 @@ jobs:
     name: Build Flutter Linux Packages
     strategy:
       matrix:
-        distro: [ubuntu:22.04, debian:11, centos:8]
+        distro: ["ubuntu:22.04", "debian:11", "centos:8"]
     runs-on: ubuntu-latest
     container:
-      image: ${{ matrix.distro == 'centos:8' && 'ghcr.io/cirruslabs/flutter:3.38.5' || matrix.distro }}
+      image: ${{ matrix.distro }}
 
     env:
       FLUTTER_DIR: apps/aro_client
@@ -358,6 +358,11 @@ jobs:
             fi
           fi
 
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          cache: true
+
       # Flutter build
       - name: Build Flutter Linux App
         working-directory: ${{ env.FLUTTER_DIR }}
@@ -369,6 +374,7 @@ jobs:
           flutter build linux --release
 
       - name: Copy FFI Libraries
+        working-directory: ${{ env.FLUTTER_DIR }}
         run: |
           mkdir -p build/linux/x64/release/bundle/lib
           cp lib/ffi/linux/*.so build/linux/x64/release/bundle/lib/ || true
