@@ -356,6 +356,10 @@ jobs:
             gem install --no-document fpm
           fi
 
+      - name: Install system deps
+        run: |
+          apt-get update
+          apt-get install -y git curl unzip xz-utils zip
       # 安装 Flutter
       - uses: subosito/flutter-action@v2
         with:
