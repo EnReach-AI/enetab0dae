@@ -288,8 +288,9 @@ class _MyHomePageState extends State<MyHomePage> {
   }
 
   Future<void> _initWindowsWebView() async {
-    _winController = win.WebviewController();
     try {
+      _winController = win.WebviewController();
+
       LoggerService().error('Info (_winController): $_winController');
 
       await _winController!.initialize();
