@@ -233,7 +233,7 @@ class _MyHomePageState extends State<MyHomePage> {
       // final service = StudyService.instance; // Remove local variable to avoid confusion
       final initResult = service.nodeInit(appDir, {
         "config": {
-          "BaseAPIURL": "https://staging-dashboard.aro.network",
+          "BaseAPIURL": "https://staging-api.aro.network",
           "BaseWSURL": "wss://staging-ws.aro.network"
         }
       });
