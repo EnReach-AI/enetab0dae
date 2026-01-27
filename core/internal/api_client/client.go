@@ -24,6 +24,16 @@ type APIClient struct {
 	PublicKey  *rsa.PublicKey
 }
 
+// String implements Stringer interface for safe logging
+func (c *APIClient) String() string {
+	keyBitSize := 0
+	if c.PrivateKey != nil && c.PrivateKey.N != nil {
+		keyBitSize = c.PrivateKey.N.BitLen()
+	}
+	return fmt.Sprintf("APIClient{BaseURL: %s, ClientID: %s, KeySize: %d bits}",
+		c.BaseURL, c.ClientID, keyBitSize)
+}
+
 // NewAPIClient creates an API client instance
 // Parameters:
 // - baseURL: API service base URL (e.g., https://testnet-api.aro.network)
@@ -53,7 +63,9 @@ func NewAPIClient(baseURL string, clientID string, keyPair *crypto.KeyPair) *API
 // 2. Sign with private key: SHA256(clientID:timestamp)
 // 3. Generate Bearer Token: Bearer base64("aro:clientID:timestamp:signature")
 func (c *APIClient) Request(method, path string, body interface{}) ([]byte, int, error) {
-	log.Printf("APIClient:%+v", c)
+	log.Printf("APIClient: %v", c)
+	log.Printf("APIClient pointers - HttpClient: %p, PrivateKey: %p, PublicKey: %p",
+		c.HttpClient, c.PrivateKey, c.PublicKey)
 	url := fmt.Sprintf("%s%s", c.BaseURL, path)
 
 	var reqBody io.Reader
