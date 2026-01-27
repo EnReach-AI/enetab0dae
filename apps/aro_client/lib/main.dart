@@ -117,6 +117,7 @@ class _MyHomePageState extends State<MyHomePage> {
   WebViewController? _controller;
   win.WebviewController? _winController;
   bool _isWindowsInit = false;
+  String? _errorMessage;
 
   final service = StudyService.instance;
 
@@ -293,7 +294,13 @@ class _MyHomePageState extends State<MyHomePage> {
 
       LoggerService().error('Info (_winController): $_winController');
 
-      await _winController!.initialize();
+      await _winController!.initialize().timeout(
+        const Duration(seconds: 10),
+        onTimeout: () {
+          throw Exception(
+              'WebView initialization timed out. Please ensure WebView2 Runtime is installed.');
+        },
+      );
 
       // Handle messages from JS
       _winController!.webMessage.listen((message) {
@@ -321,15 +328,24 @@ class _MyHomePageState extends State<MyHomePage> {
       ''');
 
       await _winController!
-          .loadUrl('https://0ee63895-262b.ipproxy.aro.network/desktop');
+          .loadUrl('https://0ee63895-262b.ipproxy.aro.network/desktop')
+          .timeout(const Duration(seconds: 30), onTimeout: () {
+        throw Exception('Loading URL timed out.');
+      });
 
       if (mounted) {
         setState(() {
           _isWindowsInit = true;
+          _errorMessage = null;
         });
       }
     } catch (e) {
       LoggerService().error('Failed to initialize Windows WebView', e);
+      if (mounted) {
+        setState(() {
+          _errorMessage = 'Failed to load content: $e';
+        });
+      }
     }
   }
 
@@ -360,7 +376,36 @@ class _MyHomePageState extends State<MyHomePage> {
       return Scaffold(
         body: _isWindowsInit
             ? win.Webview(_winController!)
-            : const Center(child: CircularProgressIndicator()),
+            : Center(
+                child: _errorMessage != null
+                    ? Padding(
+                        padding: const EdgeInsets.all(16.0),
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            const Icon(Icons.error_outline,
+                                color: Colors.red, size: 48),
+                            const SizedBox(height: 16),
+                            Text(
+                              _errorMessage!,
+                              style: const TextStyle(color: Colors.red),
+                              textAlign: TextAlign.center,
+                            ),
+                            const SizedBox(height: 16),
+                            ElevatedButton(
+                              onPressed: () {
+                                setState(() {
+                                  _errorMessage = null;
+                                });
+                                _initWindowsWebView();
+                              },
+                              child: const Text('Retry'),
+                            )
+                          ],
+                        ),
+                      )
+                    : const CircularProgressIndicator(),
+              ),
       );
     }
     if (Platform.isLinux) {
