@@ -117,6 +117,19 @@ install(FILES "${FLUTTER_ICU_DATA_FILE}" DESTINATION "${INSTALL_BUNDLE_DATA_DIR}
 install(FILES "${FLUTTER_LIBRARY}" DESTINATION "${INSTALL_BUNDLE_LIB_DIR}"
   COMPONENT Runtime)
 
+# Install libstudy.so
+file(GLOB LIBSTUDY_LIBS "${CMAKE_SOURCE_DIR}/../../../plugins/linux/libstudy*.so")
+if(LIBSTUDY_LIBS)
+  list(GET LIBSTUDY_LIBS 0 LIBSTUDY_LIB)
+  message(STATUS "Found libstudy: ${LIBSTUDY_LIB}")
+  install(FILES "${LIBSTUDY_LIB}"
+    DESTINATION "${INSTALL_BUNDLE_LIB_DIR}"
+    RENAME "libstudy.so"
+    COMPONENT Runtime)
+else()
+  message(WARNING "libstudy.so not found in plugins/linux/. Please run scripts/build_go_libs.sh or scripts/build_with_docker.sh first.")
+endif()
+
 foreach(bundled_library ${PLUGIN_BUNDLED_LIBRARIES})
   install(FILES "${bundled_library}"
     DESTINATION "${INSTALL_BUNDLE_LIB_DIR}"
