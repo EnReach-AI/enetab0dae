@@ -377,12 +377,34 @@ jobs:
         run: git config --global --add safe.directory $FLUTTER_HOME
 
       # 安装 Flutter SDK
+          # 安装 Flutter SDK（支持重试 + 缓存）
       - name: Install Flutter SDK
+        id: flutter-sdk
         run: |
           mkdir -p $FLUTTER_HOME
-          curl -L https://storage.googleapis.com/flutter_infra_release/releases/stable/linux/flutter_linux_${FLUTTER_VERSION}-stable.tar.xz | tar -xJ -C $FLUTTER_HOME --strip-components=1
           export PATH="$FLUTTER_HOME/bin:$PATH"
+
+          # 使用缓存目录
+          CACHE_DIR="$HOME/.cache/flutter-sdk"
+          mkdir -p $CACHE_DIR
+
+          if [ -d "$CACHE_DIR/flutter_linux_${FLUTTER_VERSION}-stable" ]; then
+            echo "Using cached Flutter SDK"
+            cp -r $CACHE_DIR/flutter_linux_${FLUTTER_VERSION}-stable/* $FLUTTER_HOME/
+          else
+            echo "Downloading Flutter SDK..."
+            for i in {1..5}; do
+              curl -L -C - \
+                https://storage.googleapis.com/flutter_infra_release/releases/stable/linux/flutter_linux_${FLUTTER_VERSION}-stable.tar.xz \
+                -o /tmp/flutter_linux_${FLUTTER_VERSION}.tar.xz && break || \
+              echo "Download failed, retrying ($i/5)..." && sleep 10
+            done
+            tar -xJ -f /tmp/flutter_linux_${FLUTTER_VERSION}.tar.xz -C $FLUTTER_HOME --strip-components=1
+            cp -r $FLUTTER_HOME/* $CACHE_DIR/flutter_linux_${FLUTTER_VERSION}-stable/
+          fi
+
           flutter --version
+
 
       # Flutter 构建
       - name: Build Flutter Linux App
