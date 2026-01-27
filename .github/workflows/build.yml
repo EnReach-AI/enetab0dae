@@ -323,7 +323,13 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        distro: ["ubuntu:22.04", "debian:11", "rockylinux:8"]
+        include:
+          - distro: "ubuntu:22.04"
+            artifact_suffix: "ubuntu-22-04"
+          - distro: "debian:11"
+            artifact_suffix: "debian-11"
+          - distro: "rockylinux:8"
+            artifact_suffix: "rockylinux-8"
     runs-on: ubuntu-latest
     container:
       image: ${{ matrix.distro }}
@@ -342,13 +348,29 @@ jobs:
       - name: Install Dependencies
         run: |
           if [ -f /etc/debian_version ]; then
-            apt-get update
-            DEBIAN_FRONTEND=noninteractive apt-get install -y git curl jq clang cmake ninja-build \
+            set -euo pipefail
+            retry() {
+              local attempts="${1:-5}"
+              local sleep_seconds="${2:-3}"
+              shift 2 || true
+              local n=0
+              until "$@"; do
+                n=$((n + 1))
+                if [ "$n" -ge "$attempts" ]; then
+                  return 1
+                fi
+                sleep $((sleep_seconds * n))
+              done
+            }
+
+            retry 5 3 apt-get -o Acquire::Retries=5 -o Acquire::http::Timeout=60 -o Acquire::https::Timeout=60 update
+            retry 5 3 env DEBIAN_FRONTEND=noninteractive apt-get -o Acquire::Retries=5 -o Acquire::http::Timeout=60 -o Acquire::https::Timeout=60 install -y --no-install-recommends --fix-missing \
+              git curl jq clang cmake ninja-build \
               pkg-config libgtk-3-dev ruby ruby-dev build-essential unzip debianutils
-            if ! DEBIAN_FRONTEND=noninteractive apt-get install -y libwebkit2gtk-4.1-dev; then
-              DEBIAN_FRONTEND=noninteractive apt-get install -y libwebkit2gtk-4.0-dev
+            if ! env DEBIAN_FRONTEND=noninteractive apt-get -o Acquire::Retries=5 -o Acquire::http::Timeout=60 -o Acquire::https::Timeout=60 install -y --no-install-recommends --fix-missing libwebkit2gtk-4.1-dev; then
+              retry 3 3 env DEBIAN_FRONTEND=noninteractive apt-get -o Acquire::Retries=5 -o Acquire::http::Timeout=60 -o Acquire::https::Timeout=60 install -y --no-install-recommends --fix-missing libwebkit2gtk-4.0-dev
             fi
-            gem install --no-document fpm
+            retry 5 5 gem install --no-document fpm
 
           elif command -v dnf >/dev/null 2>&1; then
             dnf install -y epel-release dnf-plugins-core
@@ -470,7 +492,7 @@ jobs:
       - name: Upload Packages
         uses: actions/upload-artifact@v4
         with:
-          name: linux-packages
+          name: linux-packages-${{ matrix.artifact_suffix }}
           path: |
             ${{ env.FLUTTER_DIR }}/*.deb
             ${{ env.FLUTTER_DIR }}/*.rpm
