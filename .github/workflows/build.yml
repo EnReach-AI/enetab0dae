@@ -359,6 +359,7 @@ jobs:
               glib2-devel gdk-pixbuf2-devel libcurl-devel
             dnf groupinstall -y "Development Tools"
             gem install --no-document fpm
+          fi
 
       # 配置 Flutter 安全目录，解决 dubious ownership
       - name: Configure Flutter Git safe.directory
