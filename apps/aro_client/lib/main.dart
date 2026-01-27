@@ -239,7 +239,6 @@ class _MyHomePageState extends State<MyHomePage> {
       });
 
       LoggerService().info('Init result: $initResult ------- ');
-      service.nodeSignUp(); // Move inside try block
     } catch (e) {
       print('Error initializing node: $e');
       LoggerService().error('Error initializing node', e);

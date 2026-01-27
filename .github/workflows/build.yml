@@ -205,7 +205,7 @@ jobs:
 
   build-core-macos:
     needs: prepare
-    if: false # temporarily disabled
+    if: true
     name: Build Core macOS
     runs-on: macos-latest
 
