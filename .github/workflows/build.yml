@@ -499,8 +499,7 @@ jobs:
 
   build-windows:
     needs: [prepare, build-core-windows]
-    # if: needs.prepare.outputs.build_core == 'true'
-    if: false
+    if: needs.prepare.outputs.build_core == 'true'
     name: Build Windows
     runs-on: windows-latest
     steps:
