@@ -318,7 +318,7 @@ jobs:
     name: Build Flutter Linux Packages
     strategy:
       matrix:
-        distro: ["ubuntu:22.04", "debian:11", "centos:8"]
+        distro: ["ubuntu:22.04", "debian:11", "rockylinux:8"]
     runs-on: ubuntu-latest
     container:
       image: ${{ matrix.distro }}
@@ -341,12 +341,10 @@ jobs:
             fi
             gem install --no-document fpm
 
-          elif [ -f /etc/centos-release ]; then
+          elif command -v dnf >/dev/null 2>&1; then
             dnf install -y epel-release
-            sed -i 's|mirrorlist=|#mirrorlist=|g' /etc/yum.repos.d/CentOS-*
-            sed -i 's|#baseurl=http://mirror.centos.org|baseurl=http://vault.centos.org|g' /etc/yum.repos.d/CentOS-*
             dnf makecache
-            dnf install -y git curl jq gtk3-devel webkit2gtk3-devel ruby ruby-devel rubygems unzip cmake clang
+            dnf install -y git curl jq gtk3-devel webkit2gtk3-devel ruby ruby-devel rubygems unzip cmake clang rpm-build ninja-build
             dnf groupinstall -y "Development Tools"
             gem install --no-document fpm
 
@@ -391,7 +389,7 @@ jobs:
           EOF
 
       - name: Package DEB
-        if: matrix.distro != 'centos:8'
+        if: matrix.distro != 'rockylinux:8'
         working-directory: ${{ env.FLUTTER_DIR }}
         run: |
           VERSION=$(grep 'version:' pubspec.yaml | cut -d ' ' -f2 | cut -d '+' -f1)
@@ -404,7 +402,7 @@ jobs:
             aro-client.desktop=/usr/share/applications/aro-client.desktop
 
       - name: Package RPM
-        if: matrix.distro == 'centos:8'
+        if: matrix.distro == 'rockylinux:8'
         working-directory: ${{ env.FLUTTER_DIR }}
         run: |
           VERSION=$(grep 'version:' pubspec.yaml | cut -d ' ' -f2 | cut -d '+' -f1)
