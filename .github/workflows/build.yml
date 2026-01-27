@@ -345,6 +345,35 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Download Linux core library (x64)
+        if: needs.build-core-linux.result == 'success'
+        uses: actions/download-artifact@v4
+        with:
+          name: libstudy-linux
+          path: plugins/linux
+
+      - name: Download Linux core library (arm64)
+        if: needs.build-core-linux-arm64.result == 'success'
+        uses: actions/download-artifact@v4
+        with:
+          name: libstudy-linux-arm64
+          path: plugins/linux-arm64
+
+      - name: Copy core libraries into app
+        run: |
+          set -euo pipefail
+          if [ -f plugins/linux/libstudy.so ]; then
+            mkdir -p "${FLUTTER_DIR}/lib/ffi/linux"
+            cp -f plugins/linux/libstudy.so "${FLUTTER_DIR}/lib/ffi/linux/"
+            ls -lh "${FLUTTER_DIR}/lib/ffi/linux/libstudy.so"
+          fi
+
+          if [ -f plugins/linux-arm64/libstudy.so ]; then
+            mkdir -p "${FLUTTER_DIR}/lib/ffi/linux-arm64"
+            cp -f plugins/linux-arm64/libstudy.so "${FLUTTER_DIR}/lib/ffi/linux-arm64/"
+            ls -lh "${FLUTTER_DIR}/lib/ffi/linux-arm64/libstudy.so"
+          fi
+
       - name: Install Dependencies
         run: |
           if [ -f /etc/debian_version ]; then
@@ -450,6 +479,13 @@ jobs:
         run: |
           mkdir -p build/linux/x64/release/bundle/lib
           cp lib/ffi/linux/*.so build/linux/x64/release/bundle/lib/ || true
+
+      - name: Verify FFI Libraries
+        working-directory: ${{ env.FLUTTER_DIR }}
+        run: |
+          set -euo pipefail
+          test -f build/linux/x64/release/bundle/lib/libstudy.so
+          ls -lh build/linux/x64/release/bundle/lib/libstudy.so
 
       - name: Create Desktop Entry
         working-directory: ${{ env.FLUTTER_DIR }}
