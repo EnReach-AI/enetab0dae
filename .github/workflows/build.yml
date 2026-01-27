@@ -17,6 +17,10 @@ on:
 env:
   FLUTTER_DIR: apps/aro_client
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
 jobs:
   prepare:
     name: Parse commit tags
