@@ -321,12 +321,12 @@ jobs:
         distro: [ubuntu:22.04, debian:11, centos:8]
     runs-on: ubuntu-latest
     container:
-      image: ${{ matrix.distro }}
+      image: ${{ matrix.distro == 'centos:8' && 'cirrusci/flutter:3.38.5' || matrix.distro }}
 
     env:
       FLUTTER_DIR: apps/aro_client
-      FLUTTER_VERSION: 3.38.5
       FLUTTER_HOME: /usr/local/flutter
+      FLUTTER_VERSION: 3.38.5
 
     steps:
       - uses: actions/checkout@v4
@@ -342,8 +342,6 @@ jobs:
                 git curl jq clang cmake ninja-build pkg-config libgtk-3-dev ruby ruby-dev build-essential unzip && break || \
               echo "Retrying apt-get install..." && sleep 5
             done
-
-            # WebKitGTK 版本判断
             VERSION=$(cut -d. -f1 /etc/debian_version)
             if [ "$VERSION" -ge 12 ]; then
               apt-get install -y libwebkit2gtk-4.1-dev
@@ -353,11 +351,7 @@ jobs:
             gem install --no-document fpm
 
           elif [ -f /etc/centos-release ]; then
-            # CentOS 8 + Vault 源
-            sed -i 's|mirrorlist=|#mirrorlist=|g' /etc/yum.repos.d/CentOS-*
-            sed -i 's|#baseurl=http://mirror.centos.org|baseurl=http://vault.centos.org|g' /etc/yum.repos.d/CentOS-*
-            dnf makecache
-
+            # CentOS 8: 已自带 Flutter SDK (Docker 镜像)
             dnf install -y epel-release
             dnf makecache
             dnf install -y git curl jq gtk3-devel webkit2gtk3-devel ruby ruby-devel rubygems unzip cmake clang
@@ -375,36 +369,6 @@ jobs:
       # 修复 Flutter dubious ownership
       - name: Fix Flutter Git Ownership
         run: git config --global --add safe.directory $FLUTTER_HOME
-
-      # 安装 Flutter SDK
-          # 安装 Flutter SDK（支持重试 + 缓存）
-      - name: Install Flutter SDK
-        id: flutter-sdk
-        run: |
-          mkdir -p $FLUTTER_HOME
-          export PATH="$FLUTTER_HOME/bin:$PATH"
-
-          # 使用缓存目录
-          CACHE_DIR="$HOME/.cache/flutter-sdk"
-          mkdir -p $CACHE_DIR
-
-          if [ -d "$CACHE_DIR/flutter_linux_${FLUTTER_VERSION}-stable" ]; then
-            echo "Using cached Flutter SDK"
-            cp -r $CACHE_DIR/flutter_linux_${FLUTTER_VERSION}-stable/* $FLUTTER_HOME/
-          else
-            echo "Downloading Flutter SDK..."
-            for i in {1..5}; do
-              curl -L -C - \
-                https://storage.googleapis.com/flutter_infra_release/releases/stable/linux/flutter_linux_${FLUTTER_VERSION}-stable.tar.xz \
-                -o /tmp/flutter_linux_${FLUTTER_VERSION}.tar.xz && break || \
-              echo "Download failed, retrying ($i/5)..." && sleep 10
-            done
-            tar -xJ -f /tmp/flutter_linux_${FLUTTER_VERSION}.tar.xz -C $FLUTTER_HOME --strip-components=1
-            cp -r $FLUTTER_HOME/* $CACHE_DIR/flutter_linux_${FLUTTER_VERSION}-stable/
-          fi
-
-          flutter --version
-
 
       # Flutter 构建
       - name: Build Flutter Linux App
