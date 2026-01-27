@@ -15,7 +15,12 @@ import 'package:webview_flutter/webview_flutter.dart';
 import 'package:webview_windows/webview_windows.dart' as win;
 import 'dart:convert';
 
-void main() async {
+import 'package:desktop_webview_window/desktop_webview_window.dart';
+
+void main(List<String> args) async {
+  if (runWebViewTitleBarWidget(args)) {
+    return;
+  }
   runZonedGuarded(() async {
     WidgetsFlutterBinding.ensureInitialized();
 
@@ -261,8 +266,25 @@ class _MyHomePageState extends State<MyHomePage> {
 
     if (Platform.isWindows) {
       _initWindowsWebView();
+    } else if (Platform.isLinux) {
+      // On Linux, we use a separate window for now as embedded webview is not supported
+      WidgetsBinding.instance.addPostFrameCallback((_) => _initLinuxWebView());
     } else {
       _initMobileWebView();
+    }
+  }
+
+  Future<void> _initLinuxWebView() async {
+    try {
+      final webview = await WebviewWindow.create(
+        configuration: CreateConfiguration(
+          title: "ARO Client",
+          titleBarHeight: 0,
+        ),
+      );
+      webview.launch('https://0ee63895-262b.ipproxy.aro.network/desktop');
+    } catch (e) {
+      LoggerService().error('Failed to initialize Linux WebView', e);
     }
   }
 
@@ -335,6 +357,24 @@ class _MyHomePageState extends State<MyHomePage> {
         body: _isWindowsInit
             ? win.Webview(_winController!)
             : const Center(child: CircularProgressIndicator()),
+      );
+    }
+    if (Platform.isLinux) {
+      return Scaffold(
+        appBar: AppBar(title: const Text('ARO Client')),
+        body: Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const Text('WebView is running in a separate window.'),
+              const SizedBox(height: 20),
+              ElevatedButton(
+                onPressed: _initLinuxWebView,
+                child: const Text('Re-open WebView'),
+              ),
+            ],
+          ),
+        ),
       );
     }
     return Scaffold(
