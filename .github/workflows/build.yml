@@ -325,6 +325,8 @@ jobs:
 
     env:
       FLUTTER_DIR: apps/aro_client
+      FLUTTER_ROOT: /__t/flutter/stable-3.38.5-x64
+      PUB_CACHE: /github/home/.pub-cache
 
     steps:
       - uses: actions/checkout@v4
@@ -355,6 +357,10 @@ jobs:
             gem install --no-document fpm
           fi
 
+      # 配置 Flutter 安全目录，解决 dubious ownership
+      - name: Configure Flutter Git safe.directory
+        run: git config --global --add safe.directory ${{ env.FLUTTER_ROOT }}
+
       # 安装 Flutter
       - uses: subosito/flutter-action@v2
         with:
@@ -365,10 +371,10 @@ jobs:
       - name: Build Flutter Linux App
         working-directory: ${{ env.FLUTTER_DIR }}
         run: |
-          flutter config --enable-linux-desktop
-          flutter precache --linux
-          flutter pub get
-          flutter build linux --release
+          ${{ env.FLUTTER_ROOT }}/bin/flutter config --enable-linux-desktop
+          ${{ env.FLUTTER_ROOT }}/bin/flutter precache --linux
+          ${{ env.FLUTTER_ROOT }}/bin/flutter pub get
+          ${{ env.FLUTTER_ROOT }}/bin/flutter build linux --release
 
       # Copy FFI libs
       - name: Copy FFI Libraries
