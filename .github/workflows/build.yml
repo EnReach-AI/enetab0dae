@@ -351,7 +351,7 @@ jobs:
             # Rocky Linux 9
             dnf install -y epel-release
             dnf makecache
-            dnf install -y --allowerasing git curl jq gtk3-devel webkit2gtk3-devel ruby ruby-devel rubygems unzip
+            dnf install -y --allowerasing git curl jq gtk3-devel webkit2gtk3-devel ruby ruby-devel rubygems unzip cmake
             dnf groupinstall -y "Development Tools"
             gem install --no-document fpm
             # 安装 Ninja 官方二进制
@@ -378,7 +378,7 @@ jobs:
       - name: Build Flutter Linux App
         working-directory: ${{ env.FLUTTER_DIR }}
         run: |
-          export PATH="$FLUTTER_HOME/bin:$PATH"
+          export PATH="$FLUTTER_HOME/bin:/usr/local/bin:$PATH"
           flutter config --enable-linux-desktop
           flutter precache --linux
           flutter pub get
@@ -438,6 +438,7 @@ jobs:
           path: |
             ${{ env.FLUTTER_DIR }}/*.deb
             ${{ env.FLUTTER_DIR }}/*.rpm
+
 
 
   build-windows:
