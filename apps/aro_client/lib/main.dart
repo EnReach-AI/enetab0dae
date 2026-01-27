@@ -290,6 +290,21 @@ class _MyHomePageState extends State<MyHomePage> {
 
   Future<void> _initWindowsWebView() async {
     try {
+      // Initialize WebView2 environment with a custom user data folder
+      try {
+        final appDataDir = await getAppSupportDir();
+        final webviewDataDir = Directory('$appDataDir/webview_data');
+        if (!webviewDataDir.existsSync()) {
+          webviewDataDir.createSync(recursive: true);
+        }
+        await win.WebviewController.initializeEnvironment(
+          userDataPath: webviewDataDir.path,
+        );
+      } catch (e) {
+        // Environment might be already initialized
+        print('WebView environment initialization warning: $e');
+      }
+
       _winController = win.WebviewController();
 
       LoggerService().error('Info (_winController): $_winController');
