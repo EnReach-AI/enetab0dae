@@ -321,7 +321,7 @@ jobs:
         distro: [ubuntu:22.04, debian:11, centos:8]
     runs-on: ubuntu-latest
     container:
-      image: ${{ matrix.distro == 'centos:8' && 'ghcr.io/cirruslabs/docker-images-flutter/pkgs/container/flutter:3.38.6' || matrix.distro }}
+      image: ${{ matrix.distro == 'centos:8' && 'ghcr.io/cirruslabs/flutter:3.38.5' || matrix.distro }}
 
     env:
       FLUTTER_DIR: apps/aro_client
