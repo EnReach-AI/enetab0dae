@@ -393,6 +393,28 @@ jobs:
           flutter config --enable-linux-desktop
           flutter precache --linux
           flutter pub get
+          python3 - <<'PY'
+          from pathlib import Path
+
+          p = Path("linux/flutter/ephemeral/.plugin_symlinks/desktop_webview_window/linux/CMakeLists.txt")
+          if not p.exists():
+              raise SystemExit(0)
+
+          s = p.read_text(encoding="utf-8")
+          old = "pkg_check_modules(WebKit REQUIRED IMPORTED_TARGET webkit2gtk-4.1)"
+          if old not in s:
+              raise SystemExit(0)
+
+          new = "\n".join(
+              [
+                  "pkg_check_modules(WebKit IMPORTED_TARGET webkit2gtk-4.1)",
+                  "if (NOT WebKit_FOUND)",
+                  "  pkg_check_modules(WebKit REQUIRED IMPORTED_TARGET webkit2gtk-4.0)",
+                  "endif()",
+              ]
+          )
+          p.write_text(s.replace(old, new), encoding="utf-8")
+          PY
           flutter build linux --release
 
       - name: Copy FFI Libraries
