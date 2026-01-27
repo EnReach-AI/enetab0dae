@@ -352,6 +352,7 @@ jobs:
             dnf install -y epel-release
             dnf install -y --allowerasing git curl jq gtk3-devel webkit2gtk3-devel ruby ruby-devel rubygems
             dnf groupinstall -y "Development Tools"
+            dnf install -y ninja
             gem install --no-document fpm
           fi
 
