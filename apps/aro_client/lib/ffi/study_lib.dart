@@ -169,6 +169,8 @@ class StudyLibrary {
       '/usr/local/lib/libstudy.dylib',
     ];
 
+    print('StudyLib: macOS dylib candidates: $candidates');
+
     for (final dylibPath in candidates) {
       final file = File(dylibPath);
       final exists = file.existsSync();

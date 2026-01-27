@@ -290,11 +290,15 @@ class _MyHomePageState extends State<MyHomePage> {
   Future<void> _initWindowsWebView() async {
     _winController = win.WebviewController();
     try {
+      LoggerService().error('Info (_winController): $_winController');
+
       await _winController!.initialize();
 
       // Handle messages from JS
       _winController!.webMessage.listen((message) {
         print('Received Web message (Windows): $message');
+        LoggerService().error('Received Web message (Windows): $message');
+
         if (message is String) {
           handleWebMessage(message);
         } else if (message is Map) {
