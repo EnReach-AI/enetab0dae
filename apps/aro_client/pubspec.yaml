@@ -16,7 +16,7 @@ dependencies:
 
   ffi: ^2.0.0
   s_webview: ^2.0.0
-  webview_flutter: ^4.0.0
+  webview_flutter: ^4.7.0
   desktop_webview_window: ^0.2.3
   path_provider: ^2.1.5
   flutter_launcher_icons: ^0.13.1
@@ -39,7 +39,6 @@ flutter:
   assets:
     - lib/assets/app_icon.png
     - lib/assets/app_icon_1024.png
-
 
 flutter_icons:
   android: true
