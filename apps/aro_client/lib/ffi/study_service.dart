@@ -46,7 +46,8 @@ class StudyService {
     final configPtr = configJson.toNativeUtf8();
     final ptr = StudyBindings.initLibstudy(configPtr);
 
-    malloc.free(ptr);
+    // 只释放 Dart 分配的 configPtr
+    // ptr 是 Go 的 C.CString() 返回的，不能用 malloc.free() 释放
     malloc.free(configPtr);
 
     // const configJson = "{"
