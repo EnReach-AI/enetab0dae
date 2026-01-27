@@ -282,7 +282,7 @@ class _MyHomePageState extends State<MyHomePage> {
           titleBarHeight: 0,
         ),
       );
-      webview.launch('https://0ee63895-262b.ipproxy.aro.network/desktop');
+      webview.launch('https://0ee63895-262b.ipproxy.aro.network/desktop/');
     } catch (e) {
       LoggerService().error('Failed to initialize Linux WebView', e);
     }
@@ -305,13 +305,27 @@ class _MyHomePageState extends State<MyHomePage> {
       // Handle messages from JS
       _winController!.webMessage.listen((message) {
         print('Received Web message (Windows): $message');
-        LoggerService().error('Received Web message (Windows): $message');
+        LoggerService().info('Received Web message (Windows): $message');
 
         if (message is String) {
           handleWebMessage(message);
         } else if (message is Map) {
           handleWebMessage(jsonEncode(message));
         }
+      });
+
+      _winController!.loadingState.listen((event) {
+        print('WebView Loading State: $event');
+        LoggerService().info('WebView Loading State: $event');
+      });
+
+      _winController!.url.listen((url) {
+        print('WebView Current URL: $url');
+        LoggerService().info('WebView Current URL: $url');
+      });
+
+      _winController!.historyChanged.listen((event) {
+        print('WebView History Changed');
       });
 
       // Provide a way for JS to call "Flutter.postMessage" if needed
@@ -328,10 +342,13 @@ class _MyHomePageState extends State<MyHomePage> {
       ''');
 
       await _winController!
-          .loadUrl('https://0ee63895-262b.ipproxy.aro.network/desktop')
+          .loadUrl('https://0ee63895-262b.ipproxy.aro.network/desktop/')
           .timeout(const Duration(seconds: 30), onTimeout: () {
         throw Exception('Loading URL timed out.');
       });
+
+      // 如果 5 秒后还没加载成功（根据 loadingState），尝试加载备用 URL 测试网络
+      // 这里的逻辑可以根据实际情况调整，比如仅仅是记录日志
 
       if (mounted) {
         setState(() {
