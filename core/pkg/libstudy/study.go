@@ -272,7 +272,7 @@ func GetCurrentVersion() *C.char {
 func GetLastVersion() *C.char {
 	defer recoverAndLog("GetLastVersion")
 	log.Println("GetLastVersion called")
-	apiResponse, err := api_client.GetLastVersion(constant.PROGRAM_APP, constant.ENV)
+	apiResponse, err := apiClient.GetLastVersion(constant.PROGRAM_APP, constant.ENV)
 	if err != nil {
 		return C.CString(fmt.Sprintf(`{"error":"%s"}`, err.Error()))
 	}
