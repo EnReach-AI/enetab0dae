@@ -19,11 +19,32 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"path/filepath"
+	"time"
 
 	"aro-ext-app/core/internal/api_client"
 	"aro-ext-app/core/internal/crypto"
 	"aro-ext-app/core/internal/ws_client"
 )
+
+// 日志文件路径
+var logFilePath = "libstudy.log"
+
+// 日志初始化
+func init() {
+	logDir := filepath.Dir(logFilePath)
+	if logDir != "." && logDir != "" {
+		_ = os.MkdirAll(logDir, 0755)
+	}
+	f, err := os.OpenFile(logFilePath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
+	if err == nil {
+		log.SetOutput(f)
+		log.SetFlags(log.LstdFlags | log.Lmicroseconds | log.Lshortfile)
+		log.Println("==== libstudy started at", time.Now().Format(time.RFC3339), "====")
+	} else {
+		log.Printf("Failed to open log file: %v", err)
+	}
+}
 
 // goStringFromC 安全地将 C 字符串转换为 Go 字符串，处理 NULL 指针
 func goStringFromC(s *C.char) string {
@@ -244,6 +265,7 @@ func StartWSClient() *C.char {
 //export InitLibstudy
 func InitLibstudy(initParamsJSON *C.char) *C.char {
 	defer recoverAndLog("InitLibstudy")
+
 	log.Println("InitLibstudy called")
 
 	details := map[string]interface{}{}
