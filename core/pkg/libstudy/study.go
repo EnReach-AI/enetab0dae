@@ -234,7 +234,16 @@ func GetWSClientStatus() *C.char {
 		"status":     status,
 		"error":      lastError,
 	}
-	return reply(200, "WebSocket client status fetched", data)
+	var code int
+	switch status {
+	case "connecting":
+		code = 400
+	case "forbidden":
+		code = 401
+	default:
+		code = 200
+	}
+	return reply(code, "WebSocket client status fetched", data)
 }
 
 // StartWSClient 手动启动 WebSocket 客户端
