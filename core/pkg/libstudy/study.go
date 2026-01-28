@@ -12,38 +12,36 @@ package main
 import "C"
 
 import (
+	"aro-ext-app/core/internal/api_client"
 	"aro-ext-app/core/internal/constant"
+	"aro-ext-app/core/internal/crypto"
 	"aro-ext-app/core/internal/proxy_worker"
 	"aro-ext-app/core/internal/storage"
+	"aro-ext-app/core/internal/ws_client"
 	"encoding/json"
 	"fmt"
 	"log"
 	"os"
-	"path/filepath"
-	"time"
 
-	"aro-ext-app/core/internal/api_client"
-	"aro-ext-app/core/internal/crypto"
-	"aro-ext-app/core/internal/ws_client"
+	"github.com/sirupsen/logrus"
+	"gopkg.in/natefinch/lumberjack.v2"
 )
 
-// 日志文件路径
-var logFilePath = "libstudy.log"
-
-// 日志初始化
+// 日志初始化（Logrus + Lumberjack）
 func init() {
-	logDir := filepath.Dir(logFilePath)
-	if logDir != "." && logDir != "" {
-		_ = os.MkdirAll(logDir, 0755)
-	}
-	f, err := os.OpenFile(logFilePath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
-	if err == nil {
-		log.SetOutput(f)
-		log.SetFlags(log.LstdFlags | log.Lmicroseconds | log.Lshortfile)
-		log.Println("==== libstudy started at", time.Now().Format(time.RFC3339), "====")
-	} else {
-		log.Printf("Failed to open log file: %v", err)
-	}
+	logrus.SetFormatter(&logrus.TextFormatter{
+		FullTimestamp:   true,
+		TimestampFormat: "2006-01-02 15:04:05.000",
+	})
+	logrus.SetOutput(&lumberjack.Logger{
+		Filename:   "libstudy.log",
+		MaxSize:    10,    // MB
+		MaxBackups: 0,     // 不保留历史文件
+		MaxAge:     0,     // 不限制时间
+		Compress:   false, // 不压缩
+	})
+	logrus.SetLevel(logrus.InfoLevel)
+	logrus.Info("==== libstudy started ====")
 }
 
 // goStringFromC 安全地将 C 字符串转换为 Go 字符串，处理 NULL 指针
@@ -57,13 +55,13 @@ func goStringFromC(s *C.char) string {
 // recoverAndLog 捕获 panic 并返回错误 JSON
 func recoverAndLog(funcName string) {
 	if r := recover(); r != nil {
-		log.Printf("%s panic recovered: %v", funcName, r)
-		os.Stderr.Sync() // 确保错误日志写入
+		logrus.WithField("func", funcName).WithField("panic", r).Error("panic recovered")
 	}
 }
 
 func toCStringJSON(v interface{}) *C.char {
 	data, _ := json.Marshal(v)
+	logrus.WithField("json", string(data)).Debug("response json")
 	return C.CString(string(data))
 }
 
