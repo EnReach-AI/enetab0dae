@@ -184,6 +184,70 @@ func GetRewards() *C.char {
 	return C.CString(string(data))
 }
 
+// ======================
+// WebSocket 相关导出函数
+// ======================
+
+// GetWSClientStatus 获取 WebSocket 客户端连接状态
+// 返回：JSON 格式的响应，包含运行状态
+//
+//export GetWSClientStatus
+func GetWSClientStatus() *C.char {
+	defer recoverAndLog("GetWSClientStatus")
+	log.Println("GetWSClientStatus called")
+
+	isRunning := ws_client.IsWebSocketRunning()
+
+	result := map[string]interface{}{
+		"success": true,
+		"message": "WebSocket client status fetched",
+		"data": map[string]bool{
+			"is_running": isRunning,
+		},
+	}
+
+	data, _ := json.Marshal(result)
+	log.Println("GetWSClientStatus result: ", string(data))
+	return C.CString(string(data))
+}
+
+// StartWSClient 手动启动 WebSocket 客户端
+// 返回：JSON 格式的响应，包含启动结果和当前状态
+//
+//export StartWSClient
+func StartWSClient() *C.char {
+	defer recoverAndLog("StartWSClient")
+	log.Println("StartWSClient called")
+
+	if ws_client.IsWebSocketRunning() {
+		result := map[string]interface{}{
+			"success": true,
+			"message": "WebSocket client already running",
+			"data": map[string]bool{
+				"is_running": true,
+			},
+		}
+		data, _ := json.Marshal(result)
+		log.Println("StartWSClient result: ", string(data))
+		return C.CString(string(data))
+	}
+
+	// 启动客户端（内部包含重连机制）
+	ws_client.StartWebSocketClient()
+
+	result := map[string]interface{}{
+		"success": true,
+		"message": "WebSocket client start triggered",
+		"data": map[string]bool{
+			"is_running": ws_client.IsWebSocketRunning(),
+		},
+	}
+
+	data, _ := json.Marshal(result)
+	log.Println("StartWSClient result: ", string(data))
+	return C.CString(string(data))
+}
+
 // InitLibstudy 初始化 libstudy 库
 // 加载或创建密钥对、初始化 API 客户端和 WebSocket 客户端
 // 参数：initParamsJSON - JSON 格式的初始化参数，包含 ServerConfig
@@ -223,7 +287,6 @@ func InitLibstudy(initParamsJSON *C.char) *C.char {
 		}
 	}
 
-	
 	// 加载或创建密钥对
 	var err error
 	keyPair, err = crypto.GetOrCreateKeyPair("")
