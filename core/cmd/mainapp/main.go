@@ -5,7 +5,6 @@ import (
 	"aro-ext-app/core/internal/constant"
 	"aro-ext-app/core/internal/crypto"
 	"aro-ext-app/core/internal/storage"
-	"aro-ext-app/core/internal/ws_client"
 	"fmt"
 	"log"
 )
@@ -13,7 +12,6 @@ import (
 // Global variables
 var (
 	apiClient  *api_client.APIClient
-	wsClient   *ws_client.WSClient
 	keyPair    *crypto.KeyPair
 	clientID   string
 	baseAPIURL = constant.HTTP_SERVER_ENDPOINT
@@ -33,13 +31,6 @@ func main() {
 	fmt.Printf("NodeStat response: %+v\n", stat)
 	rewards, _ := apiClient.GetRewards()
 	fmt.Printf("Rewards response: %+v\n", rewards)
-
-	err = wsClient.Connect()
-	if err != nil {
-		log.Printf("WebSocket connection error: %v", err)
-		return
-	}
-
 }
 
 func init() {
