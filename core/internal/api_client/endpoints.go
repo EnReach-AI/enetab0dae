@@ -3,10 +3,12 @@ package api_client
 import (
 	"aro-ext-app/core/internal/auth"
 	"aro-ext-app/core/internal/config"
+	"aro-ext-app/core/internal/constant"
 	"aro-ext-app/core/internal/crypto"
 	"aro-ext-app/core/internal/storage"
 	"aro-ext-app/core/internal/ws_client"
 	"encoding/json"
+	"fmt"
 	"runtime"
 	"time"
 )
@@ -153,4 +155,14 @@ func (c *APIClient) GetNodeStat() (*APIResponse, error) {
 //   - rewardInfo: Detailed reward information
 func (c *APIClient) GetRewards() (*APIResponse, error) {
 	return c.Get("/api/liteNode/rewards")
+}
+
+
+func (b *APIClient) GetLastVersion(program constant.OtaProgram, env string) (*APIResponse, error) {
+	isa := 0
+	if runtime.GOARCH == "arm64" {
+		isa = 1
+	}
+	path := fmt.Sprintf("/api/keeper/ota/%s/%s/%d/%s/lastest", program, env, isa, runtime.GOOS)
+	return b.Get(path)
 }

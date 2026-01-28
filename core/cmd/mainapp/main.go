@@ -58,6 +58,5 @@ func init() {
 	log.Printf("API client auto-initialized with URL: %+v, ClientID: %s", apiClient, clientID)
 
 	// auto initialize WebSocket client
-	wsClient = ws_client.NewWSClient(baseWSURL)
 	log.Printf("WebSocket client initialized with URL: %s", baseWSURL)
 }

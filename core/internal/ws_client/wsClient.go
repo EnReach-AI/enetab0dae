@@ -40,14 +40,22 @@ var (
 
 // WebSocketClient 结构体
 type WebSocketClient struct {
+	ws_url      string
 	conn        *websocket.Conn
 	config      WSConfig
 	isConnected bool
+	status      string // connecting, connected, forbidden
+	lastError   string
 	mutex       sync.Mutex
 }
 
 // GetWebSocketClient 获取WebSocket客户端单例实例
+func SetWsClientUrl(wsurl string) {
+	client := GetWebSocketClient()
+	client.ws_url = wsurl
+}
 func GetWebSocketClient() *WebSocketClient {
+
 	once.Do(func() {
 		cfg := config.GetConfig()
 
@@ -61,7 +69,9 @@ func GetWebSocketClient() *WebSocketClient {
 		}
 
 		websocketClientInstance = &WebSocketClient{
-			config: wsConfig,
+			config:    wsConfig,
+			status:    "connecting",
+			lastError: "",
 		}
 	})
 	return websocketClientInstance
@@ -69,6 +79,7 @@ func GetWebSocketClient() *WebSocketClient {
 
 // Start 启动WebSocket客户端
 func (wsc *WebSocketClient) Start() {
+	wsc.setStatus("connecting", "")
 	// 如果 AutoConnect 为 false，则直接返回
 	//if !wsc.config.AutoConnect {
 	//	log.Println("AutoConnect is disabled, skipping WebSocket connection")
@@ -126,7 +137,7 @@ func (wsc *WebSocketClient) connectToWebSocket() bool {
 
 	u := url.URL{
 		Scheme:   "ws",
-		Host:     "staging-ws.aro.network", // 你的端口
+		Host:     wsc.ws_url, // 你的端口
 		Path:     "/socket.io/",
 		RawQuery: "EIO=4&transport=websocket",
 	}
@@ -138,6 +149,7 @@ func (wsc *WebSocketClient) connectToWebSocket() bool {
 	c, _, err := websocket.DefaultDialer.Dial(u.String(), requestHeader)
 	if err != nil {
 		log.Printf("Connection failed: %v", err)
+		wsc.handleConnectError(err.Error())
 		return false
 	}
 
@@ -173,6 +185,7 @@ func (wsc *WebSocketClient) connectToWebSocket() bool {
 				wsc.conn = nil
 			}
 			wsc.mutex.Unlock()
+			wsc.handleDisconnect("connection closed")
 		}()
 		for {
 			_, message, err := c.ReadMessage()
@@ -200,9 +213,9 @@ func (wsc *WebSocketClient) connectToWebSocket() bool {
 					log.Println("Failed to send auth:", err)
 					return
 				}
-				fmt.Printf(">>> Auth data has been sent: %+v\n", authWrapper)
+				log.Printf(">>> Auth data has been sent: %+v\n", authWrapper)
 			case '1': // '1' = Close 包 (连接关闭)
-				fmt.Println("Server actively closed the connection")
+				log.Println("Server actively closed the connection")
 				connected = false
 			case '2': // '2' = Ping (心跳)
 				// 必须回复 '3' (Pong) 保持连接
@@ -211,9 +224,10 @@ func (wsc *WebSocketClient) connectToWebSocket() bool {
 			case '4': // '4' = Message (业务消息)
 				// 40 代表连接成功确认
 				if len(msgStr) > 1 && msgStr[1] == '0' {
-					fmt.Println(">>> Server confirmed connection successful (SID generated)")
+					log.Println(">>> Server confirmed connection successful (SID generated)")
+					wsc.setStatus("connected", "")
 				} else {
-					fmt.Printf("Received message: %s\n", msgStr)
+					log.Printf("Received message: %s\n", msgStr)
 				}
 			}
 		}
@@ -236,4 +250,58 @@ func IsWebSocketRunning() bool {
 	client.mutex.Lock()
 	defer client.mutex.Unlock()
 	return client.isConnected
+}
+
+// GetWebSocketStatus 获取 WebSocket 状态与错误信息
+// 返回：status (connecting/connected/forbidden), lastError, isConnected
+func GetWebSocketStatus() (string, string, bool) {
+	client := GetWebSocketClient()
+	client.mutex.Lock()
+	defer client.mutex.Unlock()
+	return client.status, client.lastError, client.isConnected
+}
+
+// setStatus 设置连接状态和错误信息
+func (wsc *WebSocketClient) setStatus(status string, errMsg string) {
+	wsc.mutex.Lock()
+	defer wsc.mutex.Unlock()
+	if status != "" {
+		wsc.status = status
+	}
+	wsc.lastError = errMsg
+}
+
+// handleConnectError 处理连接错误，参考 JS 的 connect_error 逻辑
+func (wsc *WebSocketClient) handleConnectError(msg string) {
+	invalidMsgs := []string{
+		"Connection busy please try again later",
+		"invalid userId",
+		"server err",
+		"invalid auth token",
+	}
+
+	// 检查是否是 invalid ip address 开头
+	isInvalidIP := len(msg) > 19 && msg[:19] == "invalid ip address:"
+
+	// 检查是否在 invalidMsgs 列表中
+	isInvalidMsg := false
+	for _, m := range invalidMsgs {
+		if msg == m {
+			isInvalidMsg = true
+			break
+		}
+	}
+
+	if isInvalidIP || isInvalidMsg {
+		wsc.setStatus("connecting", "")
+	} else if msg == "Restricted IP" {
+		wsc.setStatus("forbidden", msg)
+	} else {
+		wsc.setStatus("connecting", msg)
+	}
+}
+
+// handleDisconnect 处理断开连接，参考 JS 的 disconnect 逻辑
+func (wsc *WebSocketClient) handleDisconnect(reason string) {
+	wsc.setStatus("connecting", reason)
 }

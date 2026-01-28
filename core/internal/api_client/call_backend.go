@@ -82,31 +82,6 @@ func NewBackendService(deviceType string, serialNumber string) *BackendService {
 	return bs
 }
 
-// 接收者方法版本（用于面向对象调用）
-func (b *BackendService) GetLastVersion(program constant.OtaProgram, env string) (*APIResponse, error) {
-	isa := 0
-	if runtime.GOARCH == "arm64" {
-		isa = 1
-	}
-	path := fmt.Sprintf("/api/keeper/ota/%s/%s/%d/%s/lastest", program, env, isa, runtime.GOOS)
-	return b.get(path)
-}
-
-// 直接函数版本（用于直接调用，自动使用 defaultBackendService）
-// 如果未初始化 defaultBackendService，返回错误
-func GetLastVersion(program constant.OtaProgram, env string) (*APIResponse, error) {
-	if defaultBackendService == nil {
-		return nil, fmt.Errorf("BackendService not initialized, call NewBackendService first")
-	}
-	return defaultBackendService.GetLastVersion(program, env)
-}
-
-type OtaVersionInfo struct {
-	Version      string `json:"version"`
-	Url          string `json:"url"`
-	Checksum     string `json:"checksum"`
-	ReleaseNotes string `json:"releaseNotes"`
-}
 
 // 辅助函数：从指定 URL 获取版本信息
 // 内部实现细节
