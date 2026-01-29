@@ -13,7 +13,6 @@ class StudyLibrary {
   StudyLibrary._internal();
 
   static DynamicLibrary? _lib;
-  static bool _inited = false;
 
   static DynamicLibrary get instance {
     _lib ??= _open();
