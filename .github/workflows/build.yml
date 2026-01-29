@@ -239,7 +239,7 @@ jobs:
 
   build-core-android:
     needs: prepare
-    if: false # temporarily disabled
+    if: true # temporarily disabled
     name: Build Core Android ARM64
     runs-on: ubuntu-latest
 
