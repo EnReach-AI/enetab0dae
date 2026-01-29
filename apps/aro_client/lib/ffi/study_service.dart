@@ -63,17 +63,18 @@ class StudyService {
       final jsonPtr = configJson.toNativeUtf8();
 
       final startProxyPtr = StudyBindings.startProxy(jsonPtr);
-      final result = startProxyPtr.toDartString();
+      final startResult = startProxyPtr.toDartString();
       malloc.free(jsonPtr);
 
       final getProxyWorkerStatus = StudyBindings.getProxyWorkerStatus();
-      final result2 = getProxyWorkerStatus.toDartString();
+      final statusResult = getProxyWorkerStatus.toDartString();
 
-      LoggerService().info('GetProxyWorkerStatus: $result2 -------  $result');
+      LoggerService()
+          .info('GetProxyWorkerStatus: $statusResult -------  $startResult');
       print(
           'wwwwwwwwwwww------wwwww:  hhhhhhhhhh---hhh $jsonPtr  $getProxyWorkerStatus');
     } catch (e) {
-      LoggerService().info('Error in startProxy: ${DateTime.now()} $e');
+      LoggerService().info('Error in startProxy: $e');
       print('Error in startProxy: $e');
     }
 
