@@ -3,12 +3,10 @@ package api_client
 import (
 	"aro-ext-app/core/internal/auth"
 	"aro-ext-app/core/internal/config"
-	"aro-ext-app/core/internal/constant"
 	"aro-ext-app/core/internal/crypto"
 	"aro-ext-app/core/internal/storage"
 	"aro-ext-app/core/internal/ws_client"
 	"encoding/json"
-	"fmt"
 	"runtime"
 	"time"
 )
