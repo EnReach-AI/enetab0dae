@@ -19,7 +19,7 @@ retry() {
 if [ -f /etc/debian_version ]; then
   retry 5 3 sudo apt-get -o Acquire::Retries=5 -o Acquire::http::Timeout=60 -o Acquire::https::Timeout=60 update
   retry 5 3 sudo env DEBIAN_FRONTEND=noninteractive apt-get -o Acquire::Retries=5 -o Acquire::http::Timeout=60 -o Acquire::https::Timeout=60 install -y --no-install-recommends --fix-missing \
-    git curl jq clang cmake ninja-build pkg-config libgtk-3-dev ruby ruby-dev build-essential unzip debianutils
+    git curl jq clang cmake ninja-build pkg-config libgtk-3-dev ruby ruby-dev build-essential unzip debianutils libayatana-appindicator3-dev
   if ! sudo env DEBIAN_FRONTEND=noninteractive apt-get -o Acquire::Retries=5 -o Acquire::http::Timeout=60 -o Acquire::https::Timeout=60 install -y --no-install-recommends --fix-missing libwebkit2gtk-4.1-dev; then
     retry 3 3 sudo env DEBIAN_FRONTEND=noninteractive apt-get -o Acquire::Retries=5 -o Acquire::http::Timeout=60 -o Acquire::https::Timeout=60 install -y --no-install-recommends --fix-missing libwebkit2gtk-4.0-dev
   fi
