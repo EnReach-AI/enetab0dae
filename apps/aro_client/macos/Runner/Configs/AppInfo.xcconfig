@@ -11,4 +11,8 @@ PRODUCT_NAME = aro_client
 PRODUCT_BUNDLE_IDENTIFIER = com.aro.aroApp
 
 // The copyright displayed in application information
-PRODUCT_COPYRIGHT = Copyright © 2025 com.aro. All rights reserved.
+PRODUCT_COPYRIGHT = Copyright © 2025 com.aro.ARONetwork All rights reserved.
+
+// Added by Trae to fix "library 'study' not found"
+LIBRARY_SEARCH_PATHS = $(inherited) "$(PROJECT_DIR)/../lib/ffi/macos"
+

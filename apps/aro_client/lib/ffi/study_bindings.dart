@@ -29,6 +29,12 @@ typedef GetCurrentVersionDart = Pointer<Utf8> Function();
 typedef GetLastVersionC = Pointer<Utf8> Function();
 typedef GetLastVersionDart = Pointer<Utf8> Function();
 
+typedef GetWSClientStatusC = Pointer<Utf8> Function();
+typedef GetWSClientStatusDart = Pointer<Utf8> Function();
+
+typedef StartWSClientC = Pointer<Utf8> Function();
+typedef StartWSClientDart = Pointer<Utf8> Function();
+
 typedef ChdirC = Int32 Function(Pointer<Utf8>);
 typedef ChdirDart = int Function(Pointer<Utf8>);
 
@@ -64,4 +70,11 @@ class StudyBindings {
 
   static final getLastVersion = _lib
       .lookupFunction<GetLastVersionC, GetLastVersionDart>('GetLastVersion');
+
+  static final getWSClientStatus =
+      _lib.lookupFunction<GetWSClientStatusC, GetWSClientStatusDart>(
+          'GetWSClientStatus');
+
+  static final startWSClient =
+      _lib.lookupFunction<StartWSClientC, StartWSClientDart>('StartWSClient');
 }

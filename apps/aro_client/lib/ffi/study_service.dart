@@ -100,4 +100,14 @@ class StudyService {
     final str = ptr.toDartString();
     return str;
   }
+
+  String getWSClientStatus() {
+    final ptr = StudyBindings.getWSClientStatus();
+    return _handleResult(ptr);
+  }
+
+  String startWSClient() {
+    final ptr = StudyBindings.startWSClient();
+    return _handleResult(ptr);
+  }
 }

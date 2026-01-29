@@ -186,6 +186,10 @@ class StudyLibrary {
           print('[StudyLib] Failed to load from $pathToOpen: $e');
           continue;
         }
+      } else {
+        final lib = DynamicLibrary.open('libstudy.dylib');
+        print('[StudyLib] Successfully loaded from dev: $pathToOpen');
+        return lib;
       }
     }
 

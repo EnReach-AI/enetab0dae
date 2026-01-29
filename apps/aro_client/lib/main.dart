@@ -13,9 +13,12 @@ import 'dart:io';
 import 'package:s_webview/s_webview.dart';
 import 'package:webview_flutter/webview_flutter.dart';
 import 'package:webview_windows/webview_windows.dart' as win;
+import 'package:tray_manager/tray_manager.dart';
+import 'package:path/path.dart' as p;
 import 'dart:convert';
-
+import 'package:aro_client/utils/config.dart';
 import 'package:desktop_webview_window/desktop_webview_window.dart';
+import 'package:flutter_inappwebview/flutter_inappwebview.dart' as inapp;
 
 void main(List<String> args) async {
   if (runWebViewTitleBarWidget(args)) {
@@ -66,6 +69,16 @@ void main(List<String> args) async {
 
       windowManager.waitUntilReadyToShow(windowOptions, () async {
         await windowManager.show();
+        if (Platform.isWindows) {
+          try {
+            final exeDir = p.dirname(Platform.resolvedExecutable);
+            final iconPath = p.join(exeDir, 'resources', 'app_icon.ico');
+            await trayManager.setIcon(iconPath);
+            await trayManager.setToolTip('ARO');
+          } catch (e) {
+            LoggerService().error('Failed to setup Windows tray icon', e);
+          }
+        }
       });
     }
     if (Platform.isAndroid) {
@@ -116,6 +129,7 @@ class MyHomePage extends StatefulWidget {
 class _MyHomePageState extends State<MyHomePage> {
   WebViewController? _controller;
   win.WebviewController? _winController;
+  inapp.InAppWebViewController? _linuxController;
   bool _isWindowsInit = false;
   String? _errorMessage;
 
@@ -135,6 +149,8 @@ class _MyHomePageState extends State<MyHomePage> {
   ''';
     if (Platform.isWindows) {
       _winController?.executeScript(script);
+    } else if (Platform.isLinux) {
+      _linuxController?.evaluateJavascript(source: script);
     } else {
       _controller?.runJavaScript(script);
     }
@@ -200,11 +216,36 @@ class _MyHomePageState extends State<MyHomePage> {
       }
     } else if (message == 'nodeRewards') {
       final rewards = service.getRewards();
-      print('node rewards: $rewards');
-      sendMessageToWeb({
-        'type': 'nodeRewards',
-        'payload': rewards,
-      });
+      final rewardsMap = jsonDecode(rewards);
+
+      print('node rewardsMap: $rewardsMap');
+      if (rewardsMap['code'] == 200) {
+        sendMessageToWeb({
+          'type': 'nodeRewards',
+          'payload': rewardsMap,
+        });
+      }
+    } else if (message == 'getVersion') {
+      final version = service.getCurrentVersion();
+      final versionMap = jsonDecode(version);
+      print('versionMap getVersion $versionMap');
+      if (versionMap['code'] == 200) {
+        sendMessageToWeb({
+          'type': 'getVersion',
+          'payload': versionMap,
+        });
+      }
+    } else if (message == 'getWSClientStatus') {
+      final status = service.getWSClientStatus();
+      final statusMap = jsonDecode(status);
+      print('statusMap getWSClientStatus $statusMap');
+      LoggerService().info('getWSClientStatus--- $statusMap');
+      if (statusMap['code'] == 200) {
+        sendMessageToWeb({
+          'type': 'getWSClientStatus',
+          'payload': statusMap,
+        });
+      }
     }
   }
 
@@ -233,10 +274,7 @@ class _MyHomePageState extends State<MyHomePage> {
       print('Generate file directory 123: $appDir');
       // final service = StudyService.instance; // Remove local variable to avoid confusion
       final initResult = service.nodeInit(appDir, {
-        "config": {
-          "BaseAPIURL": "https://staging-api.aro.network",
-          "BaseWSURL": "wss://staging-ws.aro.network"
-        }
+        "config": {"BaseAPIURL": AllConfig.apiBase, "BaseWSURL": AllConfig.ws}
       });
 
       LoggerService().info('Init result: $initResult ------- ');
@@ -251,6 +289,8 @@ class _MyHomePageState extends State<MyHomePage> {
     final script = 'window.onFlutterMessage($json);';
     if (Platform.isWindows) {
       _winController?.executeScript(script);
+    } else if (Platform.isLinux) {
+      _linuxController?.evaluateJavascript(source: script);
     } else {
       _controller?.runJavaScript(script);
     }
@@ -267,24 +307,9 @@ class _MyHomePageState extends State<MyHomePage> {
     if (Platform.isWindows) {
       _initWindowsWebView();
     } else if (Platform.isLinux) {
-      // On Linux, we use a separate window for now as embedded webview is not supported
-      WidgetsBinding.instance.addPostFrameCallback((_) => _initLinuxWebView());
+      // On Linux, we use embedded InAppWebView
     } else {
       _initMobileWebView();
-    }
-  }
-
-  Future<void> _initLinuxWebView() async {
-    try {
-      final webview = await WebviewWindow.create(
-        configuration: CreateConfiguration(
-          title: "ARO Client",
-          titleBarHeight: 0,
-        ),
-      );
-      webview.launch('https://0ee63895-262b.ipproxy.aro.network/desktop/');
-    } catch (e) {
-      LoggerService().error('Failed to initialize Linux WebView', e);
     }
   }
 
@@ -357,7 +382,7 @@ class _MyHomePageState extends State<MyHomePage> {
       ''');
 
       await _winController!
-          .loadUrl('https://0ee63895-262b.ipproxy.aro.network/desktop/')
+          .loadUrl(AllConfig.deskTopURL)
           .timeout(const Duration(seconds: 30), onTimeout: () {
         throw Exception('Loading URL timed out.');
       });
@@ -398,8 +423,9 @@ class _MyHomePageState extends State<MyHomePage> {
           },
         ),
       )
-      ..loadRequest(
-          Uri.parse('https://0ee63895-262b.ipproxy.aro.network/desktop'));
+      ..loadRequest(Uri.parse(Platform.isAndroid || Platform.isIOS
+          ? AllConfig.mobileURL
+          : AllConfig.deskTopURL));
   }
 
   @override
@@ -442,19 +468,40 @@ class _MyHomePageState extends State<MyHomePage> {
     }
     if (Platform.isLinux) {
       return Scaffold(
-        appBar: AppBar(title: const Text('ARO Client')),
-        body: Center(
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              const Text('WebView is running in a separate window.'),
-              const SizedBox(height: 20),
-              ElevatedButton(
-                onPressed: _initLinuxWebView,
-                child: const Text('Re-open WebView'),
-              ),
-            ],
+        body: inapp.InAppWebView(
+          initialUrlRequest: inapp.URLRequest(
+            url: inapp.WebUri(AllConfig.deskTopURL),
           ),
+          initialSettings: inapp.InAppWebViewSettings(
+            isInspectable: kDebugMode,
+          ),
+          onWebViewCreated: (controller) {
+            _linuxController = controller;
+            controller.addJavaScriptHandler(
+              handlerName: 'Flutter',
+              callback: (args) {
+                if (args.isNotEmpty) {
+                  dynamic message = args[0];
+                  if (message is String) {
+                    handleWebMessage(message);
+                  } else if (message is Map) {
+                    handleWebMessage(jsonEncode(message));
+                  }
+                }
+              },
+            );
+          },
+          onLoadStop: (controller, url) async {
+            await controller.evaluateJavascript(source: '''
+                if (!window.Flutter) {
+                  window.Flutter = {
+                    postMessage: function(msg) {
+                      window.flutter_inappwebview.callHandler('Flutter', msg);
+                    }
+                  };
+                }
+             ''');
+          },
         ),
       );
     }
