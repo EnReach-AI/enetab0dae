@@ -79,10 +79,12 @@ class LoggerService {
   }
 
   void info(String message, [dynamic error, StackTrace? stackTrace]) {
+    final timestamp = DateTime.now().toString();
+    final messageWithTime = '[$timestamp] $message';
     if (_logger != null) {
-      _logger!.i(message, error: error, stackTrace: stackTrace);
+      _logger!.i(messageWithTime, error: error, stackTrace: stackTrace);
     } else {
-      print('[INFO] $message');
+      print('[INFO] $messageWithTime');
     }
   }
 
@@ -96,10 +98,12 @@ class LoggerService {
   }
 
   void error(String message, [dynamic error, StackTrace? stackTrace]) {
+    final timestamp = DateTime.now().toString();
+    final messageWithTime = '[$timestamp] $message';
     if (_logger != null) {
-      _logger!.e(message, error: error, stackTrace: stackTrace);
+      _logger!.e(messageWithTime, error: error, stackTrace: stackTrace);
     } else {
-      print('[ERROR] $message');
+      print('[ERROR] $messageWithTime');
       if (error != null) print(error);
       if (stackTrace != null) print(stackTrace);
     }

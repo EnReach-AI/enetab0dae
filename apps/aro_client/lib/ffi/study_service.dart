@@ -1,6 +1,7 @@
 import 'dart:ffi';
 import 'dart:io';
 import 'dart:convert';
+import 'package:aro_client/services/logger_service.dart';
 import 'package:ffi/ffi.dart';
 import 'study_bindings.dart';
 
@@ -59,25 +60,26 @@ class StudyService {
     //     "\"fixed_port\": 10800"
     //     "}";
 
-    // try {
-    //   const configJson = {
-    //     "sn": "LITEARO1L9NMAUHM",
-    //     "token": "1",
-    //     "tunnel_id": "4dd56d7f-df87-4f7b-9dd3-5f74465d8f74",
-    //     "proxy_server_ip": "127.0.0.1",
-    //     "proxy_server_port": 8000,
-    //     "local_port": 10800,
-    //     "nat_type": 1,
-    //     "fixed_port": 10800
-    //   };
-    //   final configJsonPtr = configJson.toString().toNativeUtf8();
-    //   final startProxyPtr = StudyBindings.startProxy(configJsonPtr);
-    //   malloc.free(configJsonPtr);
-    //   print(
-    //       'wwwwwwwwwwww------wwwww: $startProxyPtr hhhhhhhhhh---hhh $configJsonPtr');
-    // } catch (e) {
-    //   print('Error in startProxy: $e');
-    // }
+    try {
+      const configJson = {
+        "SN": "OLKN4YY4XA9096W5",
+        "Token": "1",
+        "TunnelID": "4dd56d7f-df87-4f7b-9dd3-5f74465d8f74",
+        "ProxyServerIP": "150.109.69.196",
+        "ProxyServerPort": 443,
+        "LocalPort": 22779,
+        "NatType": 0,
+        "FixedPort": 22779
+      };
+      final configJsonPtr = configJson.toString().toNativeUtf8();
+      final startProxyPtr = StudyBindings.startProxy(configJsonPtr);
+      malloc.free(configJsonPtr);
+      print(
+          'wwwwwwwwwwww------wwwww: $startProxyPtr hhhhhhhhhh---hhh $configJsonPtr');
+    } catch (e) {
+      LoggerService().info('Error in startProxy: ${DateTime.now()} $e');
+      print('Error in startProxy: $e');
+    }
 
     return _handleResult(ptr);
   }
