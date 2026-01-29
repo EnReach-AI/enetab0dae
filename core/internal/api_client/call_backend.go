@@ -1,6 +1,7 @@
 package api_client
 
 import (
+	"aro-ext-app/core/internal/config"
 	"aro-ext-app/core/internal/constant"
 	"crypto/rand"
 	"crypto/rsa"
@@ -12,6 +13,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"runtime"
 )
 
 type DeviceType string
@@ -79,6 +81,16 @@ func NewBackendService(deviceType string, serialNumber string) *BackendService {
 	// Set as default instance for direct calls
 	defaultBackendService = bs
 	return bs
+}
+
+func GetLastVersion(program constant.OtaProgram, env string) (*APIResponse, error) {
+	isa := 0
+	if runtime.GOARCH == "arm64" {
+		isa = 1
+	}
+	path := fmt.Sprintf("/api/keeper/ota/%s/%s/%d/%s/lastest", program, env, isa, runtime.GOOS)
+	backendService := NewBackendService(runtime.GOOS, cfg.Get(config.KeySN))
+	return backendService.get(path)
 }
 
 

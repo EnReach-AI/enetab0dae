@@ -342,7 +342,7 @@ func GetLastVersion() *C.char {
 	if apiClient == nil {
 		return reply(500, "apiClient not initialized, call InitLibstudy first", nil)
 	}
-	apiResponse, err := apiClient.GetLastVersion(constant.PROGRAM_APP, constant.ENV)
+	apiResponse, err := api_client.GetLastVersion(constant.PROGRAM_APP, constant.ENV)
 	if err != nil {
 		return reply(500, err.Error(), nil)
 	}

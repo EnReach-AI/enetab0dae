@@ -157,7 +157,6 @@ func (c *APIClient) GetRewards() (*APIResponse, error) {
 	return c.Get("/api/liteNode/rewards")
 }
 
-
 func (c *APIClient) GetLastVersion(program constant.OtaProgram, env string) (*APIResponse, error) {
 	isa := 0
 	if runtime.GOARCH == "arm64" {
@@ -166,3 +165,4 @@ func (c *APIClient) GetLastVersion(program constant.OtaProgram, env string) (*AP
 	path := fmt.Sprintf("/api/keeper/ota/%s/%s/%d/%s/lastest", program, env, isa, runtime.GOOS)
 	return c.Get(path)
 }
+
