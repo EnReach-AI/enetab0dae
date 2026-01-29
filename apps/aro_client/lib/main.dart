@@ -10,20 +10,14 @@ import 'package:aro_client/services/logger_service.dart';
 import 'package:aro_client/utils/native_dialog.dart';
 import 'package:window_manager/window_manager.dart';
 import 'dart:io';
-import 'package:s_webview/s_webview.dart';
 import 'package:webview_flutter/webview_flutter.dart';
-import 'package:webview_windows/webview_windows.dart' as win;
 import 'package:tray_manager/tray_manager.dart';
 import 'package:path/path.dart' as p;
 import 'dart:convert';
 import 'package:aro_client/utils/config.dart';
-import 'package:desktop_webview_window/desktop_webview_window.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart' as inapp;
 
 void main(List<String> args) async {
-  if (runWebViewTitleBarWidget(args)) {
-    return;
-  }
   runZonedGuarded(() async {
     WidgetsFlutterBinding.ensureInitialized();
 
@@ -128,10 +122,10 @@ class MyHomePage extends StatefulWidget {
 
 class _MyHomePageState extends State<MyHomePage> {
   WebViewController? _controller;
-  win.WebviewController? _winController;
-  inapp.InAppWebViewController? _linuxController;
-  bool _isWindowsInit = false;
-  String? _errorMessage;
+  // win.WebviewController? _winController;
+  inapp.InAppWebViewController? _desktopController;
+  // bool _isWindowsInit = false;
+  // String? _errorMessage;
 
   final service = StudyService.instance;
 
@@ -147,10 +141,8 @@ class _MyHomePageState extends State<MyHomePage> {
     final script = '''
     window.onFlutterMessage && window.onFlutterMessage($json);
   ''';
-    if (Platform.isWindows) {
-      _winController?.executeScript(script);
-    } else if (Platform.isLinux) {
-      _linuxController?.evaluateJavascript(source: script);
+    if (Platform.isWindows || Platform.isLinux) {
+      _desktopController?.evaluateJavascript(source: script);
     } else {
       _controller?.runJavaScript(script);
     }
@@ -287,10 +279,8 @@ class _MyHomePageState extends State<MyHomePage> {
   void sendToWeb(Map<String, dynamic> data) {
     final json = jsonEncode(data);
     final script = 'window.onFlutterMessage($json);';
-    if (Platform.isWindows) {
-      _winController?.executeScript(script);
-    } else if (Platform.isLinux) {
-      _linuxController?.evaluateJavascript(source: script);
+    if (Platform.isWindows || Platform.isLinux) {
+      _desktopController?.evaluateJavascript(source: script);
     } else {
       _controller?.runJavaScript(script);
     }
@@ -304,105 +294,10 @@ class _MyHomePageState extends State<MyHomePage> {
       print('initNode error caught: $e');
     });
 
-    if (Platform.isWindows) {
-      _initWindowsWebView();
-    } else if (Platform.isLinux) {
-      // On Linux, we use embedded InAppWebView
+    if (Platform.isWindows || Platform.isLinux) {
+      // On Windows and Linux, we use embedded InAppWebView which is initialized in build()
     } else {
       _initMobileWebView();
-    }
-  }
-
-  Future<void> _initWindowsWebView() async {
-    try {
-      // Initialize WebView2 environment with a custom user data folder
-      try {
-        final appDataDir = await getAppSupportDir();
-        final webviewDataDir = Directory('$appDataDir/webview_data');
-        if (!webviewDataDir.existsSync()) {
-          webviewDataDir.createSync(recursive: true);
-        }
-        await win.WebviewController.initializeEnvironment(
-          userDataPath: webviewDataDir.path,
-        );
-      } catch (e) {
-        // Environment might be already initialized
-        print('WebView environment initialization warning: $e');
-      }
-
-      _winController = win.WebviewController();
-
-      LoggerService().error('Info (_winController): $_winController');
-
-      await _winController!.initialize().timeout(
-        const Duration(seconds: 10),
-        onTimeout: () {
-          throw Exception(
-              'WebView initialization timed out. Please ensure WebView2 Runtime is installed.');
-        },
-      );
-
-      // Handle messages from JS
-      _winController!.webMessage.listen((message) {
-        print('Received Web message (Windows): $message');
-        LoggerService().info('Received Web message (Windows): $message');
-
-        if (message is String) {
-          handleWebMessage(message);
-        } else if (message is Map) {
-          handleWebMessage(jsonEncode(message));
-        }
-      });
-
-      _winController!.loadingState.listen((event) {
-        print('WebView Loading State: $event');
-        LoggerService().info('WebView Loading State: $event');
-      });
-
-      _winController!.url.listen((url) {
-        print('WebView Current URL: $url');
-        LoggerService().info('WebView Current URL: $url');
-      });
-
-      _winController!.historyChanged.listen((event) {
-        print('WebView History Changed');
-      });
-
-      // Provide a way for JS to call "Flutter.postMessage" if needed
-      // webview_windows exposes "window.chrome.webview.postMessage"
-      // You might need to inject a polyfill if your JS specifically uses "Flutter.postMessage"
-      await _winController!.addScriptToExecuteOnDocumentCreated('''
-        if (!window.Flutter) {
-          window.Flutter = {
-            postMessage: function(msg) {
-              window.chrome.webview.postMessage(msg);
-            }
-          };
-        }
-      ''');
-
-      await _winController!
-          .loadUrl(AllConfig.deskTopURL)
-          .timeout(const Duration(seconds: 30), onTimeout: () {
-        throw Exception('Loading URL timed out.');
-      });
-
-      // 如果 5 秒后还没加载成功（根据 loadingState），尝试加载备用 URL 测试网络
-      // 这里的逻辑可以根据实际情况调整，比如仅仅是记录日志
-
-      if (mounted) {
-        setState(() {
-          _isWindowsInit = true;
-          _errorMessage = null;
-        });
-      }
-    } catch (e) {
-      LoggerService().error('Failed to initialize Windows WebView', e);
-      if (mounted) {
-        setState(() {
-          _errorMessage = 'Failed to load content: $e';
-        });
-      }
     }
   }
 
@@ -430,43 +325,7 @@ class _MyHomePageState extends State<MyHomePage> {
 
   @override
   Widget build(BuildContext context) {
-    if (Platform.isWindows) {
-      return Scaffold(
-        body: _isWindowsInit
-            ? win.Webview(_winController!)
-            : Center(
-                child: _errorMessage != null
-                    ? Padding(
-                        padding: const EdgeInsets.all(16.0),
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            const Icon(Icons.error_outline,
-                                color: Colors.red, size: 48),
-                            const SizedBox(height: 16),
-                            Text(
-                              _errorMessage!,
-                              style: const TextStyle(color: Colors.red),
-                              textAlign: TextAlign.center,
-                            ),
-                            const SizedBox(height: 16),
-                            ElevatedButton(
-                              onPressed: () {
-                                setState(() {
-                                  _errorMessage = null;
-                                });
-                                _initWindowsWebView();
-                              },
-                              child: const Text('Retry'),
-                            )
-                          ],
-                        ),
-                      )
-                    : const CircularProgressIndicator(),
-              ),
-      );
-    }
-    if (Platform.isLinux) {
+    if (Platform.isWindows || Platform.isLinux) {
       return Scaffold(
         body: inapp.InAppWebView(
           initialUrlRequest: inapp.URLRequest(
@@ -476,7 +335,7 @@ class _MyHomePageState extends State<MyHomePage> {
             isInspectable: kDebugMode,
           ),
           onWebViewCreated: (controller) {
-            _linuxController = controller;
+            _desktopController = controller;
             controller.addJavaScriptHandler(
               handlerName: 'Flutter',
               callback: (args) {
