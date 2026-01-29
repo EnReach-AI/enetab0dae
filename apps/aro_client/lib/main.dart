@@ -209,14 +209,22 @@ class _MyHomePageState extends State<MyHomePage> {
         });
       }
     } else if (message == 'getVersion') {
-      final version = service.getCurrentVersion();
-      final versionMap = jsonDecode(version);
-      print('versionMap getVersion $versionMap');
-      if (versionMap['code'] == 200) {
-        sendMessageToWeb({
-          'type': 'getVersion',
-          'payload': versionMap,
-        });
+      try {
+        final version = service.getCurrentVersion();
+        final version2 = service.getLastVersion();
+
+        final versionMap = jsonDecode(version);
+        final versionMap2 = version2;
+
+        print('versionMap getVersion $versionMap 12311 $versionMap2');
+        if (versionMap['code'] == 200) {
+          sendMessageToWeb({
+            'type': 'getVersion',
+            'payload': versionMap,
+          });
+        }
+      } catch (e) {
+        print('getVersion error $e');
       }
     } else if (message == 'getWSClientStatus') {
       final status = service.getWSClientStatus();

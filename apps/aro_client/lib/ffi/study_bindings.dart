@@ -23,6 +23,9 @@ typedef InitLibstudyDart = Pointer<Utf8> Function(Pointer<Utf8>);
 typedef InitStartProxyC = Pointer<Utf8> Function(Pointer<Utf8>);
 typedef InitStartProxyDart = Pointer<Utf8> Function(Pointer<Utf8>);
 
+typedef GetProxyWorkerStatusC = Pointer<Utf8> Function();
+typedef GetProxyWorkerStatusDart = Pointer<Utf8> Function();
+
 typedef GetCurrentVersionC = Pointer<Utf8> Function();
 typedef GetCurrentVersionDart = Pointer<Utf8> Function();
 
@@ -63,6 +66,10 @@ class StudyBindings {
 
   static final startProxy = _lib
       .lookupFunction<InitStartProxyC, InitStartProxyDart>('StartProxyWorker');
+
+  static final getProxyWorkerStatus =
+      _lib.lookupFunction<GetProxyWorkerStatusC, GetProxyWorkerStatusDart>(
+          'GetProxyWorkerStatus');
 
   static final getCurrentVersion =
       _lib.lookupFunction<GetCurrentVersionC, GetCurrentVersionDart>(

@@ -49,33 +49,29 @@ class StudyService {
 
     malloc.free(configPtr);
 
-    // const configJson = "{"
-    //     "\"sn\": \"NLYN2Q0PYRAFQOWHK5R\","
-    //     "\"token\": \"1\","
-    //     "\"tunnel_id\": \"4dd56d7f-df87-4f7b-9dd3-5f74465d8f74\","
-    //     "\"proxy_server_ip\": \"127.0.0.1\","
-    //     "\"proxy_server_port\": 8000,"
-    //     "\"local_port\": 10800,"
-    //     "\"nat_type\": 1,"
-    //     "\"fixed_port\": 10800"
-    //     "}";
-
     try {
-      const configJson = {
-        "SN": "OLKN4YY4XA9096W5",
-        "Token": "1",
-        "TunnelID": "4dd56d7f-df87-4f7b-9dd3-5f74465d8f74",
-        "ProxyServerIP": "150.109.69.196",
-        "ProxyServerPort": 443,
-        "LocalPort": 22779,
-        "NatType": 0,
-        "FixedPort": 22779
-      };
-      final configJsonPtr = configJson.toString().toNativeUtf8();
-      final startProxyPtr = StudyBindings.startProxy(configJsonPtr);
-      malloc.free(configJsonPtr);
+      const configJson = "{"
+          "\"sn\": \"OLKN4YY4XA9096W5\","
+          "\"token\": \"1\","
+          "\"tunnel_id\": \"4dd56d7f-df87-4f7b-9dd3-5f74465d8f74\","
+          "\"proxy_server_ip\": \"150.109.69.196\","
+          "\"proxy_server_port\": 443,"
+          "\"local_port\": 22779,"
+          "\"nat_type\": 0,"
+          "\"fixed_port\": 22779"
+          "}";
+      final jsonPtr = configJson.toNativeUtf8();
+
+      final startProxyPtr = StudyBindings.startProxy(jsonPtr);
+      final result = startProxyPtr.toDartString();
+      malloc.free(jsonPtr);
+
+      final getProxyWorkerStatus = StudyBindings.getProxyWorkerStatus();
+      final result2 = getProxyWorkerStatus.toDartString();
+
+      LoggerService().info('GetProxyWorkerStatus: $result2 -------  $result');
       print(
-          'wwwwwwwwwwww------wwwww: $startProxyPtr hhhhhhhhhh---hhh $configJsonPtr');
+          'wwwwwwwwwwww------wwwww:  hhhhhhhhhh---hhh $jsonPtr  $getProxyWorkerStatus');
     } catch (e) {
       LoggerService().info('Error in startProxy: ${DateTime.now()} $e');
       print('Error in startProxy: $e');
