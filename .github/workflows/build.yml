@@ -399,6 +399,10 @@ jobs:
             if ! env DEBIAN_FRONTEND=noninteractive apt-get -o Acquire::Retries=5 -o Acquire::http::Timeout=60 -o Acquire::https::Timeout=60 install -y --no-install-recommends --fix-missing libwebkit2gtk-4.1-dev; then
               retry 3 3 env DEBIAN_FRONTEND=noninteractive apt-get -o Acquire::Retries=5 -o Acquire::http::Timeout=60 -o Acquire::https::Timeout=60 install -y --no-install-recommends --fix-missing libwebkit2gtk-4.0-dev
             fi
+            # Install appindicator (required by tray_manager plugin)
+            if ! env DEBIAN_FRONTEND=noninteractive apt-get -o Acquire::Retries=5 -o Acquire::http::Timeout=60 -o Acquire::https::Timeout=60 install -y --no-install-recommends --fix-missing libayatana-appindicator3-dev; then
+              retry 3 3 env DEBIAN_FRONTEND=noninteractive apt-get -o Acquire::Retries=5 -o Acquire::http::Timeout=60 -o Acquire::https::Timeout=60 install -y --no-install-recommends --fix-missing libappindicator3-dev
+            fi
             retry 5 5 gem install --no-document fpm
 
           elif command -v dnf >/dev/null 2>&1; then

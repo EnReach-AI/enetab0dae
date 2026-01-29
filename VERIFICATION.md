@@ -131,6 +131,14 @@ When the GitHub Actions workflow completes:
 | Debian 11 | DEB | 4.0 or 4.1 | ✅ Supported |
 | Rocky Linux 8 | RPM | 4.0 | ✅ Supported |
 
+### Known Issues Fixed
+
+1. **Missing appindicator dependency** (Ubuntu/Debian)
+   - **Problem**: tray_manager Flutter plugin requires ayatana-appindicator3 or appindicator3
+   - **Symptom**: Build fails with "The `tray_manager` package requires ayatana-appindicator3-0.1 or appindicator3-0.1"
+   - **Fix**: Added libayatana-appindicator3-dev (with fallback to libappindicator3-dev) to dependency installation
+   - **Status**: ✅ Fixed in this commit
+
 ### Known Limitations
 
 1. Flutter version 3.38.5 specified in workflow may need verification
