@@ -56,7 +56,7 @@ void main(List<String> args) async {
 
       windowManager.waitUntilReadyToShow(windowOptions, () async {
         await windowManager.show();
-        if (Platform.isWindows) {
+        if (Platform.isWindows || Platform.isLinux) {
           try {
             final exeDir = p.dirname(Platform.resolvedExecutable);
             final iconPath = p.join(exeDir, 'resources', 'app_icon.ico');
@@ -132,7 +132,7 @@ class _MyHomePageState extends State<MyHomePage> {
     final script = '''
     window.onFlutterMessage && window.onFlutterMessage($json);
   ''';
-    if (Platform.isWindows) {
+    if (Platform.isWindows || Platform.isLinux) {
       _desktopController?.evaluateJavascript(source: script);
     } else {
       _controller?.runJavaScript(script);
@@ -278,7 +278,7 @@ class _MyHomePageState extends State<MyHomePage> {
   void sendToWeb(Map<String, dynamic> data) {
     final json = jsonEncode(data);
     final script = 'window.onFlutterMessage($json);';
-    if (Platform.isWindows) {
+    if (Platform.isWindows || Platform.isLinux) {
       _desktopController?.evaluateJavascript(source: script);
     } else {
       _controller?.runJavaScript(script);
@@ -336,16 +336,7 @@ class _MyHomePageState extends State<MyHomePage> {
 
   @override
   Widget build(BuildContext context) {
-    // Initialize Linux webview lazily in build
-    if (Platform.isLinux && _controller == null) {
-      try {
-        _initMobileWebView();
-      } catch (e) {
-        print('Failed to initialize Linux webview: $e');
-      }
-    }
-
-    if (Platform.isWindows) {
+    if (Platform.isWindows || Platform.isLinux) {
       return Scaffold(
         body: inapp.InAppWebView(
           key: const ValueKey('desktop_webview'),
