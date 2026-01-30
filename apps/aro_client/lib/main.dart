@@ -56,16 +56,22 @@ void main(List<String> args) async {
 
       windowManager.waitUntilReadyToShow(windowOptions, () async {
         await windowManager.show();
-        if (Platform.isWindows || Platform.isLinux) {
+        if (Platform.isWindows) {
           try {
             final exeDir = p.dirname(Platform.resolvedExecutable);
             final iconPath = p.join(exeDir, 'resources', 'app_icon.ico');
             await trayManager.setIcon(iconPath);
-            if (Platform.isWindows) {
-              await trayManager.setToolTip('ARO');
-            }
+            await trayManager.setToolTip('ARO');
           } catch (e) {
-            LoggerService().error('Failed to setup tray icon', e);
+            LoggerService().error('Failed to setup Windows tray icon', e);
+          }
+        } else if (Platform.isLinux) {
+          try {
+            final exeDir = p.dirname(Platform.resolvedExecutable);
+            final iconPath = p.join(exeDir, 'resources', 'app_icon.png');
+            await trayManager.setIcon(iconPath);
+          } catch (e) {
+            LoggerService().error('Failed to setup Linux tray icon', e);
           }
         }
       });
