@@ -132,7 +132,7 @@ class _MyHomePageState extends State<MyHomePage> {
     final script = '''
     window.onFlutterMessage && window.onFlutterMessage($json);
   ''';
-    if (Platform.isWindows || Platform.isLinux) {
+    if (Platform.isWindows) {
       _desktopController?.evaluateJavascript(source: script);
     } else {
       _controller?.runJavaScript(script);
@@ -278,7 +278,7 @@ class _MyHomePageState extends State<MyHomePage> {
   void sendToWeb(Map<String, dynamic> data) {
     final json = jsonEncode(data);
     final script = 'window.onFlutterMessage($json);';
-    if (Platform.isWindows || Platform.isLinux) {
+    if (Platform.isWindows) {
       _desktopController?.evaluateJavascript(source: script);
     } else {
       _controller?.runJavaScript(script);
@@ -293,8 +293,8 @@ class _MyHomePageState extends State<MyHomePage> {
       print('initNode error caught: $e');
     });
 
-    if (Platform.isWindows || Platform.isLinux) {
-      // On Windows and Linux, we use embedded InAppWebView which is initialized in build()
+    if (Platform.isWindows) {
+      // On Windows, we use embedded InAppWebView which is initialized in build()
     } else {
       _initMobileWebView();
     }
@@ -324,14 +324,17 @@ class _MyHomePageState extends State<MyHomePage> {
 
   @override
   Widget build(BuildContext context) {
-    if (Platform.isWindows || Platform.isLinux) {
+    if (Platform.isWindows) {
       return Scaffold(
         body: inapp.InAppWebView(
+          key: const ValueKey('desktop_webview'),
           initialUrlRequest: inapp.URLRequest(
             url: inapp.WebUri.uri(Uri.parse(AllConfig.deskTopURL)),
           ),
           initialSettings: inapp.InAppWebViewSettings(
             isInspectable: kDebugMode,
+            javaScriptEnabled: true,
+            useShouldOverrideUrlLoading: false,
           ),
           onWebViewCreated: (controller) {
             _desktopController = controller;
@@ -363,6 +366,7 @@ class _MyHomePageState extends State<MyHomePage> {
         ),
       );
     }
+    // Use webview_flutter for Linux, macOS, Android, iOS
     return Scaffold(
       body: _controller != null
           ? WebViewWidget(controller: _controller!)
