@@ -93,7 +93,8 @@ generate_ldflags() {
     local branch=$(echo "$1" | cut -d: -f2)
     local buildtime=$(date -u +'%Y-%m-%dT%H:%M:%SZ')
     
-    echo "-X aro-ext-app/core/version.VERSION=$BASE_VERSION \
+    echo "-s -w \
+-X aro-ext-app/core/version.VERSION=$BASE_VERSION \
 -X aro-ext-app/core/version.BUILDTIME=$buildtime \
 -X aro-ext-app/core/version.GITCOMMIT=$commit \
 -X aro-ext-app/core/version.GITBRANCH=$branch"
@@ -108,9 +109,20 @@ check_compiler() {
     local platform=$1
     case "$platform" in
         darwin|macos)
-            if ! command -v clang &> /dev/null; then
-                log_warning "macOS 编译器 (clang/Xcode) 未找到，跳过 macOS 编译"
-                return 1
+            # 优先检查是否在 macOS 上
+            if [[ "$OSTYPE" == "darwin"* ]]; then
+                if ! command -v clang &> /dev/null; then
+                    log_warning "macOS 编译器 (clang/Xcode) 未找到，跳过 macOS 编译"
+                    return 1
+                fi
+            else
+                # 在非 macOS 系统上，检查是否有 osxcross
+                if [ -z "$OSXCROSS_ROOT" ] || [ ! -d "$OSXCROSS_ROOT" ]; then
+                    log_warning "OSXCross 未配置，无法在 Linux 上交叉编译 macOS"
+                    echo "   提示: 安装 OSXCross 或在 macOS 机器上构建"
+                    echo "   提示: 设置 OSXCROSS_ROOT=/path/to/osxcross"
+                    return 1
+                fi
             fi
             ;;
         windows)
@@ -143,6 +155,12 @@ build_for_platform() {
     local output_name=$3
     
     log_info "构建 $platform_name"
+    
+    # 检查编译器是否可用
+    if ! check_compiler "$goos"; then
+        log_warning "跳过 $platform_name 构建"
+        return 0
+    fi
     
     local git_info=$(get_git_info)
     local ldflags=$(generate_ldflags "$git_info")
@@ -177,6 +195,9 @@ build_for_platform() {
     
     cd "$BUILD_DIR"
     
+    # 使用 set +e 允许构建失败时继续
+    set +e
+    
     case $goos in
         linux)
             CGO_ENABLED=1 GOOS=$goos GOARCH=$goarch go build \
@@ -186,11 +207,45 @@ build_for_platform() {
                 .
             ;;
         darwin)
-            CGO_ENABLED=1 GOOS=$goos GOARCH=$goarch go build \
-                -buildmode=c-shared \
-                -ldflags "$ldflags" \
-                -o "$output_dir/$output_name.$output_ext" \
-                .
+            # 检测当前系统，区分原生构建和交叉编译
+            if [[ "$OSTYPE" == "darwin"* ]]; then
+                # 在 macOS 上原生构建
+                CGO_ENABLED=1 GOOS=$goos GOARCH=$goarch go build \
+                    -buildmode=c-shared \
+                    -ldflags "$ldflags" \
+                    -o "$output_dir/$output_name.$output_ext" \
+                    .
+            elif [ -n "$OSXCROSS_ROOT" ] && [ -d "$OSXCROSS_ROOT" ]; then
+                # 在 Linux 上使用 osxcross 交叉编译
+                local osxcross_bin="$OSXCROSS_ROOT/target/bin"
+                local cc_compiler=""
+                
+                if [ "$goarch" = "arm64" ]; then
+                    cc_compiler="$osxcross_bin/oa64-clang"
+                else
+                    cc_compiler="$osxcross_bin/o64-clang"
+                fi
+                
+                if [ ! -f "$cc_compiler" ]; then
+                    log_error "OSXCross 编译器未找到: $cc_compiler"
+                    set -e
+                    return 1
+                fi
+                
+                log_info "  使用 OSXCross: $cc_compiler"
+                CC="$cc_compiler" CGO_ENABLED=1 GOOS=$goos GOARCH=$goarch go build \
+                    -buildmode=c-shared \
+                    -ldflags "$ldflags" \
+                    -o "$output_dir/$output_name.$output_ext" \
+                    .
+            else
+                log_warning "macOS 动态库需要在 macOS 系统上构建或配置 OSXCross"
+                log_warning "如需构建 macOS 版本，请："
+                log_warning "  1. 在 macOS 机器上运行此脚本，或"
+                log_warning "  2. 安装 OSXCross 并设置 OSXCROSS_ROOT 环境变量"
+                set -e
+                return 0
+            fi
             ;;
         windows)
             CC=x86_64-w64-mingw32-gcc CGO_ENABLED=1 GOOS=$goos GOARCH=$goarch go build \
@@ -210,7 +265,15 @@ build_for_platform() {
             ;;
     esac
     
-    log_success "构建完成: $output_dir/$output_name.$output_ext"
+    local build_status=$?
+    set -e
+    
+    if [ $build_status -eq 0 ]; then
+        log_success "构建完成: $output_dir/$output_name.$output_ext"
+    else
+        log_error "构建失败: $platform_name (退出码: $build_status)"
+        log_warning "继续执行其他平台的构建..."
+    fi
 }
 
 # 清理构建产物
@@ -441,6 +504,7 @@ main() {
 
 环境变量:
   ANDROID_NDK_ROOT    Android NDK 路径（Android 构建必需）
+  OSXCROSS_ROOT       OSXCross 路径（Linux 上构建 macOS 时必需）
   RUNNER_OS           GitHub Actions 环境（可选，用于 ci 模式）
 
 示例:
@@ -448,6 +512,7 @@ main() {
   $0 build-linux
   $0 version
   ANDROID_NDK_ROOT=/path/to/ndk $0 build-android
+  OSXCROSS_ROOT=/path/to/osxcross $0 build-macos
 
 GitHub Actions 示例:
   $0 ci

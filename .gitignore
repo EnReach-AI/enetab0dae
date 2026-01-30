@@ -51,7 +51,7 @@ core/**/*.h
 core/bin/
 core/test_proxy_worker
 core/cmd/test_proxy_worker/test_proxy_worker
-plugins/*/libstudy.*
+plugins
 
 # Ignore archives
 *.zip
