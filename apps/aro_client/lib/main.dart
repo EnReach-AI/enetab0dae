@@ -132,7 +132,7 @@ class _MyHomePageState extends State<MyHomePage> {
     final script = '''
     window.onFlutterMessage && window.onFlutterMessage($json);
   ''';
-    if (Platform.isWindows || Platform.isLinux) {
+    if (Platform.isWindows) {
       _desktopController?.evaluateJavascript(source: script);
     } else {
       _controller?.runJavaScript(script);
@@ -278,7 +278,7 @@ class _MyHomePageState extends State<MyHomePage> {
   void sendToWeb(Map<String, dynamic> data) {
     final json = jsonEncode(data);
     final script = 'window.onFlutterMessage($json);';
-    if (Platform.isWindows || Platform.isLinux) {
+    if (Platform.isWindows) {
       _desktopController?.evaluateJavascript(source: script);
     } else {
       _controller?.runJavaScript(script);
