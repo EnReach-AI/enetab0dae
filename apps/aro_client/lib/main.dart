@@ -295,11 +295,10 @@ class _MyHomePageState extends State<MyHomePage> {
 
     if (Platform.isWindows) {
       // On Windows, we use embedded InAppWebView which is initialized in build()
-    } else if (!Platform.isLinux) {
-      // Initialize immediately for Android/iOS only
+    } else {
+      // Initialize WebViewController for Android/iOS/Linux
       _initMobileWebView();
     }
-    // Linux will be initialized in build() method
   }
 
   void _initMobileWebView() {
@@ -336,7 +335,7 @@ class _MyHomePageState extends State<MyHomePage> {
 
   @override
   Widget build(BuildContext context) {
-    if (Platform.isWindows || Platform.isLinux) {
+    if (Platform.isWindows) {
       return Scaffold(
         body: inapp.InAppWebView(
           key: const ValueKey('desktop_webview'),
