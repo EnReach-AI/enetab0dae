@@ -41,7 +41,6 @@ void main(List<String> args) async {
 
     PlatformDispatcher.instance.onError = (error, stack) {
       LoggerService().error('Async Error: $error', error, stack);
-      // NativeDialog.show('Async Error:\n$error');
       return true;
     };
 
@@ -226,7 +225,8 @@ class _MyHomePageState extends State<MyHomePage> {
         LoggerService()
             .info('getVersion1232--- $versionMap 12311 $versionMap2 $version2');
 
-        print('versionMap getVersion $versionMap 12311 $versionMap2 $version2');
+        print(
+            'versionMap getVersion $versionMap 12311 $versionMap2 $versionMap2');
         if (versionMap['code'] == 200) {
           sendMessageToWeb({
             'type': 'getVersion',
