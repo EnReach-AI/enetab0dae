@@ -295,16 +295,11 @@ class _MyHomePageState extends State<MyHomePage> {
 
     if (Platform.isWindows) {
       // On Windows, we use embedded InAppWebView which is initialized in build()
-    } else {
-      // Delay initialization for Linux to avoid null check errors
-      if (Platform.isLinux) {
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          _initMobileWebView();
-        });
-      } else {
-        _initMobileWebView();
-      }
+    } else if (!Platform.isLinux) {
+      // Initialize immediately for Android/iOS only
+      _initMobileWebView();
     }
+    // Linux will be initialized in build() method
   }
 
   void _initMobileWebView() {
@@ -341,6 +336,15 @@ class _MyHomePageState extends State<MyHomePage> {
 
   @override
   Widget build(BuildContext context) {
+    // Initialize Linux webview lazily in build
+    if (Platform.isLinux && _controller == null) {
+      try {
+        _initMobileWebView();
+      } catch (e) {
+        print('Failed to initialize Linux webview: $e');
+      }
+    }
+
     if (Platform.isWindows) {
       return Scaffold(
         body: inapp.InAppWebView(
@@ -384,10 +388,13 @@ class _MyHomePageState extends State<MyHomePage> {
       );
     }
     // Use webview_flutter for Linux, macOS, Android, iOS
+    if (_controller == null) {
+      return const Scaffold(
+        body: Center(child: CircularProgressIndicator()),
+      );
+    }
     return Scaffold(
-      body: _controller != null
-          ? WebViewWidget(controller: _controller!)
-          : const Center(child: CircularProgressIndicator()),
+      body: WebViewWidget(controller: _controller!),
     );
   }
 }
