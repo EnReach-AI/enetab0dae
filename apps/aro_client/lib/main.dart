@@ -214,9 +214,11 @@ class _MyHomePageState extends State<MyHomePage> {
         final version2 = service.getLastVersion();
 
         final versionMap = jsonDecode(version);
-        final versionMap2 = version2;
+        final versionMap2 = jsonDecode(version2);
+        LoggerService()
+            .info('getVersion1232--- $versionMap 12311 $versionMap2 $version2');
 
-        print('versionMap getVersion $versionMap 12311 $versionMap2');
+        print('versionMap getVersion $versionMap 12311 $versionMap2 $version2');
         if (versionMap['code'] == 200) {
           sendMessageToWeb({
             'type': 'getVersion',
@@ -336,7 +338,7 @@ class _MyHomePageState extends State<MyHomePage> {
 
   @override
   Widget build(BuildContext context) {
-    if (Platform.isWindows || Platform.isLinux) {
+    if (Platform.isWindows) {
       return Scaffold(
         body: inapp.InAppWebView(
           key: const ValueKey('desktop_webview'),
@@ -344,6 +346,7 @@ class _MyHomePageState extends State<MyHomePage> {
             url: inapp.WebUri.uri(Uri.parse(AllConfig.deskTopURL)),
           ),
           initialSettings: inapp.InAppWebViewSettings(
+            // ...
             isInspectable: kDebugMode,
             javaScriptEnabled: true,
             useShouldOverrideUrlLoading: false,
