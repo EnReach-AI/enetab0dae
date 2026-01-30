@@ -346,7 +346,7 @@ class _MyHomePageState extends State<MyHomePage> {
 
   @override
   Widget build(BuildContext context) {
-    if (Platform.isWindows) {
+    if (Platform.isWindows || Platform.isLinux) {
       return Scaffold(
         body: inapp.InAppWebView(
           key: const ValueKey('desktop_webview'),
