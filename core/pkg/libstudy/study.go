@@ -21,6 +21,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"strings"
 
 	"github.com/sirupsen/logrus"
 	"gopkg.in/natefinch/lumberjack.v2"
@@ -345,9 +346,9 @@ func GetLastVersion() *C.char {
 	if err != nil {
 		return reply(500, err.Error(), nil)
 	}
-	result := toCStringJSON(apiResponse)
-	log.Printf("GetLastVersion response: %s", C.GoString(result))
-	return result
+	result := reply(apiResponse.Code, apiResponse.Message, apiResponse.Data)
+	log.Printf("getLastVersion response:%s",C.GoString(result))
+    return result
 }
 
 // ======================
