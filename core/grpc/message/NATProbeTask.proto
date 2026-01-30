@@ -1,0 +1,18 @@
+syntax = "proto3";
+
+package message;
+
+option go_package = "agent/internal/grpc/message;message";
+
+service ChatService {
+  // 双向流式 RPC
+  rpc Chat(stream GrpcMessage) returns (stream GrpcMessage);
+}
+
+// 消息结构
+message GrpcMessage {
+  string id = 1;         // 房间名
+  messageType
+  string message = 2;         // 用户名
+  string signature = 3;      // 消息内容
+}

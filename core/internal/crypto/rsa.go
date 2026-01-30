@@ -11,9 +11,12 @@ import (
 	"encoding/base64"
 	"encoding/pem"
 	"fmt"
-	"github.com/google/uuid"
 	"os"
 	"path/filepath"
+	"runtime"
+	"strings"
+
+	"github.com/google/uuid"
 )
 
 const (
@@ -217,15 +220,41 @@ func ExportPrivateKeyToPEM(privateKey *rsa.PrivateKey) string {
 	return string(privateKeyPEM)
 }
 
-
-// GenerateClientID 生成或读取客户端ID
+// GenerateClientID 生成或读取客户端ID（隐式包含平台信息）
 func GenerateClientID() string {
 	clientId := cfg.Get(config.KeyClientId)
 	if clientId != "" {
 		return clientId
 	}
-	clientID := uuid.New().String()
+
+	// 生成基础 UUID
+	baseUUID := uuid.New().String()
+
+	// 获取平台代码（1位数字）
+	platformCode := getPlatformCode()
+
+	// 将平台代码替换 UUID 的第一个字符，看起来像正常的 UUID
+	clientID := platformCode +"-"+ baseUUID
 
 	cfg.SetAndSave(config.KeyClientId, clientID)
 	return clientID
+}
+
+// getPlatformCode 获取平台代码（单个数字，不易被察觉）
+func getPlatformCode() string {
+	goos := strings.ToLower(runtime.GOOS)
+	switch goos {
+	case "linux":
+		return "1"
+	case "windows":
+		return "2"
+	case "darwin":
+		return "3" // macOS
+	case "android":
+		return "4"
+	case "ios":
+		return "5"
+	default:
+		return "9" // 未知平台
+	}
 }

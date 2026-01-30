@@ -12,6 +12,7 @@ import (
 	"encoding/pem"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"runtime"
 )
@@ -73,6 +74,7 @@ func getAuthToken(deviceType string, serialNumber string) (string, error) {
 
 func NewBackendService(deviceType string, serialNumber string) *BackendService {
 	authToken, _ := getAuthToken(deviceType, serialNumber)
+	log.Println(authToken)
 	bs := &BackendService{
 		SerialNumber: serialNumber,
 		DeviceType:   deviceType,
@@ -83,15 +85,18 @@ func NewBackendService(deviceType string, serialNumber string) *BackendService {
 	return bs
 }
 
+// 接收者方法版本（用于面向对象调用）
 func GetLastVersion(program constant.OtaProgram, env string) (*APIResponse, error) {
 	isa := 0
 	if runtime.GOARCH == "arm64" {
 		isa = 1
 	}
 	path := fmt.Sprintf("/api/keeper/ota/%s/%s/%d/%s/lastest", program, env, isa, runtime.GOOS)
+	log.Println(cfg.Get(config.KeySN))
 	backendService := NewBackendService(runtime.GOOS, cfg.Get(config.KeySN))
 	return backendService.get(path)
 }
+
 
 
 // 辅助函数：从指定 URL 获取版本信息
@@ -105,7 +110,7 @@ func (b *BackendService) get(path string) (*APIResponse, error) {
 	}
 
 	// Add auth header
-	req.Header.Set("Authorization", b.authToken)
+	req.Header.Set("Authorization","Bearer " + b.authToken)
 
 	client := &http.Client{}
 	resp, err := client.Do(req)

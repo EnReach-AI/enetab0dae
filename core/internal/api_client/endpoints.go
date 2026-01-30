@@ -5,7 +5,6 @@ import (
 	"aro-ext-app/core/internal/config"
 	"aro-ext-app/core/internal/crypto"
 	"aro-ext-app/core/internal/storage"
-	"aro-ext-app/core/internal/ws_client"
 	"encoding/json"
 	"runtime"
 	"time"
@@ -131,9 +130,9 @@ func (c *APIClient) GetNodeStat() (*APIResponse, error) {
 		cfg.SetAndSave(config.EMAIL, bindUser.BindUser.Email)
 	}
 	// Only start WebSocket if bound and not already running
-	if bindUser.Bind && !ws_client.IsWebSocketRunning() {
-		ws_client.StartWebSocketClient()
-	}
+	// if bindUser.Bind && !ws_client.IsWebSocketRunning() {
+	// 	ws_client.StartWebSocketClient()
+	// }
 	return apiResponse, nil
 }
 
@@ -154,5 +153,3 @@ func (c *APIClient) GetNodeStat() (*APIResponse, error) {
 func (c *APIClient) GetRewards() (*APIResponse, error) {
 	return c.Get("/api/liteNode/rewards")
 }
-
-

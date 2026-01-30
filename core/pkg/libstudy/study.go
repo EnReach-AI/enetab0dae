@@ -17,7 +17,6 @@ import (
 	"aro-ext-app/core/internal/crypto"
 	"aro-ext-app/core/internal/proxy_worker"
 	"aro-ext-app/core/internal/storage"
-	"aro-ext-app/core/internal/ws_client"
 	"encoding/json"
 	"fmt"
 	"log"
@@ -223,46 +222,46 @@ func GetRewards() *C.char {
 // 返回：JSON 格式的响应，包含运行状态
 //
 //export GetWSClientStatus
-func GetWSClientStatus() *C.char {
-	defer recoverAndLog("GetWSClientStatus")
-	log.Println("GetWSClientStatus called")
+// func GetWSClientStatus() *C.char {
+// 	defer recoverAndLog("GetWSClientStatus")
+// 	log.Println("GetWSClientStatus called")
 
-	status, lastError, isRunning := ws_client.GetWebSocketStatus()
+// 	status, lastError, isRunning := ws_client.GetWebSocketStatus()
 
-	data := map[string]interface{}{
-		"is_running": isRunning,
-		"status":     status,
-		"error":      lastError,
-	}
-	var code int
-	switch status {
-	case "connecting":
-		code = 400
-	case "forbidden":
-		code = 401
-	default:
-		code = 200
-	}
-	return reply(code, "WebSocket client status fetched", data)
-}
+// 	data := map[string]interface{}{
+// 		"is_running": isRunning,
+// 		"status":     status,
+// 		"error":      lastError,
+// 	}
+// 	var code int
+// 	switch status {
+// 	case "connecting":
+// 		code = 400
+// 	case "forbidden":
+// 		code = 401
+// 	default:
+// 		code = 200
+// 	}
+// 	return reply(code, "WebSocket client status fetched", data)
+// }
 
-// StartWSClient 手动启动 WebSocket 客户端
-// 返回：JSON 格式的响应，包含启动结果和当前状态
-//
-//export StartWSClient
-func StartWSClient() *C.char {
-	defer recoverAndLog("StartWSClient")
-	log.Println("StartWSClient called")
+// // StartWSClient 手动启动 WebSocket 客户端
+// // 返回：JSON 格式的响应，包含启动结果和当前状态
+// //
+// //export StartWSClient
+// func StartWSClient() *C.char {
+// 	defer recoverAndLog("StartWSClient")
+// 	log.Println("StartWSClient called")
 
-	if ws_client.IsWebSocketRunning() {
-		return reply(200, "WebSocket client already running", map[string]bool{"is_running": true})
-	}
+// 	if ws_client.IsWebSocketRunning() {
+// 		return reply(200, "WebSocket client already running", map[string]bool{"is_running": true})
+// 	}
 
-	// 启动客户端（内部包含重连机制）
-	ws_client.StartWebSocketClient()
+// 	// 启动客户端（内部包含重连机制）
+// 	ws_client.StartWebSocketClient()
 
-	return reply(200, "WebSocket client start triggered", map[string]bool{"is_running": ws_client.IsWebSocketRunning()})
-}
+// 	return reply(200, "WebSocket client start triggered", map[string]bool{"is_running": ws_client.IsWebSocketRunning()})
+// }
 
 // InitLibstudy 初始化 libstudy 库
 // 加载或创建密钥对、初始化 API 客户端和 WebSocket 客户端
@@ -308,7 +307,7 @@ func InitLibstudy(initParamsJSON *C.char) *C.char {
 
 	// 更新全局 Server Config
 	details["api_url"] = serverConfig.BaseAPIURL
-	details["ws_url"] = serverConfig.BaseWSURL
+	// details["ws_url"] = serverConfig.BaseWSURL
 
 	// 初始化客户端 ID
 	clientID = crypto.GenerateClientID()
@@ -316,7 +315,7 @@ func InitLibstudy(initParamsJSON *C.char) *C.char {
 
 	// 初始化 API 客户端
 	apiClient = api_client.NewAPIClient(serverConfig.BaseAPIURL, clientID, keyPair)
-	ws_client.SetWsClientUrl(serverConfig.BaseWSURL)
+	// ws_client.SetWsClientUrl(serverConfig.BaseWSURL)
 	details["api_client_status"] = "initialized"
 
 	log.Println("InitLibstudy success")

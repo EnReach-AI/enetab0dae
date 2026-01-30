@@ -5,8 +5,8 @@ import (
 	"aro-ext-app/core/internal/constant"
 	"aro-ext-app/core/internal/crypto"
 	"aro-ext-app/core/internal/storage"
-	"fmt"
 	"log"
+	"runtime"
 )
 
 // Global variables
@@ -20,17 +20,7 @@ var (
 )
 
 func main() {
-	up, err := apiClient.NodeSignUp()
-	if err != nil {
-		fmt.Printf("Error: %v", err)
-		return
-	}
-
-	fmt.Printf("NodeSignUp response: %+v\n", up)
-	stat, err := apiClient.GetNodeStat()
-	fmt.Printf("NodeStat response: %+v\n", stat)
-	rewards, _ := apiClient.GetRewards()
-	fmt.Printf("Rewards response: %+v\n", rewards)
+	log.Print(runtime.GOOS)
 }
 
 func init() {
@@ -47,7 +37,8 @@ func init() {
 	clientID = crypto.GenerateClientID()
 	apiClient = api_client.NewAPIClient(baseAPIURL, clientID, keyPair)
 	log.Printf("API client auto-initialized with URL: %+v, ClientID: %s", apiClient, clientID)
-
+	apiResponse,_ := api_client.GetLastVersion(constant.PROGRAM_APP,"dev")
+	log.Println(*apiResponse)
 	// auto initialize WebSocket client
 	log.Printf("WebSocket client initialized with URL: %s", baseWSURL)
 }
