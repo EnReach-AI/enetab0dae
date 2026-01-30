@@ -86,18 +86,40 @@ func NewBackendService(deviceType string, serialNumber string) *BackendService {
 }
 
 // 接收者方法版本（用于面向对象调用）
-func GetLastVersion(program constant.OtaProgram, env string) (*APIResponse, error) {
+func GetLastVersion(program constant.OtaProgram, env string) (*APIResponseWith[LastVersionData], error) {
 	isa := 0
 	if runtime.GOARCH == "arm64" {
 		isa = 1
 	}
-	
+
 	path := fmt.Sprintf("/api/keeper/ota/%s/%s/%d/%s/lastest", program, env, isa, runtime.GOOS)
 	log.Println(cfg.Get(config.KeySN))
 	backendService := NewBackendService(runtime.GOOS, cfg.Get(config.KeySN))
-	apiResponse, _ := backendService.get(path)
+	apiResponse, err := backendService.get(path)
+	if err != nil {
+		return nil, err
+	}
 	log.Printf("getLastVersion xxxx apiResponse:%+v", apiResponse)
-	return apiResponse, nil
+
+	// 将 interface{} 转换为 LastVersionData
+	var versionData LastVersionData
+	if apiResponse.Data != nil {
+		// 使用 json 序列化和反序列化进行类型转换
+		dataBytes, err := json.Marshal(apiResponse.Data)
+		if err != nil {
+			return nil, fmt.Errorf("failed to marshal version data: %w", err)
+		}
+		if err := json.Unmarshal(dataBytes, &versionData); err != nil {
+			return nil, fmt.Errorf("failed to unmarshal version data: %w", err)
+		}
+	}
+
+	apiResponseWith := APIResponseWith[LastVersionData]{
+		Code:    apiResponse.Code,
+		Message: apiResponse.Message,
+		Data:    versionData,
+	}
+	return &apiResponseWith, nil
 }
 
 // 辅助函数：从指定 URL 获取版本信息

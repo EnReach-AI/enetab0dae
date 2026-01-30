@@ -37,3 +37,11 @@ type NodeReportBaseInfoRequest struct {
 	TimeZone    string `json:"timeZone"`    // Timezone
 	NodeID      string `json:"nodeId"`      // Node ID
 }
+
+type LastVersionData struct {
+	Version      string `json:"version"`
+	URL          string `json:"url"`
+	ReleaseNotes string `json:"releaseNotes"`
+	Checksum     string `json:"checksum"`
+}
+

@@ -345,8 +345,9 @@ func GetLastVersion() *C.char {
 	if err != nil {
 		return reply(500, err.Error(), nil)
 	}
-	log.Println("GetLastVersion aaaa response: ", apiResponse)
-	return toCStringJSON(apiResponse)
+	result := toCStringJSON(apiResponse)
+	log.Printf("GetLastVersion response: %s", C.GoString(result))
+	return result
 }
 
 // ======================
