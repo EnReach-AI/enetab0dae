@@ -7,6 +7,7 @@ import 'package:aro_client/ffi/study_lib.dart';
 import 'package:aro_client/ffi/study_service.dart';
 import 'package:aro_client/services/AppServiceStarter.dart';
 import 'package:aro_client/services/logger_service.dart';
+import 'package:aro_client/services/lib_update_service.dart';
 import 'package:aro_client/utils/native_dialog.dart';
 import 'package:window_manager/window_manager.dart';
 import 'dart:io';
@@ -25,6 +26,11 @@ void main(List<String> args) async {
     LoggerService().info('App starting...');
 
     try {
+      if (Platform.isMacOS) {
+        final appSupportDir = await getAppSupportDir();
+        final overridePath = p.join(appSupportDir, 'libstudy.dylib');
+        StudyLibrary.setOverridePath(overridePath);
+      }
       StudyLibrary.ensureInitialized();
     } catch (e) {
       LoggerService().error('Native library initialization failed', e);
@@ -222,6 +228,7 @@ class _MyHomePageState extends State<MyHomePage> {
 
         final versionMap = jsonDecode(version);
         final versionMap2 = jsonDecode(version2);
+
         LoggerService()
             .info('getVersion1232--- $versionMap 12311 $versionMap2 $version2');
 
@@ -232,6 +239,16 @@ class _MyHomePageState extends State<MyHomePage> {
             'type': 'getVersion',
             'payload': versionMap,
           });
+        }
+
+        if (Platform.isMacOS && versionMap2 is Map<String, dynamic>) {
+          final updateResult =
+              await LibUpdateService.instance.checkAndUpdateMacOS(
+            currentVersionMap: versionMap,
+            latestVersionMap: versionMap2,
+          );
+
+          LoggerService().info('Library update result: $updateResult');
         }
       } catch (e) {
         print('getVersion error $e');

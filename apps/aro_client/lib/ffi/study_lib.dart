@@ -13,6 +13,7 @@ class StudyLibrary {
   StudyLibrary._internal();
 
   static DynamicLibrary? _lib;
+  static String? _overridePath;
 
   static DynamicLibrary get instance {
     _lib ??= _open();
@@ -37,7 +38,25 @@ class StudyLibrary {
     }
   }
 
+  static void setOverridePath(String? path) {
+    _overridePath = path;
+  }
+
   static DynamicLibrary _open() {
+    if (_overridePath != null) {
+      final file = File(_overridePath!);
+      final exists = file.existsSync();
+      if (exists) {
+        try {
+          final lib = DynamicLibrary.open(file.path);
+          print('[StudyLib] Loaded from override path: ${file.path}');
+          return lib;
+        } catch (e) {
+          print('[StudyLib] Failed to load override path: $e');
+        }
+      }
+    }
+
     if (Platform.isAndroid) {
       return DynamicLibrary.open('libstudy.so');
     }
