@@ -61,9 +61,11 @@ void main(List<String> args) async {
             final exeDir = p.dirname(Platform.resolvedExecutable);
             final iconPath = p.join(exeDir, 'resources', 'app_icon.ico');
             await trayManager.setIcon(iconPath);
-            await trayManager.setToolTip('ARO');
+            if (Platform.isWindows) {
+              await trayManager.setToolTip('ARO');
+            }
           } catch (e) {
-            LoggerService().error('Failed to setup Windows tray icon', e);
+            LoggerService().error('Failed to setup tray icon', e);
           }
         }
       });
