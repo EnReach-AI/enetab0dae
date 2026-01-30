@@ -16,8 +16,20 @@ class LoggerService {
 
   Future<void> initialize() async {
     try {
-      final appDir = await getApplicationSupportDirectory();
-      final logDir = Directory('${appDir.path}/logs');
+      Directory logDir;
+      
+      try {
+        // Try to get the application support directory
+        final appDir = await getApplicationSupportDirectory();
+        logDir = Directory('${appDir.path}/logs');
+      } catch (e) {
+        print('Failed to get application support directory: $e');
+        print('Falling back to temporary directory for logs');
+        
+        // Fallback to temporary directory on Linux if application support directory is not accessible
+        final tempDir = await getTemporaryDirectory();
+        logDir = Directory('${tempDir.path}/logs');
+      }
 
       if (!await logDir.exists()) {
         await logDir.create(recursive: true);
@@ -64,8 +76,16 @@ class LoggerService {
   String get logFilePath => _logFilePath ?? 'Not initialized';
 
   Future<String> getLogDirectory() async {
-    final appDir = await getApplicationSupportDirectory();
-    return '${appDir.path}/logs';
+    try {
+      final appDir = await getApplicationSupportDirectory();
+      return '${appDir.path}/logs';
+    } catch (e) {
+      print('Failed to get application support directory: $e');
+      print('Using temporary directory for logs');
+      // Fallback to temporary directory if application support directory is not accessible
+      final tempDir = await getTemporaryDirectory();
+      return '${tempDir.path}/logs';
+    }
   }
 
   void debug(String message, [dynamic error, StackTrace? stackTrace]) {
