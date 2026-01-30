@@ -60,7 +60,7 @@ func recoverAndLog(funcName string) {
 
 func toCStringJSON(v interface{}) *C.char {
 	data, _ := json.Marshal(v)
-	logrus.WithField("json", string(data)).Debug("response json")
+	logrus.WithField("json", string(data)).Info("response json")
 	return C.CString(string(data))
 }
 

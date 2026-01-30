@@ -72,9 +72,9 @@ aro-ext-app/coverage/
 .env
 aro-ext-app/core/.env
 
-# Ignore RSA key files
-core/aro_rsa
-core/aro_rsa.pub
+# Ignore RSA key files (all paths)
+**/aro_rsa
+**/aro_rsa.pub
 
 
 .history

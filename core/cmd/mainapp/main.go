@@ -21,24 +21,25 @@ var (
 
 func main() {
 	log.Print(runtime.GOOS)
+	log.Println(runtime.GOARCH)
 }
 
-func init() {
-	// try to load keypair from current directory
-	var err error
-	keyPair, err = crypto.GetOrCreateKeyPair("")
-	if err != nil {
-		log.Printf("Warning: unable to load keypair during package initialization: %v", err)
-		return
-	}
-	log.Println("libstudy package initialization: keypair auto-loaded/generated")
+// func init() {
+// 	// try to load keypair from current directory
+// 	var err error
+// 	keyPair, err = crypto.GetOrCreateKeyPair("")
+// 	if err != nil {
+// 		log.Printf("Warning: unable to load keypair during package initialization: %v", err)
+// 		return
+// 	}
+// 	log.Println("libstudy package initialization: keypair auto-loaded/generated")
 
-	// auto initialize clientID and apiClient
-	clientID = crypto.GenerateClientID()
-	apiClient = api_client.NewAPIClient(baseAPIURL, clientID, keyPair)
-	log.Printf("API client auto-initialized with URL: %+v, ClientID: %s", apiClient, clientID)
-	apiResponse,_ := api_client.GetLastVersion(constant.PROGRAM_APP,"dev")
-	log.Println(*apiResponse)
-	// auto initialize WebSocket client
-	log.Printf("WebSocket client initialized with URL: %s", baseWSURL)
-}
+// 	// auto initialize clientID and apiClient
+// 	clientID = crypto.GenerateClientID()
+// 	apiClient = api_client.NewAPIClient(baseAPIURL, clientID, keyPair)
+// 	log.Printf("API client auto-initialized with URL: %+v, ClientID: %s", apiClient, clientID)
+// 	apiResponse,_ := api_client.GetLastVersion(constant.PROGRAM_APP,"dev")
+// 	log.Println(*apiResponse)
+// 	// auto initialize WebSocket client
+// 	log.Printf("WebSocket client initialized with URL: %s", baseWSURL)
+// }
