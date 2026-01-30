@@ -96,7 +96,7 @@ var (
 )
 
 const (
-	Version string = "0.0.1"
+	Version string = "0.0.2"
 )
 
 // init package initialization function，automatically called when dynamic library is loaded
