@@ -91,17 +91,13 @@ func GetLastVersion(program constant.OtaProgram, env string) (*APIResponse, erro
 	if runtime.GOARCH == "arm64" {
 		isa = 1
 	}
+	
 	path := fmt.Sprintf("/api/keeper/ota/%s/%s/%d/%s/lastest", program, env, isa, runtime.GOOS)
 	log.Println(cfg.Get(config.KeySN))
 	backendService := NewBackendService(runtime.GOOS, cfg.Get(config.KeySN))
 	apiResponse, _ := backendService.get(path)
 	log.Printf("getLastVersion xxxx apiResponse:%+v", apiResponse)
-	// apiResponse.Data = apiResponse.Data.(map[string]interface{})["data"].
-	return &APIResponse{
-		Code:    200,
-		Message: "scuccess",
-		Data:    "123",
-	}, nil
+	return apiResponse, nil
 }
 
 // 辅助函数：从指定 URL 获取版本信息

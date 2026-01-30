@@ -12,7 +12,7 @@
 //     char *error;
     
 //     // 加载共享库
-//     handle = dlopen("./libstudy.so", RTLD_LAZY);
+//     handle = dlopen("", RTLD_LAZY);
 //     if (!handle) {
 //         fprintf(stderr, "❌ Failed to load libstudy.so: %s\n", dlerror());
 //         return 1;
