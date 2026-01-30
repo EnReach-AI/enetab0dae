@@ -3,7 +3,7 @@ package constant
 type OtaProgram string
 
 const (
-	PROGRAM_APP OtaProgram = "enreach-app"
+	PROGRAM_APP OtaProgram = "aro-app"
 )
 
 const (
