@@ -95,6 +95,7 @@ func GetLastVersion(program constant.OtaProgram, env string) (*APIResponse, erro
 	path := fmt.Sprintf("/api/keeper/ota/%s/%s/%d/%s/lastest", program, env, isa, runtime.GOOS)
 	log.Println(cfg.Get(config.KeySN))
 	backendService := NewBackendService(runtime.GOOS, cfg.Get(config.KeySN))
+	log.Printf("GetLastVersion params: program=%s, env=%s, isa=%d, os=%s, path=%s", program, env, isa, runtime.GOOS, path)
 	apiResponse, err := backendService.get(path)
 	if err != nil {
 		return nil, err
