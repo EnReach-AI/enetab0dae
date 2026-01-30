@@ -28,7 +28,7 @@ class LoggerService {
         
         // Fallback to temporary directory on Linux if application support directory is not accessible
         final tempDir = await getTemporaryDirectory();
-        logDir = Directory('${tempDir.path}/aro_logs');
+        logDir = Directory('${tempDir.path}/logs');
       }
 
       if (!await logDir.exists()) {
@@ -80,9 +80,11 @@ class LoggerService {
       final appDir = await getApplicationSupportDirectory();
       return '${appDir.path}/logs';
     } catch (e) {
+      print('Failed to get application support directory: $e');
+      print('Using temporary directory for logs');
       // Fallback to temporary directory if application support directory is not accessible
       final tempDir = await getTemporaryDirectory();
-      return '${tempDir.path}/aro_logs';
+      return '${tempDir.path}/logs';
     }
   }
 
