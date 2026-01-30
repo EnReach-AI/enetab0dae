@@ -347,7 +347,7 @@ func GetLastVersion() *C.char {
 	}
 
 	data, _ := json.Marshal(resp)
-	log.Println("GetLastVersion response: ", string(data))
+	log.Println("GetLastVersion 14124 response: ", string(data))
 	return toCStringJSON(resp)
 }
 
