@@ -296,30 +296,47 @@ class _MyHomePageState extends State<MyHomePage> {
     if (Platform.isWindows) {
       // On Windows, we use embedded InAppWebView which is initialized in build()
     } else {
-      _initMobileWebView();
+      // Delay initialization for Linux to avoid null check errors
+      if (Platform.isLinux) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          _initMobileWebView();
+        });
+      } else {
+        _initMobileWebView();
+      }
     }
   }
 
   void _initMobileWebView() {
-    _controller = WebViewController()
-      ..setJavaScriptMode(JavaScriptMode.unrestricted)
-      ..addJavaScriptChannel(
+    try {
+      _controller = WebViewController();
+
+      _controller!.setJavaScriptMode(JavaScriptMode.unrestricted);
+
+      _controller!.addJavaScriptChannel(
         'Flutter',
         onMessageReceived: (JavaScriptMessage message) {
           print('Received Web message: $message');
           handleWebMessage(message.message);
         },
-      )
-      ..setNavigationDelegate(
+      );
+
+      _controller!.setNavigationDelegate(
         NavigationDelegate(
           onPageFinished: (_) {
             print('[FLUTTER] page finished');
           },
         ),
-      )
-      ..loadRequest(Uri.parse(Platform.isAndroid || Platform.isIOS
+      );
+
+      final url = Platform.isAndroid || Platform.isIOS
           ? AllConfig.mobileURL
-          : AllConfig.deskTopURL));
+          : AllConfig.deskTopURL;
+      _controller!.loadRequest(Uri.parse(url));
+    } catch (e) {
+      print('Error initializing webview: $e');
+      LoggerService().error('Error initializing webview', e);
+    }
   }
 
   @override
