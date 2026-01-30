@@ -341,13 +341,14 @@ func GetLastVersion() *C.char {
 	if apiClient == nil {
 		return reply(500, "apiClient not initialized, call InitLibstudy first", nil)
 	}
-	apiResponse, err := api_client.GetLastVersion(constant.PROGRAM_APP, constant.ENV)
+	resp, err := api_client.GetLastVersion(constant.PROGRAM_APP, constant.ENV)
 	if err != nil {
 		return reply(500, err.Error(), nil)
 	}
-	result := reply(apiResponse.Code, apiResponse.Message, apiResponse.Data)
-	log.Printf("getLastVersion response:%s",C.GoString(result))
-    return result
+
+	data, _ := json.Marshal(resp)
+	log.Println("GetLastVersion response: ", string(data))
+	return toCStringJSON(resp)
 }
 
 // ======================

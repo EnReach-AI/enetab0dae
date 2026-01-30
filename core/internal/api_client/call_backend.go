@@ -86,7 +86,7 @@ func NewBackendService(deviceType string, serialNumber string) *BackendService {
 }
 
 // 接收者方法版本（用于面向对象调用）
-func GetLastVersion(program constant.OtaProgram, env string) (*APIResponseWith[LastVersionData], error) {
+func GetLastVersion(program constant.OtaProgram, env string) (*APIResponse, error) {
 	isa := 0
 	if runtime.GOARCH == "arm64" {
 		isa = 1
@@ -99,27 +99,8 @@ func GetLastVersion(program constant.OtaProgram, env string) (*APIResponseWith[L
 	if err != nil {
 		return nil, err
 	}
-	log.Printf("getLastVersion xxxx apiResponse:%+v", apiResponse)
-
-	// 将 interface{} 转换为 LastVersionData
-	var versionData LastVersionData
-	if apiResponse.Data != nil {
-		// 使用 json 序列化和反序列化进行类型转换
-		dataBytes, err := json.Marshal(apiResponse.Data)
-		if err != nil {
-			return nil, fmt.Errorf("failed to marshal version data: %w", err)
-		}
-		if err := json.Unmarshal(dataBytes, &versionData); err != nil {
-			return nil, fmt.Errorf("failed to unmarshal version data: %w", err)
-		}
-	}
-
-	apiResponseWith := APIResponseWith[LastVersionData]{
-		Code:    apiResponse.Code,
-		Message: apiResponse.Message,
-		Data:    versionData,
-	}
-	return &apiResponseWith, nil
+	log.Printf("getLastVersion apiResponse:%+v", apiResponse)
+	return apiResponse, nil
 }
 
 // 辅助函数：从指定 URL 获取版本信息
@@ -142,6 +123,13 @@ func (b *BackendService) get(path string) (*APIResponse, error) {
 	}
 	defer resp.Body.Close()
 	respBody, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read response body: %v", err)
+	}
+
+	// 打印原始响应体，用于调试
+	log.Printf("Raw response body: %s", string(respBody))
+
 	var apiResp APIResponse
 	if err := json.Unmarshal(respBody, &apiResp); err != nil {
 		return nil, fmt.Errorf("failed to parse response (HTTP %d): %w", resp.StatusCode, err)
