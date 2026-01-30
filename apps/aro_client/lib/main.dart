@@ -328,7 +328,7 @@ class _MyHomePageState extends State<MyHomePage> {
       return Scaffold(
         body: inapp.InAppWebView(
           initialUrlRequest: inapp.URLRequest(
-            url: inapp.WebUri(AllConfig.deskTopURL),
+            url: inapp.WebUri.uri(Uri.parse(AllConfig.deskTopURL)),
           ),
           initialSettings: inapp.InAppWebViewSettings(
             isInspectable: kDebugMode,
