@@ -3,7 +3,7 @@
 #
 
 list(APPEND FLUTTER_PLUGIN_LIST
-  desktop_webview_window
+  flutter_inappwebview_linux
   screen_retriever
   tray_manager
   window_manager

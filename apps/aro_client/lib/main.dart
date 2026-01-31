@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
@@ -18,14 +17,10 @@ import 'package:path/path.dart' as p;
 import 'dart:convert';
 import 'package:aro_client/utils/config.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart' as inapp;
-import 'package:desktop_webview_window/desktop_webview_window.dart';
 
 void main(List<String> args) async {
   runZonedGuarded(() async {
     WidgetsFlutterBinding.ensureInitialized();
-    if (runWebViewTitleBarWidget(args)) {
-      return;
-    }
 
     await LoggerService().initialize();
     LoggerService().info('App starting...');
@@ -148,17 +143,6 @@ class _MyHomePageState extends State<MyHomePage> {
   // String? _errorMessage;
 
   final service = StudyService.instance;
-  HttpServer? _linuxBridgeServer;
-  final Set<WebSocket> _linuxBridgeClients = {};
-  int? _linuxBridgePort;
-  String? _linuxBridgeToken;
-  bool _linuxWebviewLaunched = false;
-  bool _linuxWebviewStarting = false;
-  String? _linuxWebviewError;
-  bool get _useDesktopWebviewWindow =>
-      Platform.isLinux ||
-      (kDebugMode &&
-          Platform.environment['ARO_FORCE_DESKTOP_WEBVIEW_WINDOW'] == '1');
 
   // void sendToWeb(Map<String, dynamic> data) {
   //   final json = jsonEncode(data);
@@ -167,44 +151,12 @@ class _MyHomePageState extends State<MyHomePage> {
   //   );
   // }
 
-  @override
-  void dispose() {
-    for (final c in _linuxBridgeClients) {
-      try {
-        c.close();
-      } catch (_) {}
-    }
-    _linuxBridgeClients.clear();
-    try {
-      _linuxBridgeServer?.close();
-    } catch (_) {}
-    super.dispose();
-  }
-
-  void _broadcastToLinuxWeb(String message) {
-    for (final c in _linuxBridgeClients.toList()) {
-      if (c.closeCode != null) {
-        _linuxBridgeClients.remove(c);
-        continue;
-      }
-      try {
-        c.add(message);
-      } catch (_) {
-        _linuxBridgeClients.remove(c);
-      }
-    }
-  }
-
   void sendMessageToWeb(Map<String, dynamic> data) {
     final json = jsonEncode(data);
-    if (_useDesktopWebviewWindow) {
-      _broadcastToLinuxWeb(json);
-      return;
-    }
     final script = '''
     window.onFlutterMessage && window.onFlutterMessage($json);
   ''';
-    if (Platform.isWindows) {
+    if (Platform.isWindows || Platform.isLinux) {
       _desktopController?.evaluateJavascript(source: script);
     } else {
       _controller?.runJavaScript(script);
@@ -418,27 +370,22 @@ class _MyHomePageState extends State<MyHomePage> {
     // }
   }
 
-  Future<bool> _openExternalUrl(String url) async {
+  Future<void> _openExternalUrl(String url) async {
     try {
       final uriStr = (url.startsWith('http://') || url.startsWith('https://'))
           ? url
           : 'https://$url';
       if (Platform.isMacOS) {
-        final res = await Process.run('open', [uriStr]);
-        return res.exitCode == 0;
+        await Process.run('open', [uriStr]);
       } else if (Platform.isLinux) {
-        final res = await Process.run('xdg-open', [uriStr]);
-        return res.exitCode == 0;
+        await Process.run('xdg-open', [uriStr]);
       } else if (Platform.isWindows) {
-        final res = await Process.run('cmd', ['/c', 'start', '', uriStr]);
-        return res.exitCode == 0;
+        await Process.run('cmd', ['/c', 'start', '', uriStr]);
       } else {
         print('Unsupported platform for opening URL: $uriStr');
-        return false;
       }
     } catch (e) {
       print('Failed to open external URL: $e');
-      return false;
     }
   }
 
@@ -460,12 +407,8 @@ class _MyHomePageState extends State<MyHomePage> {
 
   void sendToWeb(Map<String, dynamic> data) {
     final json = jsonEncode(data);
-    if (_useDesktopWebviewWindow) {
-      _broadcastToLinuxWeb(json);
-      return;
-    }
     final script = 'window.onFlutterMessage($json);';
-    if (Platform.isWindows) {
+    if (Platform.isWindows || Platform.isLinux) {
       _desktopController?.evaluateJavascript(source: script);
     } else {
       _controller?.runJavaScript(script);
@@ -480,137 +423,11 @@ class _MyHomePageState extends State<MyHomePage> {
       print('initNode error caught: $e');
     });
 
-    if (_useDesktopWebviewWindow) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        _initLinuxWebview().catchError((e, s) {
-          LoggerService().error('Linux webview init failed', e, s);
-        });
-      });
-    } else if (!Platform.isWindows) {
+    if (Platform.isWindows || Platform.isLinux) {
+      // On Windows/Linux, we use embedded InAppWebView which is initialized in build()
+    } else {
+      // Initialize webview_flutter for Android/iOS/macOS
       _initMobileWebView();
-    }
-  }
-
-  Future<void> _initLinuxWebview() async {
-    if (_linuxWebviewLaunched) return;
-    _linuxWebviewLaunched = true;
-    if (mounted) {
-      setState(() {
-        _linuxWebviewStarting = true;
-        _linuxWebviewError = null;
-      });
-    }
-
-    try {
-      _linuxBridgeServer ??=
-          await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
-      _linuxBridgePort = _linuxBridgeServer!.port;
-      final tokenBytes =
-          List<int>.generate(32, (_) => Random.secure().nextInt(256));
-      _linuxBridgeToken = base64UrlEncode(tokenBytes);
-      _linuxBridgeServer!.listen((HttpRequest request) async {
-        if (_linuxBridgeToken == null ||
-            request.uri.path != '/ws/$_linuxBridgeToken') {
-          request.response.statusCode = HttpStatus.notFound;
-          await request.response.close();
-          return;
-        }
-        if (!WebSocketTransformer.isUpgradeRequest(request)) {
-          request.response.statusCode = HttpStatus.badRequest;
-          await request.response.close();
-          return;
-        }
-        final socket = await WebSocketTransformer.upgrade(request);
-        _linuxBridgeClients.add(socket);
-        socket.listen(
-          (data) {
-            if (data is String) {
-              handleWebMessage(data);
-            } else {
-              handleWebMessage(data.toString());
-            }
-          },
-          onDone: () {
-            _linuxBridgeClients.remove(socket);
-          },
-          onError: (_) {
-            _linuxBridgeClients.remove(socket);
-          },
-          cancelOnError: true,
-        );
-      });
-
-      final webview = await WebviewWindow.create(
-        configuration: CreateConfiguration(
-          windowWidth: 360,
-          windowHeight: 640,
-          title: 'ARO',
-        ),
-      );
-
-      final wsPort = _linuxBridgePort!;
-      final wsToken = _linuxBridgeToken!;
-      webview.addScriptToExecuteOnDocumentCreated('''
-        (function() {
-          var wsUrl = "ws://127.0.0.1:$wsPort/ws/$wsToken";
-          var socket = null;
-          function connect() {
-            try {
-              socket = new WebSocket(wsUrl);
-              socket.onmessage = function(event) {
-                try {
-                  if (!window.onFlutterMessage) return;
-                  var data = event.data;
-                  if (typeof data === "string") {
-                    try {
-                      window.onFlutterMessage(JSON.parse(data));
-                      return;
-                    } catch (e) {}
-                  }
-                  window.onFlutterMessage(data);
-                } catch (e) {}
-              };
-              socket.onclose = function() {
-                setTimeout(connect, 1000);
-              };
-            } catch (e) {
-              setTimeout(connect, 1000);
-            }
-          }
-          connect();
-
-          window.Flutter = window.Flutter || {};
-          window.Flutter.postMessage = function(msg) {
-            try {
-              if (!socket || socket.readyState !== 1) return;
-              if (typeof msg === "string") {
-                socket.send(msg);
-              } else {
-                socket.send(JSON.stringify(msg));
-              }
-            } catch (e) {}
-          };
-        })();
-      ''');
-
-      webview.launch(AllConfig.deskTopURL);
-      if (Platform.isLinux) {
-        await windowManager.hide();
-      }
-
-      if (mounted) {
-        setState(() {
-          _linuxWebviewStarting = false;
-        });
-      }
-    } catch (e, s) {
-      LoggerService().error('Linux webview startup failed', e, s);
-      if (mounted) {
-        setState(() {
-          _linuxWebviewStarting = false;
-          _linuxWebviewError = e.toString();
-        });
-      }
     }
   }
 
@@ -648,51 +465,7 @@ class _MyHomePageState extends State<MyHomePage> {
 
   @override
   Widget build(BuildContext context) {
-    if (_useDesktopWebviewWindow) {
-      if (_linuxWebviewError != null) {
-        return Scaffold(
-          body: Center(
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 24),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const Text('Linux WebView 启动失败'),
-                  const SizedBox(height: 12),
-                  SelectableText(
-                    _linuxWebviewError!,
-                    textAlign: TextAlign.center,
-                  ),
-                  const SizedBox(height: 12),
-                  OutlinedButton(
-                    onPressed: () {
-                      _openExternalUrl(AllConfig.deskTopURL);
-                    },
-                    child: const Text('用系统浏览器打开'),
-                  ),
-                  const SizedBox(height: 12),
-                  OutlinedButton(
-                    onPressed: () async {
-                      await Clipboard.setData(
-                        const ClipboardData(text: AllConfig.deskTopURL),
-                      );
-                    },
-                    child: const Text('复制链接'),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        );
-      }
-      if (_linuxWebviewStarting) {
-        return const Scaffold(
-          body: Center(child: CircularProgressIndicator()),
-        );
-      }
-      return const Scaffold(body: SizedBox.shrink());
-    }
-    if (Platform.isWindows) {
+    if (Platform.isWindows || Platform.isLinux) {
       return Scaffold(
         body: HeroMode(
           enabled: false,
@@ -700,7 +473,7 @@ class _MyHomePageState extends State<MyHomePage> {
         ),
       );
     }
-    // Use webview_flutter for Linux, macOS, Android, iOS
+    // Use webview_flutter for macOS, Android, iOS
     if (_controller == null) {
       return const Scaffold(
         body: Center(child: CircularProgressIndicator()),
