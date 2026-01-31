@@ -123,6 +123,15 @@ class MyApp extends StatelessWidget {
         useMaterial3: true,
         colorScheme: ColorScheme.fromSeed(seedColor: Colors.deepOrange),
       ),
+      builder: (context, child) {
+        final builtChild = child ?? const SizedBox.shrink();
+        // Work around a Linux crash where HeroController can throw a null-check
+        // error during platform view initialization (InAppWebView).
+        if (Platform.isLinux) {
+          return HeroControllerScope.none(child: builtChild);
+        }
+        return builtChild;
+      },
       home: MyHomePage(),
     );
   }
