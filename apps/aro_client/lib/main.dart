@@ -71,7 +71,12 @@ void main(List<String> args) async {
       );
 
       windowManager.waitUntilReadyToShow(windowOptions, () async {
-        await windowManager.show();
+        if (Platform.isLinux &&
+            Platform.environment['ARO_LINUX_SHOW_MAIN_WINDOW'] != '1') {
+          await windowManager.hide();
+        } else {
+          await windowManager.show();
+        }
         if (Platform.isWindows) {
           try {
             final exeDir = p.dirname(Platform.resolvedExecutable);
@@ -493,6 +498,9 @@ class _MyHomePageState extends State<MyHomePage> {
         ),
         initialSettings: inapp.InAppWebViewSettings(
           javaScriptEnabled: true,
+          javaScriptCanOpenWindowsAutomatically: false,
+          supportMultipleWindows: false,
+          useShouldOverrideUrlLoading: true,
         ),
         onWebViewCreated: (controller) {
           _desktopController = controller;
@@ -532,6 +540,15 @@ class _MyHomePageState extends State<MyHomePage> {
         onLoadError: (controller, url, code, message) {
           LoggerService()
               .error('WebView load error: $message (code: $code)', null);
+        },
+        onCreateWindow: (controller, action) async {
+          final uri = action.request.url;
+          if (uri != null) {
+            await controller.loadUrl(
+              urlRequest: inapp.URLRequest(url: uri),
+            );
+          }
+          return false;
         },
       );
     } catch (e) {
