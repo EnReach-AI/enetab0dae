@@ -21,6 +21,7 @@ dependencies:
   webview_flutter_wkwebview: ^3.23.5
   logger: ^2.4.0
   flutter_inappwebview: ^6.1.5
+  desktop_webview_window: ^0.2.3
   tray_manager: ^0.5.2
   path: ^1.9.1
   archive: ^3.6.1
