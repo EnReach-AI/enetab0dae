@@ -22,8 +22,21 @@ class MainActivity: FlutterActivity() {
                     stopService(intent)
                     result.success("Service Stopped")
                 }
+                "restartApp" -> {
+                    restartApp()
+                    result.success(true)
+                }
                 else -> result.notImplemented()
             }
         }
+    }
+
+    private fun restartApp() {
+        val context = applicationContext
+        val intent = context.packageManager.getLaunchIntentForPackage(context.packageName)
+        intent?.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
+        startActivity(intent)
+        finish()
+        Runtime.getRuntime().exit(0)
     }
 }

@@ -84,6 +84,246 @@ class LibUpdateService {
       url: url,
       checksum: checksum,
       version: latestVersion,
+      fileName: 'libstudy.dylib',
+      chmod: true,
+      releaseNotes: releaseNotes,
+    );
+  }
+
+  Future<Map<String, dynamic>> checkAndUpdateAndroid({
+    required Map<String, dynamic> currentVersionMap,
+    required Map<String, dynamic> latestVersionMap,
+  }) async {
+    if (!Platform.isAndroid) {
+      return {
+        'code': 200,
+        'updated': false,
+        'message': 'Skip update: not Android',
+      };
+    }
+
+    if (currentVersionMap['code'] != 200) {
+      return {
+        'code': currentVersionMap['code'] ?? 500,
+        'updated': false,
+        'message': 'Failed to read current version',
+      };
+    }
+
+    if (latestVersionMap['code'] != 200) {
+      return {
+        'code': latestVersionMap['code'] ?? 500,
+        'updated': false,
+        'message': 'Failed to read latest version',
+      };
+    }
+
+    final currentVersion = (currentVersionMap['data'] ?? '').toString();
+    final latestData = latestVersionMap['data'];
+    if (latestData is! Map) {
+      return {
+        'code': 500,
+        'updated': false,
+        'message': 'Latest version data invalid',
+      };
+    }
+
+    final latestVersion = (latestData['version'] ?? '').toString();
+    if (currentVersion.isEmpty || latestVersion.isEmpty) {
+      return {
+        'code': 500,
+        'updated': false,
+        'message': 'Version info missing',
+      };
+    }
+
+    final compare = _compareVersions(currentVersion, latestVersion);
+    if (compare >= 0) {
+      return {
+        'code': 200,
+        'updated': false,
+        'message': 'Already up to date',
+        'currentVersion': currentVersion,
+        'latestVersion': latestVersion,
+      };
+    }
+
+    final url = (latestData['url'] ?? '').toString();
+    final checksum = (latestData['checksum'] ?? '').toString();
+    final releaseNotes = (latestData['releaseNotes'] ?? '').toString();
+
+    if (url.isEmpty) {
+      return {
+        'code': 500,
+        'updated': false,
+        'message': 'Download url missing',
+      };
+    }
+
+    return _downloadAndInstall(
+      url: url,
+      checksum: checksum,
+      version: latestVersion,
+      fileName: 'libstudy.so',
+      releaseNotes: releaseNotes,
+    );
+  }
+
+  Future<Map<String, dynamic>> checkAndUpdateWindows({
+    required Map<String, dynamic> currentVersionMap,
+    required Map<String, dynamic> latestVersionMap,
+  }) async {
+    if (!Platform.isWindows) {
+      return {
+        'code': 200,
+        'updated': false,
+        'message': 'Skip update: not Windows',
+      };
+    }
+
+    if (currentVersionMap['code'] != 200) {
+      return {
+        'code': currentVersionMap['code'] ?? 500,
+        'updated': false,
+        'message': 'Failed to read current version',
+      };
+    }
+
+    if (latestVersionMap['code'] != 200) {
+      return {
+        'code': latestVersionMap['code'] ?? 500,
+        'updated': false,
+        'message': 'Failed to read latest version',
+      };
+    }
+
+    final currentVersion = (currentVersionMap['data'] ?? '').toString();
+    final latestData = latestVersionMap['data'];
+    if (latestData is! Map) {
+      return {
+        'code': 500,
+        'updated': false,
+        'message': 'Latest version data invalid',
+      };
+    }
+
+    final latestVersion = (latestData['version'] ?? '').toString();
+    if (currentVersion.isEmpty || latestVersion.isEmpty) {
+      return {
+        'code': 500,
+        'updated': false,
+        'message': 'Version info missing',
+      };
+    }
+
+    final compare = _compareVersions(currentVersion, latestVersion);
+    if (compare >= 0) {
+      return {
+        'code': 200,
+        'updated': false,
+        'message': 'Already up to date',
+        'currentVersion': currentVersion,
+        'latestVersion': latestVersion,
+      };
+    }
+
+    final url = (latestData['url'] ?? '').toString();
+    final checksum = (latestData['checksum'] ?? '').toString();
+    final releaseNotes = (latestData['releaseNotes'] ?? '').toString();
+
+    if (url.isEmpty) {
+      return {
+        'code': 500,
+        'updated': false,
+        'message': 'Download url missing',
+      };
+    }
+
+    return _downloadAndInstall(
+      url: url,
+      checksum: checksum,
+      version: latestVersion,
+      fileName: 'libstudy.dll',
+      releaseNotes: releaseNotes,
+    );
+  }
+
+  Future<Map<String, dynamic>> checkAndUpdateLinux({
+    required Map<String, dynamic> currentVersionMap,
+    required Map<String, dynamic> latestVersionMap,
+  }) async {
+    if (!Platform.isLinux) {
+      return {
+        'code': 200,
+        'updated': false,
+        'message': 'Skip update: not Linux',
+      };
+    }
+
+    if (currentVersionMap['code'] != 200) {
+      return {
+        'code': currentVersionMap['code'] ?? 500,
+        'updated': false,
+        'message': 'Failed to read current version',
+      };
+    }
+
+    if (latestVersionMap['code'] != 200) {
+      return {
+        'code': latestVersionMap['code'] ?? 500,
+        'updated': false,
+        'message': 'Failed to read latest version',
+      };
+    }
+
+    final currentVersion = (currentVersionMap['data'] ?? '').toString();
+    final latestData = latestVersionMap['data'];
+    if (latestData is! Map) {
+      return {
+        'code': 500,
+        'updated': false,
+        'message': 'Latest version data invalid',
+      };
+    }
+
+    final latestVersion = (latestData['version'] ?? '').toString();
+    if (currentVersion.isEmpty || latestVersion.isEmpty) {
+      return {
+        'code': 500,
+        'updated': false,
+        'message': 'Version info missing',
+      };
+    }
+
+    final compare = _compareVersions(currentVersion, latestVersion);
+    if (compare >= 0) {
+      return {
+        'code': 200,
+        'updated': false,
+        'message': 'Already up to date',
+        'currentVersion': currentVersion,
+        'latestVersion': latestVersion,
+      };
+    }
+
+    final url = (latestData['url'] ?? '').toString();
+    final checksum = (latestData['checksum'] ?? '').toString();
+    final releaseNotes = (latestData['releaseNotes'] ?? '').toString();
+
+    if (url.isEmpty) {
+      return {
+        'code': 500,
+        'updated': false,
+        'message': 'Download url missing',
+      };
+    }
+
+    return _downloadAndInstall(
+      url: url,
+      checksum: checksum,
+      version: latestVersion,
+      fileName: 'libstudy.so',
+      chmod: true,
       releaseNotes: releaseNotes,
     );
   }
@@ -92,6 +332,8 @@ class LibUpdateService {
     required String url,
     required String checksum,
     required String version,
+    required String fileName,
+    bool chmod = false,
     String? releaseNotes,
   }) async {
     Directory? tempDir;
@@ -112,26 +354,28 @@ class LibUpdateService {
         }
       }
 
-      final dylibBytes = await _extractDylib(zipPath);
-      if (dylibBytes == null) {
+      final libBytes = await _extractFile(zipPath, fileName);
+      if (libBytes == null) {
         return {
           'code': 500,
           'updated': false,
-          'message': 'libstudy.dylib not found in archive',
+          'message': '$fileName not found in archive',
           'version': version,
         };
       }
 
       final appDir = await getAppSupportDir();
-      final targetPath = p.join(appDir, 'libstudy.dylib');
-      await File(targetPath).writeAsBytes(dylibBytes, flush: true);
+      final targetPath = p.join(appDir, fileName);
+      await File(targetPath).writeAsBytes(libBytes, flush: true);
       await File(p.join(appDir, 'libstudy.version'))
           .writeAsString(version, flush: true);
 
-      try {
-        await Process.run('chmod', ['+x', targetPath]);
-      } catch (e) {
-        LoggerService().info('chmod failed for $targetPath', e);
+      if (chmod) {
+        try {
+          await Process.run('chmod', ['+x', targetPath]);
+        } catch (e) {
+          LoggerService().info('chmod failed for $targetPath', e);
+        }
       }
 
       LoggerService().info('libstudy updated', {
@@ -191,13 +435,13 @@ class LibUpdateService {
     return digest.toLowerCase() == expected.toLowerCase();
   }
 
-  Future<List<int>?> _extractDylib(String zipPath) async {
+  Future<List<int>?> _extractFile(String zipPath, String fileName) async {
     final bytes = await File(zipPath).readAsBytes();
     final archive = ZipDecoder().decodeBytes(bytes);
     for (final file in archive.files) {
       if (!file.isFile) continue;
       final name = p.basename(file.name);
-      if (name == 'libstudy.dylib') {
+      if (name == fileName) {
         return List<int>.from(file.content as List);
       }
     }

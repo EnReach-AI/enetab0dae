@@ -26,9 +26,20 @@ void main(List<String> args) async {
     LoggerService().info('App starting...');
 
     try {
-      if (Platform.isMacOS) {
+      if (Platform.isMacOS ||
+          Platform.isAndroid ||
+          Platform.isWindows ||
+          Platform.isLinux) {
         final appSupportDir = await getAppSupportDir();
-        final overridePath = p.join(appSupportDir, 'libstudy.dylib');
+        String overrideFile;
+        if (Platform.isMacOS) {
+          overrideFile = 'libstudy.dylib';
+        } else if (Platform.isWindows) {
+          overrideFile = 'libstudy.dll';
+        } else {
+          overrideFile = 'libstudy.so';
+        }
+        final overridePath = p.join(appSupportDir, overrideFile);
         StudyLibrary.setOverridePath(overridePath);
       }
       StudyLibrary.ensureInitialized();
@@ -157,6 +168,71 @@ class _MyHomePageState extends State<MyHomePage> {
     // print('connect status: $status');
   }
 
+  Future<void> _restartApp() async {
+    try {
+      if (Platform.isAndroid) {
+        await MyApp.platform.invokeMethod('restartApp');
+        return;
+      }
+
+      if (Platform.isMacOS) {
+        final exePath = Platform.resolvedExecutable;
+        final exeDir = Directory(exePath).parent;
+        final appBundlePath = p.normalize(p.join(exeDir.path, '..', '..'));
+        await Process.run('open', [appBundlePath]);
+        exit(0);
+      }
+
+      if (Platform.isWindows) {
+        final exePath = Platform.resolvedExecutable;
+        await Process.start(exePath, []);
+        exit(0);
+      }
+
+      if (Platform.isLinux) {
+        final exePath = Platform.resolvedExecutable;
+        await Process.start(exePath, []);
+        exit(0);
+      }
+    } catch (e) {
+      LoggerService().error('Restart failed', e);
+    }
+  }
+
+  Future<void> _showRestartDialog() async {
+    if (!mounted) return;
+    try {
+      await showDialog<void>(
+        context: context,
+        barrierDismissible: false,
+        builder: (context) {
+          return AlertDialog(
+            title: const Text('Update completed'),
+            content: const Text(
+                'Update completed. Please restart the app to take effect.'),
+            actions: [
+              TextButton(
+                onPressed: () {
+                  Navigator.of(context).pop();
+                },
+                child: const Text('OK'),
+              ),
+              TextButton(
+                onPressed: () async {
+                  Navigator.of(context).pop();
+                  await _restartApp();
+                },
+                child: const Text('Restart now'),
+              ),
+            ],
+          );
+        },
+      );
+    } catch (e) {
+      LoggerService().error('Show restart dialog failed', e);
+    }
+  }
+
   void handleWebMessage(String message) async {
     print('messagehandleWebMessage $message');
     // Try to decode JSON messages from the web first
@@ -241,14 +317,40 @@ class _MyHomePageState extends State<MyHomePage> {
           });
         }
 
-        if (Platform.isMacOS && versionMap2 is Map<String, dynamic>) {
-          final updateResult =
-              await LibUpdateService.instance.checkAndUpdateMacOS(
-            currentVersionMap: versionMap,
-            latestVersionMap: versionMap2,
-          );
+        if (versionMap2 is Map<String, dynamic>) {
+          Map<String, dynamic>? updateResult;
 
-          LoggerService().info('Library update result: $updateResult');
+          if (Platform.isMacOS) {
+            updateResult = await LibUpdateService.instance.checkAndUpdateMacOS(
+              currentVersionMap: versionMap,
+              latestVersionMap: versionMap2,
+            );
+          } else if (Platform.isAndroid) {
+            updateResult =
+                await LibUpdateService.instance.checkAndUpdateAndroid(
+              currentVersionMap: versionMap,
+              latestVersionMap: versionMap2,
+            );
+          } else if (Platform.isWindows) {
+            updateResult =
+                await LibUpdateService.instance.checkAndUpdateWindows(
+              currentVersionMap: versionMap,
+              latestVersionMap: versionMap2,
+            );
+          } else if (Platform.isLinux) {
+            updateResult = await LibUpdateService.instance.checkAndUpdateLinux(
+              currentVersionMap: versionMap,
+              latestVersionMap: versionMap2,
+            );
+          }
+
+          if (updateResult != null) {
+            print('updateResult getVersion $updateResult');
+            LoggerService().info('Library update result: $updateResult');
+            if (updateResult['updated'] == true) {
+              await _showRestartDialog();
+            }
+          }
         }
       } catch (e) {
         print('getVersion error $e');
