@@ -490,14 +490,10 @@ class _MyHomePageState extends State<MyHomePage> {
       return inapp.InAppWebView(
         key: const ValueKey('desktop_webview'),
         initialUrlRequest: inapp.URLRequest(
-          url: inapp.WebUri.uri(Uri.parse(AllConfig.deskTopURL)),
+          url: inapp.WebUri(AllConfig.deskTopURL),
         ),
         initialSettings: inapp.InAppWebViewSettings(
-          isInspectable: kDebugMode,
           javaScriptEnabled: true,
-          useShouldOverrideUrlLoading: false,
-          disableHorizontalScroll: false,
-          disableVerticalScroll: false,
         ),
         onWebViewCreated: (controller) {
           _desktopController = controller;
@@ -541,9 +537,9 @@ class _MyHomePageState extends State<MyHomePage> {
       );
     } catch (e) {
       LoggerService().error('Failed to create desktop webview', e);
-      return const Scaffold(
+      return Scaffold(
         body: Center(
-          child: Text('Failed to load webview'),
+          child: Text('Failed to load webview: ${e.toString()}'),
         ),
       );
     }
