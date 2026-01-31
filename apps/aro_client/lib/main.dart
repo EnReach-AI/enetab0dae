@@ -470,49 +470,11 @@ class _MyHomePageState extends State<MyHomePage> {
       return Scaffold(
         body: HeroMode(
           enabled: false,
-          child: inapp.InAppWebView(
-            key: const ValueKey('desktop_webview'),
-            initialUrlRequest: inapp.URLRequest(
-              url: inapp.WebUri.uri(Uri.parse(AllConfig.deskTopURL)),
-            ),
-            initialSettings: inapp.InAppWebViewSettings(
-              // ...
-              isInspectable: kDebugMode,
-              javaScriptEnabled: true,
-              useShouldOverrideUrlLoading: false,
-            ),
-            onWebViewCreated: (controller) {
-              _desktopController = controller;
-              controller.addJavaScriptHandler(
-                handlerName: 'Flutter',
-                callback: (args) {
-                  if (args.isNotEmpty) {
-                    dynamic message = args[0];
-                    if (message is String) {
-                      handleWebMessage(message);
-                    } else if (message is Map) {
-                      handleWebMessage(jsonEncode(message));
-                    }
-                  }
-                },
-              );
-            },
-            onLoadStop: (controller, url) async {
-              await controller.evaluateJavascript(source: '''
-                  if (!window.Flutter) {
-                    window.Flutter = {
-                      postMessage: function(msg) {
-                        window.flutter_inappwebview.callHandler('Flutter', msg);
-                      }
-                    };
-                  }
-               ''');
-            },
-          ),
+          child: _buildDesktopWebView(),
         ),
       );
     }
-    // Use webview_flutter for Linux, macOS, Android, iOS
+    // Use webview_flutter for macOS, Android, iOS
     if (_controller == null) {
       return const Scaffold(
         body: Center(child: CircularProgressIndicator()),
@@ -521,5 +483,69 @@ class _MyHomePageState extends State<MyHomePage> {
     return Scaffold(
       body: WebViewWidget(controller: _controller!),
     );
+  }
+
+  Widget _buildDesktopWebView() {
+    try {
+      return inapp.InAppWebView(
+        key: const ValueKey('desktop_webview'),
+        initialUrlRequest: inapp.URLRequest(
+          url: inapp.WebUri.uri(Uri.parse(AllConfig.deskTopURL)),
+        ),
+        initialSettings: inapp.InAppWebViewSettings(
+          isInspectable: kDebugMode,
+          javaScriptEnabled: true,
+          useShouldOverrideUrlLoading: false,
+          disableHorizontalScroll: false,
+          disableVerticalScroll: false,
+        ),
+        onWebViewCreated: (controller) {
+          _desktopController = controller;
+          try {
+            controller.addJavaScriptHandler(
+              handlerName: 'Flutter',
+              callback: (args) {
+                if (args.isNotEmpty) {
+                  dynamic message = args[0];
+                  if (message is String) {
+                    handleWebMessage(message);
+                  } else if (message is Map) {
+                    handleWebMessage(jsonEncode(message));
+                  }
+                }
+              },
+            );
+          } catch (e) {
+            LoggerService().error('Failed to add JavaScript handler', e);
+          }
+        },
+        onLoadStop: (controller, url) async {
+          try {
+            await controller.evaluateJavascript(source: '''
+              if (!window.Flutter) {
+                window.Flutter = {
+                  postMessage: function(msg) {
+                    window.flutter_inappwebview.callHandler('Flutter', msg);
+                  }
+                };
+              }
+            ''');
+          } catch (e) {
+            LoggerService().error('Failed to evaluate JavaScript', e);
+          }
+        },
+        onLoadError: (controller, url, code, message) {
+          LoggerService()
+              .error('WebView load error: $message (code: $code)', null);
+        },
+      );
+    } catch (e) {
+      LoggerService().error('Failed to create desktop webview', e);
+      return const Scaffold(
+        body: Center(
+          child: Text('Failed to load webview'),
+        ),
+      );
+    }
   }
 }
