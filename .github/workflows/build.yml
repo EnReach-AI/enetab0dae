@@ -497,8 +497,8 @@ jobs:
           cat <<EOF > aro-client.desktop
           [Desktop Entry]
           Name=ARO Client
-          Exec=/opt/aro-client/aro_client
-          Icon=/opt/aro-client/data/flutter_assets/lib/assets/app_icon_1024.png
+          Exec=/opt/aro-client/aro_linux_client
+          Icon=aro-client
           Type=Application
           Categories=Utility;
           EOF
@@ -508,26 +508,34 @@ jobs:
         working-directory: ${{ env.FLUTTER_DIR }}
         run: |
           VERSION=$(grep 'version:' pubspec.yaml | cut -d ' ' -f2 | cut -d '+' -f1)
+          chmod +x packaging/linux/postinst.sh packaging/linux/prerm.sh || true
           fpm -s dir -t deb \
             -n aro-client -v "$VERSION" \
             --description "ARO Client" \
             --depends libgtk-3-0 \
             --depends "libwebkit2gtk-4.0-37 | libwebkit2gtk-4.1-0" \
+            --after-install packaging/linux/postinst.sh \
+            --before-remove packaging/linux/prerm.sh \
             build/linux/x64/release/bundle/=/opt/aro-client/ \
-            aro-client.desktop=/usr/share/applications/aro-client.desktop
+            aro-client.desktop=/usr/share/applications/aro-client.desktop \
+            lib/assets/app_icon_1024.png=/usr/share/icons/hicolor/1024x1024/apps/aro-client.png
 
       - name: Package RPM
         if: matrix.distro == 'rockylinux:8'
         working-directory: ${{ env.FLUTTER_DIR }}
         run: |
           VERSION=$(grep 'version:' pubspec.yaml | cut -d ' ' -f2 | cut -d '+' -f1)
+          chmod +x packaging/linux/postinst.sh packaging/linux/prerm.sh || true
           fpm -s dir -t rpm \
             -n aro-client -v "$VERSION" \
             --description "ARO Client" \
             --depends gtk3 \
             --depends webkit2gtk3 \
+            --after-install packaging/linux/postinst.sh \
+            --before-remove packaging/linux/prerm.sh \
             build/linux/x64/release/bundle/=/opt/aro-client/ \
-            aro-client.desktop=/usr/share/applications/aro-client.desktop
+            aro-client.desktop=/usr/share/applications/aro-client.desktop \
+            lib/assets/app_icon_1024.png=/usr/share/icons/hicolor/1024x1024/apps/aro-client.png
 
       - name: Upload Packages
         uses: actions/upload-artifact@v4

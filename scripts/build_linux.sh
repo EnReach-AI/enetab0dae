@@ -49,8 +49,25 @@ flutter precache --linux
 flutter pub get
 flutter build linux --release
 
+# 4.1) Create desktop entry (for package install)
+if [ ! -f aro-client.desktop ]; then
+  cat <<'EOF' > aro-client.desktop
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=ARO Client
+Comment=ARO Client
+Exec=/opt/aro-client/aro_linux_client %U
+Icon=aro-client
+Terminal=false
+Categories=Utility;Network;
+StartupNotify=true
+EOF
+fi
+
 # 5) 打包 DEB
 VERSION=$(grep 'version:' pubspec.yaml | cut -d ' ' -f2 | cut -d '+' -f1)
+chmod +x packaging/linux/postinst.sh packaging/linux/prerm.sh || true
 mkdir -p build/linux/x64/release/bundle/lib
 cp lib/ffi/linux/*.so build/linux/x64/release/bundle/lib/ || true
 fpm -s dir -t deb \
@@ -58,7 +75,10 @@ fpm -s dir -t deb \
   --description "ARO Client" \
   --depends libgtk-3-0 \
   --depends "libwebkit2gtk-4.0-37 | libwebkit2gtk-4.1-0" \
+  --after-install packaging/linux/postinst.sh \
+  --before-remove packaging/linux/prerm.sh \
   build/linux/x64/release/bundle/=/opt/aro-client/ \
-  aro-client.desktop=/usr/share/applications/aro-client.desktop
+  aro-client.desktop=/usr/share/applications/aro-client.desktop \
+  lib/assets/app_icon_1024.png=/usr/share/icons/hicolor/1024x1024/apps/aro-client.png
 
 echo "✅ 构建完成,DEB 包位于 apps/aro_client/ 目录下"

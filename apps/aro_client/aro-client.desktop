@@ -1,0 +1,10 @@
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=ARO Client
+Comment=ARO Client
+Exec=/opt/aro-client/aro_linux_client %U
+Icon=aro-client
+Terminal=false
+Categories=Utility;Network;
+StartupNotify=true
