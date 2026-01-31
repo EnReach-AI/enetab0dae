@@ -71,12 +71,7 @@ void main(List<String> args) async {
       );
 
       windowManager.waitUntilReadyToShow(windowOptions, () async {
-        if (Platform.isLinux &&
-            Platform.environment['ARO_LINUX_SHOW_MAIN_WINDOW'] != '1') {
-          await windowManager.hide();
-        } else {
-          await windowManager.show();
-        }
+        await windowManager.show();
         if (Platform.isWindows) {
           try {
             final exeDir = p.dirname(Platform.resolvedExecutable);
