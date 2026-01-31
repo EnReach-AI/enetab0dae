@@ -522,11 +522,6 @@ class _MyHomePageState extends State<MyHomePage> {
         useShouldOverrideUrlLoading: true,
       );
       
-      // On Linux, explicitly disable hardware acceleration if needed
-      if (Platform.isLinux) {
-        // Additional settings for Linux platform
-      }
-      
       return inapp.InAppWebView(
         key: const ValueKey('desktop_webview'),
         initialUrlRequest: inapp.URLRequest(
@@ -584,9 +579,42 @@ class _MyHomePageState extends State<MyHomePage> {
       );
     } catch (e, s) {
       LoggerService().error('Failed to create desktop webview', e, s);
+      
+      // Provide helpful error message for Linux
+      String errorMessage = 'Failed to load webview: ${e.toString()}';
+      if (Platform.isLinux) {
+        errorMessage = '''
+Failed to create WebView on Linux.
+
+This usually means missing system dependencies. Please install:
+
+sudo apt-get update
+sudo apt-get install -y libwebkit2gtk-4.0-dev libgtk-3-dev
+
+For Debian/Ubuntu, you may also need:
+sudo apt-get install -y libjavascriptcoregtk-4.0-dev
+
+Error details: ${e.toString()}
+        ''';
+      }
+      
       return Scaffold(
         body: Center(
-          child: Text('Failed to load webview: ${e.toString()}'),
+          child: Padding(
+            padding: const EdgeInsets.all(16.0),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                const Icon(Icons.error_outline, size: 48, color: Colors.red),
+                const SizedBox(height: 16),
+                Text(
+                  errorMessage,
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(fontSize: 12),
+                ),
+              ],
+            ),
+          ),
         ),
       );
     }
