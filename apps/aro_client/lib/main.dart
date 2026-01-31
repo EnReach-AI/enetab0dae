@@ -546,8 +546,8 @@ class _MyHomePageState extends State<MyHomePage> {
           return false;
         },
       );
-    } catch (e) {
-      LoggerService().error('Failed to create desktop webview', e);
+    } catch (e, s) {
+      LoggerService().error('Failed to create desktop webview', e, s);
       return Scaffold(
         body: Center(
           child: Text('Failed to load webview: ${e.toString()}'),

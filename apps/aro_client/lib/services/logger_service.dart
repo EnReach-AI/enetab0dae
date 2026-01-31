@@ -100,13 +100,15 @@ class LoggerService {
   void error(String message, [dynamic error, StackTrace? stackTrace]) {
     final timestamp = DateTime.now().toString();
     final messageWithTime = '[$timestamp] $message';
-    if (_logger != null) {
-      _logger!.e(messageWithTime, error: error, stackTrace: stackTrace);
-    } else {
-      print('[ERROR] $messageWithTime');
-      if (error != null) print(error);
-      if (stackTrace != null) print(stackTrace);
+    final logger = _logger;
+    if (logger != null) {
+      logger.e(messageWithTime, error: error, stackTrace: stackTrace);
+      return;
     }
+
+    print('[ERROR] $messageWithTime');
+    if (error != null) print(error);
+    if (stackTrace != null) print(stackTrace);
   }
 
   Future<void> cleanOldLogs({int daysToKeep = 7}) async {
