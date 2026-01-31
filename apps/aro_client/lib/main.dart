@@ -425,11 +425,10 @@ class _MyHomePageState extends State<MyHomePage> {
 
     if (Platform.isWindows) {
       // On Windows, we use embedded InAppWebView which is initialized in build()
-    } else if (!Platform.isLinux) {
-      // Initialize immediately for Android/iOS only
+    } else {
+      // Initialize webview_flutter for Android/iOS/macOS/Linux
       _initMobileWebView();
     }
-    // Linux will be initialized in build() method
   }
 
   void _initMobileWebView() {
@@ -466,7 +465,7 @@ class _MyHomePageState extends State<MyHomePage> {
 
   @override
   Widget build(BuildContext context) {
-    if (Platform.isWindows || Platform.isLinux) {
+    if (Platform.isWindows) {
       return Scaffold(
         body: HeroMode(
           enabled: false,
@@ -474,7 +473,7 @@ class _MyHomePageState extends State<MyHomePage> {
         ),
       );
     }
-    // Use webview_flutter for macOS, Android, iOS
+    // Use webview_flutter for Linux, macOS, Android, iOS
     if (_controller == null) {
       return const Scaffold(
         body: Center(child: CircularProgressIndicator()),
