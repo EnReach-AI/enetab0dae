@@ -355,18 +355,19 @@ class _MyHomePageState extends State<MyHomePage> {
       } catch (e) {
         print('getVersion error $e');
       }
-    } else if (message == 'getWSClientStatus') {
-      final status = service.getWSClientStatus();
-      final statusMap = jsonDecode(status);
-      print('statusMap getWSClientStatus $statusMap');
-      LoggerService().info('getWSClientStatus--- $statusMap');
-      if (statusMap['code'] == 200) {
-        sendMessageToWeb({
-          'type': 'getWSClientStatus',
-          'payload': statusMap,
-        });
-      }
     }
+    // else if (message == 'getWSClientStatus') {
+    //   final status = service.getWSClientStatus();
+    //   final statusMap = jsonDecode(status);
+    //   print('statusMap getWSClientStatus $statusMap');
+    //   LoggerService().info('getWSClientStatus--- $statusMap');
+    //   if (statusMap['code'] == 200) {
+    //     sendMessageToWeb({
+    //       'type': 'getWSClientStatus',
+    //       'payload': statusMap,
+    //     });
+    //   }
+    // }
   }
 
   Future<void> _openExternalUrl(String url) async {
@@ -467,44 +468,47 @@ class _MyHomePageState extends State<MyHomePage> {
   Widget build(BuildContext context) {
     if (Platform.isWindows || Platform.isLinux) {
       return Scaffold(
-        body: inapp.InAppWebView(
-          key: const ValueKey('desktop_webview'),
-          initialUrlRequest: inapp.URLRequest(
-            url: inapp.WebUri.uri(Uri.parse(AllConfig.deskTopURL)),
-          ),
-          initialSettings: inapp.InAppWebViewSettings(
-            // ...
-            isInspectable: kDebugMode,
-            javaScriptEnabled: true,
-            useShouldOverrideUrlLoading: false,
-          ),
-          onWebViewCreated: (controller) {
-            _desktopController = controller;
-            controller.addJavaScriptHandler(
-              handlerName: 'Flutter',
-              callback: (args) {
-                if (args.isNotEmpty) {
-                  dynamic message = args[0];
-                  if (message is String) {
-                    handleWebMessage(message);
-                  } else if (message is Map) {
-                    handleWebMessage(jsonEncode(message));
-                  }
-                }
-              },
-            );
-          },
-          onLoadStop: (controller, url) async {
-            await controller.evaluateJavascript(source: '''
-                if (!window.Flutter) {
-                  window.Flutter = {
-                    postMessage: function(msg) {
-                      window.flutter_inappwebview.callHandler('Flutter', msg);
+        body: HeroMode(
+          enabled: false,
+          child: inapp.InAppWebView(
+            key: const ValueKey('desktop_webview'),
+            initialUrlRequest: inapp.URLRequest(
+              url: inapp.WebUri.uri(Uri.parse(AllConfig.deskTopURL)),
+            ),
+            initialSettings: inapp.InAppWebViewSettings(
+              // ...
+              isInspectable: kDebugMode,
+              javaScriptEnabled: true,
+              useShouldOverrideUrlLoading: false,
+            ),
+            onWebViewCreated: (controller) {
+              _desktopController = controller;
+              controller.addJavaScriptHandler(
+                handlerName: 'Flutter',
+                callback: (args) {
+                  if (args.isNotEmpty) {
+                    dynamic message = args[0];
+                    if (message is String) {
+                      handleWebMessage(message);
+                    } else if (message is Map) {
+                      handleWebMessage(jsonEncode(message));
                     }
-                  };
-                }
-             ''');
-          },
+                  }
+                },
+              );
+            },
+            onLoadStop: (controller, url) async {
+              await controller.evaluateJavascript(source: '''
+                  if (!window.Flutter) {
+                    window.Flutter = {
+                      postMessage: function(msg) {
+                        window.flutter_inappwebview.callHandler('Flutter', msg);
+                      }
+                    };
+                  }
+               ''');
+            },
+          ),
         ),
       );
     }
