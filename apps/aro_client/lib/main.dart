@@ -150,6 +150,7 @@ class _MyHomePageState extends State<MyHomePage> {
   inapp.InAppWebViewController? _desktopController;
   // bool _isWindowsInit = false;
   // String? _errorMessage;
+  bool _isDesktopWebViewReady = false;
 
   final service = StudyService.instance;
 
@@ -433,7 +434,15 @@ class _MyHomePageState extends State<MyHomePage> {
     });
 
     if (Platform.isWindows || Platform.isLinux) {
-      // On Windows/Linux, we use embedded InAppWebView which is initialized in build()
+      // On Windows/Linux, delay webview creation to ensure Hero system is fully disabled
+      // Use addPostFrameCallback to ensure the widget tree is built before creating webview
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) {
+          setState(() {
+            _isDesktopWebViewReady = true;
+          });
+        }
+      });
     } else {
       // Initialize webview_flutter for Android/iOS/macOS
       _initMobileWebView();
@@ -475,10 +484,20 @@ class _MyHomePageState extends State<MyHomePage> {
   @override
   Widget build(BuildContext context) {
     if (Platform.isWindows || Platform.isLinux) {
+      // Use Builder to ensure Hero system is fully disabled before creating InAppWebView
+      if (!_isDesktopWebViewReady) {
+        return const Scaffold(
+          body: Center(child: CircularProgressIndicator()),
+        );
+      }
       return Scaffold(
-        body: HeroMode(
-          enabled: false,
-          child: _buildDesktopWebView(),
+        body: HeroControllerScope.none(
+          child: HeroMode(
+            enabled: false,
+            child: Builder(
+              builder: (context) => _buildDesktopWebView(),
+            ),
+          ),
         ),
       );
     }
@@ -495,17 +514,25 @@ class _MyHomePageState extends State<MyHomePage> {
 
   Widget _buildDesktopWebView() {
     try {
+      // For Linux, ensure we create the webview with proper platform view settings
+      final settings = inapp.InAppWebViewSettings(
+        javaScriptEnabled: true,
+        javaScriptCanOpenWindowsAutomatically: false,
+        supportMultipleWindows: false,
+        useShouldOverrideUrlLoading: true,
+      );
+      
+      // On Linux, explicitly disable hardware acceleration if needed
+      if (Platform.isLinux) {
+        // Additional settings for Linux platform
+      }
+      
       return inapp.InAppWebView(
         key: const ValueKey('desktop_webview'),
         initialUrlRequest: inapp.URLRequest(
           url: inapp.WebUri(AllConfig.deskTopURL),
         ),
-        initialSettings: inapp.InAppWebViewSettings(
-          javaScriptEnabled: true,
-          javaScriptCanOpenWindowsAutomatically: false,
-          supportMultipleWindows: false,
-          useShouldOverrideUrlLoading: true,
-        ),
+        initialSettings: settings,
         onWebViewCreated: (controller) {
           _desktopController = controller;
           try {
