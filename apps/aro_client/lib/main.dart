@@ -156,7 +156,7 @@ class _MyHomePageState extends State<MyHomePage> {
     final script = '''
     window.onFlutterMessage && window.onFlutterMessage($json);
   ''';
-    if (Platform.isWindows) {
+    if (Platform.isWindows || Platform.isLinux) {
       _desktopController?.evaluateJavascript(source: script);
     } else {
       _controller?.runJavaScript(script);
@@ -408,7 +408,7 @@ class _MyHomePageState extends State<MyHomePage> {
   void sendToWeb(Map<String, dynamic> data) {
     final json = jsonEncode(data);
     final script = 'window.onFlutterMessage($json);';
-    if (Platform.isWindows) {
+    if (Platform.isWindows || Platform.isLinux) {
       _desktopController?.evaluateJavascript(source: script);
     } else {
       _controller?.runJavaScript(script);
@@ -424,7 +424,7 @@ class _MyHomePageState extends State<MyHomePage> {
     });
 
     if (Platform.isWindows) {
-      // On Windows, we use embedded InAppWebView which is initialized in build()
+      // On Windows and Linux, we use embedded InAppWebView which is initialized in build()
     } else {
       // Initialize webview_flutter for Android/iOS/macOS/Linux
       _initMobileWebView();
@@ -465,7 +465,7 @@ class _MyHomePageState extends State<MyHomePage> {
 
   @override
   Widget build(BuildContext context) {
-    if (Platform.isWindows) {
+    if (Platform.isWindows || Platform.isLinux) {
       return Scaffold(
         body: HeroMode(
           enabled: false,
