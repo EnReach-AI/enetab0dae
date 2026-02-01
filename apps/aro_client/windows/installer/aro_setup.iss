@@ -62,6 +62,7 @@ Filename: "{app}\{#MyAppExeName}"; Description: "{cm:LaunchProgram,{#StringChang
 [Code]
 const
 	ARO_MUTEX_NAME = 'AROClientMutex';
+	ARO_PROCESS_NAME = '{#MyAppExeName}';
 
 function OpenMutex(dwDesiredAccess: LongWord; bInheritHandle: Boolean; lpName: string): LongWord;
 	external 'OpenMutexW@kernel32.dll stdcall';
@@ -88,9 +89,30 @@ begin
 	Result := (FindWindowByWindowName('ARO Desktop') <> 0);
 end;
 
+function IsAroRunningByProcess(): Boolean;
+var
+	ResultCode: Integer;
+	OutFile: string;
+	Cmd: string;
+	Content: string;
+begin
+	Result := False;
+
+	// Use tasklist as a robust fallback when mutex/window detection fails.
+	OutFile := ExpandConstant('{tmp}\aro_tasklist.txt');
+	DeleteFile(OutFile);
+	Cmd := 'tasklist /FI "IMAGENAME eq ' + ARO_PROCESS_NAME + '" /NH > "' + OutFile + '"';
+	if Exec('cmd.exe', '/c ' + Cmd, '', SW_HIDE, ewWaitUntilTerminated, ResultCode) then begin
+		if LoadStringFromFile(OutFile, Content) then begin
+			Content := LowerCase(Content);
+			Result := (Pos(LowerCase(ARO_PROCESS_NAME), Content) > 0);
+		end;
+	end;
+end;
+
 function InitializeUninstall(): Boolean;
 begin
-	if IsAroRunningByMutex() or IsAroRunningByWindow() then begin
+	if IsAroRunningByMutex() or IsAroRunningByWindow() or IsAroRunningByProcess() then begin
 		MsgBox(
 			'ARO is currently running.'#13#10#13#10 +
 			'Please exit the app first (tray menu -> Exit), then run uninstall again.',
@@ -105,7 +127,7 @@ procedure CurUninstallStepChanged(CurUninstallStep: TUninstallStep);
 begin
 	// Extra safety: abort right before uninstall starts deleting files.
 	if CurUninstallStep = usUninstall then begin
-		if IsAroRunningByMutex() or IsAroRunningByWindow() then begin
+		if IsAroRunningByMutex() or IsAroRunningByWindow() or IsAroRunningByProcess() then begin
 			MsgBox(
 				'ARO is currently running.'#13#10#13#10 +
 				'Please exit the app first (tray menu -> Exit), then run uninstall again.',

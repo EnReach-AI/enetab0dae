@@ -157,6 +157,8 @@ class _MyHomePageState extends State<MyHomePage>
   bool _isDesktopWebViewReady = false;
   String? _desktopWebViewError;
 
+  bool _trayMenuOpening = false;
+
   final service = StudyService.instance;
 
   // void sendToWeb(Map<String, dynamic> data) {
@@ -521,6 +523,22 @@ class _MyHomePageState extends State<MyHomePage>
     exit(0);
   }
 
+  Future<void> _popTrayContextMenu() async {
+    if (_trayMenuOpening) return;
+    _trayMenuOpening = true;
+    try {
+      await trayManager.popUpContextMenu();
+    } catch (e, s) {
+      LoggerService().error('Pop tray context menu failed', e, s);
+    } finally {
+      // popUpContextMenu can return quickly; give a short cooldown to avoid
+      // double-triggering on down+up.
+      Timer(const Duration(milliseconds: 300), () {
+        _trayMenuOpening = false;
+      });
+    }
+  }
+
   @override
   void onTrayIconMouseDown() {
     unawaited(_trayShow());
@@ -528,17 +546,22 @@ class _MyHomePageState extends State<MyHomePage>
 
   @override
   void onTrayIconRightMouseDown() {
-    // On Windows, showing the context menu on mouse down can sometimes result
-    // in a menu that doesn't dismiss correctly. Use mouse up instead.
-    if (!Platform.isWindows) {
-      unawaited(trayManager.popUpContextMenu());
+    if (Platform.isWindows) {
+      // On Windows, opening the menu exactly on mouse down can sometimes cause
+      // dismissal issues. A tiny delay tends to make it behave normally.
+      unawaited(Future.delayed(const Duration(milliseconds: 10), () async {
+        await _popTrayContextMenu();
+      }));
+      return;
     }
+    unawaited(_popTrayContextMenu());
   }
 
   @override
   void onTrayIconRightMouseUp() {
+    // Fallback: some environments may not reliably fire right-mouse-down.
     if (Platform.isWindows) {
-      unawaited(trayManager.popUpContextMenu());
+      unawaited(_popTrayContextMenu());
     }
   }
 
