@@ -49,35 +49,40 @@ class StudyService {
 
     malloc.free(configPtr);
 
-    try {
-      const configJson = "{"
-          "\"sn\": \"OLKN4YY4XA9096W5\","
-          "\"token\": \"1\","
-          "\"tunnel_id\": \"4dd56d7f-df87-4f7b-9dd3-5f74465d8f74\","
-          "\"proxy_server_ip\": \"150.109.69.196\","
-          "\"proxy_server_port\": 443,"
-          "\"local_port\": 22779,"
-          "\"nat_type\": 0,"
-          "\"fixed_port\": 22779"
-          "}";
-      final jsonPtr = configJson.toNativeUtf8();
+    // try {
+    //   const configJson = "{"
+    //       "\"sn\": \"OLKN4YY4XA9096W5\","
+    //       "\"token\": \"1\","
+    //       "\"tunnel_id\": \"4dd56d7f-df87-4f7b-9dd3-5f74465d8f74\","
+    //       "\"proxy_server_ip\": \"150.109.69.196\","
+    //       "\"proxy_server_port\": 443,"
+    //       "\"local_port\": 22779,"
+    //       "\"nat_type\": 0,"
+    //       "\"fixed_port\": 22779"
+    //       "}";
+    //   final jsonPtr = configJson.toNativeUtf8();
 
-      final startProxyPtr = StudyBindings.startProxy(jsonPtr);
-      final startResult = startProxyPtr.toDartString();
-      malloc.free(jsonPtr);
+    //   final startProxyPtr = StudyBindings.startProxy(jsonPtr);
+    //   final startResult = startProxyPtr.toDartString();
+    //   malloc.free(jsonPtr);
 
-      final getProxyWorkerStatus = StudyBindings.getProxyWorkerStatus();
-      final statusResult = getProxyWorkerStatus.toDartString();
+    //   final getProxyWorkerStatus = StudyBindings.getProxyWorkerStatus();
+    //   final statusResult = getProxyWorkerStatus.toDartString();
 
-      LoggerService()
-          .info('GetProxyWorkerStatus: $statusResult -------  $startResult');
-      print(
-          'wwwwwwwwwwww------wwwww:  hhhhhhhhhh---hhh $jsonPtr  $getProxyWorkerStatus');
-    } catch (e) {
-      LoggerService().info('Error in startProxy: $e');
-      print('Error in startProxy: $e');
-    }
+    //   LoggerService()
+    //       .info('GetProxyWorkerStatus: $statusResult -------  $startResult');
+    //   print(
+    //       'wwwwwwwwwwww------wwwww:  hhhhhhhhhh---hhh $jsonPtr  $getProxyWorkerStatus');
+    // } catch (e) {
+    //   LoggerService().info('Error in startProxy: $e');
+    //   print('Error in startProxy: $e');
+    // }
 
+    return _handleResult(ptr);
+  }
+
+  String getProxyStatus() {
+    final ptr = StudyBindings.getProxyWorkerStatus();
     return _handleResult(ptr);
   }
 
@@ -93,16 +98,10 @@ class StudyService {
 
   String _handleResult(Pointer<Utf8> ptr) {
     if (ptr == nullptr) return '';
-    // 直接转换字符串，不释放内存
-    // Go 的 C.CString() 分配的内存由 Go 运行时管理
-    // 不能用 Dart 的 malloc.free() 释放，否则 Windows 会崩溃
-    final str = ptr.toDartString();
-    return str;
-  }
 
-  String getWSClientStatus() {
-    final ptr = StudyBindings.getWSClientStatus();
-    return _handleResult(ptr);
+    final str = ptr.toDartString();
+    print('ptr23232---: $str');
+    return str;
   }
 
   String startWSClient() {

@@ -152,6 +152,7 @@ class _MyHomePageState extends State<MyHomePage>
   // bool _isWindowsInit = false;
   // String? _errorMessage;
   bool _isDesktopWebViewReady = false;
+  String? _desktopWebViewError;
 
   final service = StudyService.instance;
 
@@ -453,6 +454,24 @@ class _MyHomePageState extends State<MyHomePage>
           });
         }
       });
+
+      // If the platform webview fails to initialize (e.g. missing WebView2 on
+      // Windows), the screen can stay blank. Add a small timeout to surface a
+      // helpful message.
+      Timer(const Duration(seconds: 10), () {
+        if (!mounted) return;
+        if (_desktopController != null) return;
+        if (_desktopWebViewError != null) return;
+
+        if (Platform.isWindows) {
+          setState(() {
+            _desktopWebViewError =
+                'WebView failed to initialize on Windows.\n\n'
+                'Common cause: Microsoft Edge WebView2 Runtime is not installed.\n'
+                'Please install WebView2 Runtime, then restart the app.';
+          });
+        }
+      });
     } else {
       // Initialize webview_flutter for Android/iOS/macOS
       _initMobileWebView();
@@ -580,6 +599,38 @@ class _MyHomePageState extends State<MyHomePage>
           body: Center(child: CircularProgressIndicator()),
         );
       }
+
+      if (_desktopWebViewError != null) {
+        return Scaffold(
+          body: Center(
+            child: Padding(
+              padding: const EdgeInsets.all(16.0),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  const Icon(Icons.error_outline, size: 48, color: Colors.red),
+                  const SizedBox(height: 16),
+                  Text(
+                    _desktopWebViewError!,
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(fontSize: 12),
+                  ),
+                  const SizedBox(height: 16),
+                  TextButton(
+                    onPressed: () {
+                      setState(() {
+                        _desktopWebViewError = null;
+                      });
+                    },
+                    child: const Text('Retry'),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        );
+      }
+
       return Scaffold(
         body: HeroControllerScope.none(
           child: HeroMode(
@@ -620,6 +671,11 @@ class _MyHomePageState extends State<MyHomePage>
         initialSettings: settings,
         onWebViewCreated: (controller) {
           _desktopController = controller;
+          if (mounted && _desktopWebViewError != null) {
+            setState(() {
+              _desktopWebViewError = null;
+            });
+          }
           try {
             controller.addJavaScriptHandler(
               handlerName: 'Flutter',
@@ -638,6 +694,9 @@ class _MyHomePageState extends State<MyHomePage>
             LoggerService().error('Failed to add JavaScript handler', e);
           }
         },
+        shouldOverrideUrlLoading: (controller, action) async {
+          return inapp.NavigationActionPolicy.ALLOW;
+        },
         onLoadStop: (controller, url) async {
           try {
             await controller.evaluateJavascript(source: '''
@@ -653,9 +712,16 @@ class _MyHomePageState extends State<MyHomePage>
             LoggerService().error('Failed to evaluate JavaScript', e);
           }
         },
-        onLoadError: (controller, url, code, message) {
-          LoggerService()
-              .error('WebView load error: $message (code: $code)', null);
+        onReceivedError: (controller, request, error) {
+          LoggerService().error(
+            'WebView error: ${error.description} (${error.type}) url=${request.url}',
+            error,
+          );
+          if (!mounted) return;
+          setState(() {
+            _desktopWebViewError =
+                'Failed to load page.\n\nURL: ${request.url}\n\nError: ${error.description}';
+          });
         },
         onCreateWindow: (controller, action) async {
           final uri = action.request.url;
