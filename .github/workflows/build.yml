@@ -746,11 +746,24 @@ jobs:
               retry 3 3 env DEBIAN_FRONTEND=noninteractive apt-get -o Acquire::Retries=5 -o Acquire::http::Timeout=60 -o Acquire::https::Timeout=60 install -y --no-install-recommends --fix-missing libappindicator3-dev
             fi
           elif command -v dnf >/dev/null 2>&1; then
+            # Rocky/RHEL often need EPEL for appindicator/ayatana packages.
+            dnf install -y epel-release dnf-plugins-core || dnf install -y epel-release || true
+            dnf config-manager --set-enabled powertools || dnf config-manager --set-enabled PowerTools || true
+
             dnf -y makecache
             dnf install -y git curl jq which ca-certificates \
               clang gcc gcc-c++ make pkgconfig \
-              openssl-devel gtk3-devel libappindicator-gtk3-devel \
+              openssl-devel gtk3-devel \
               rpm-build
+
+            # AppIndicator headers (tray). Try legacy libappindicator first, then ayatana.
+            if ! dnf install -y libappindicator-gtk3-devel; then
+              if ! dnf install -y libayatana-appindicator-gtk3-devel; then
+                echo "ERROR: missing appindicator development package (libappindicator-gtk3-devel or libayatana-appindicator-gtk3-devel)." >&2
+                echo "Hint: ensure EPEL is available for this distro." >&2
+                exit 1
+              fi
+            fi
 
             # Prefer WebKitGTK 4.1 when available; fall back to 4.0 (webkit2gtk3) for older distros.
             if ! dnf install -y webkit2gtk4.1-devel; then
