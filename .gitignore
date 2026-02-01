@@ -13,6 +13,10 @@ out/
 test/
 *.log
 
+# Tauri CI placeholder assets (required by `frontendDist = "dist"`).
+!apps/aro_linux/src-tauri/dist/
+!apps/aro_linux/src-tauri/dist/index.html
+
 # OS files
 .DS_Store
 Thumbs.db

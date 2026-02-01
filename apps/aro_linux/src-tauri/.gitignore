@@ -2,3 +2,9 @@
 # will have compiled files and executables
 /target/
 /gen/schemas
+
+# CI needs a minimal frontendDist present for `cargo tauri build`.
+# The repo-level `.gitignore` ignores `dist/`, so we explicitly re-include it here.
+!dist/
+dist/*
+!dist/index.html
