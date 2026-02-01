@@ -144,7 +144,8 @@ class MyHomePage extends StatefulWidget {
   State<MyHomePage> createState() => _MyHomePageState();
 }
 
-class _MyHomePageState extends State<MyHomePage> {
+class _MyHomePageState extends State<MyHomePage>
+    with TrayListener, WindowListener {
   WebViewController? _controller;
   // win.WebviewController? _winController;
   inapp.InAppWebViewController? _desktopController;
@@ -428,6 +429,15 @@ class _MyHomePageState extends State<MyHomePage> {
   @override
   void initState() {
     super.initState();
+
+    if (Platform.isWindows) {
+      trayManager.addListener(this);
+      unawaited(_setupWindowsTrayMenu());
+
+      windowManager.addListener(this);
+      unawaited(windowManager.setPreventClose(true));
+    }
+
     // Initialize node in background, don't block UI
     initNode().catchError((e) {
       print('initNode error caught: $e');
@@ -447,6 +457,86 @@ class _MyHomePageState extends State<MyHomePage> {
       // Initialize webview_flutter for Android/iOS/macOS
       _initMobileWebView();
     }
+  }
+
+  Future<void> _setupWindowsTrayMenu() async {
+    try {
+      final menu = Menu(
+        items: [
+          MenuItem(key: 'show', label: 'Show'),
+          MenuItem(key: 'hide', label: 'Hidden'),
+          MenuItem.separator(),
+          MenuItem(key: 'exit', label: 'Exit'),
+        ],
+      );
+      await trayManager.setContextMenu(menu);
+    } catch (e, s) {
+      LoggerService().error('Failed to setup tray menu', e, s);
+    }
+  }
+
+  Future<void> _trayShow() async {
+    try {
+      await windowManager.show();
+      await windowManager.focus();
+    } catch (e, s) {
+      LoggerService().error('Tray show failed', e, s);
+    }
+  }
+
+  Future<void> _trayHide() async {
+    try {
+      await windowManager.hide();
+    } catch (e, s) {
+      LoggerService().error('Tray hide failed', e, s);
+    }
+  }
+
+  Future<void> _trayExit() async {
+    try {
+      await trayManager.destroy();
+    } catch (_) {}
+    exit(0);
+  }
+
+  @override
+  void onTrayIconMouseDown() {
+    unawaited(_trayShow());
+  }
+
+  @override
+  void onTrayIconRightMouseDown() {
+    unawaited(trayManager.popUpContextMenu());
+  }
+
+  @override
+  void onTrayMenuItemClick(MenuItem menuItem) {
+    switch (menuItem.key) {
+      case 'show':
+        unawaited(_trayShow());
+        break;
+      case 'hide':
+        unawaited(_trayHide());
+        break;
+      case 'exit':
+        unawaited(_trayExit());
+        break;
+    }
+  }
+
+  @override
+  Future<void> onWindowClose() async {
+    if (!Platform.isWindows) return;
+    await _trayHide();
+  }
+
+  @override
+  void dispose() {
+    if (Platform.isWindows) {
+      trayManager.removeListener(this);
+      windowManager.removeListener(this);
+    }
+    super.dispose();
   }
 
   void _initMobileWebView() {
@@ -521,7 +611,7 @@ class _MyHomePageState extends State<MyHomePage> {
         supportMultipleWindows: false,
         useShouldOverrideUrlLoading: true,
       );
-      
+
       return inapp.InAppWebView(
         key: const ValueKey('desktop_webview'),
         initialUrlRequest: inapp.URLRequest(
@@ -579,7 +669,7 @@ class _MyHomePageState extends State<MyHomePage> {
       );
     } catch (e, s) {
       LoggerService().error('Failed to create desktop webview', e, s);
-      
+
       // Provide helpful error message for Linux
       String errorMessage = 'Failed to load webview: ${e.toString()}';
       if (Platform.isLinux) {
@@ -597,7 +687,7 @@ sudo apt-get install -y libjavascriptcoregtk-4.0-dev
 Error details: ${e.toString()}
         ''';
       }
-      
+
       return Scaffold(
         body: Center(
           child: Padding(

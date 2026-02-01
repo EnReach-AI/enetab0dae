@@ -34,6 +34,8 @@ SolidCompression=yes
 WizardStyle=modern
 ; Ensure uninstall info is registered (User Request 3)
 UninstallDisplayIcon={app}\{#MyAppExeName}
+; Prevent install/uninstall while the app is running
+AppMutex=AROClientMutex
 
 [Languages]
 Name: "english"; MessagesFile: "compiler:Default.isl"
@@ -46,6 +48,8 @@ Name: "desktopicon"; Description: "Create a desktop icon"; Flags: unchecked
 ; If your build is in build\windows\runner\Release, adjust the path below.
 Source: "..\..\build\windows\x64\runner\Release\{#MyAppExeName}"; DestDir: "{app}"; Flags: ignoreversion
 Source: "..\..\build\windows\x64\runner\Release\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
+; Ensure tray icon exists at {app}\resources\app_icon.ico
+Source: "..\runner\resources\app_icon.ico"; DestDir: "{app}\resources"; Flags: ignoreversion
 ; NOTE: Don't use "Flags: ignoreversion" on any shared system files
 
 [Icons]
@@ -54,3 +58,43 @@ Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; Tasks: de
 
 [Run]
 Filename: "{app}\{#MyAppExeName}"; Description: "{cm:LaunchProgram,{#StringChange(MyAppName, '&', '&&')}}"; Flags: nowait postinstall skipifsilent
+
+[Code]
+const
+	ARO_MUTEX_NAME = 'AROClientMutex';
+
+function OpenMutex(dwDesiredAccess: LongWord; bInheritHandle: Boolean; lpName: string): LongWord;
+	external 'OpenMutexW@kernel32.dll stdcall';
+function CloseHandle(hObject: LongWord): Boolean;
+	external 'CloseHandle@kernel32.dll stdcall';
+
+function IsAroRunningByMutex(): Boolean;
+var
+	h: LongWord;
+begin
+	h := OpenMutex($001F0001, False, ARO_MUTEX_NAME);
+	if h <> 0 then begin
+		CloseHandle(h);
+		Result := True;
+	end else begin
+		Result := False;
+	end;
+end;
+
+function IsAroRunningByWindow(): Boolean;
+begin
+	Result := (FindWindowByWindowName('aro_desktop') <> 0);
+end;
+
+function InitializeUninstall(): Boolean;
+begin
+	if IsAroRunningByMutex() or IsAroRunningByWindow() then begin
+		MsgBox(
+			'ARO is currently running.'#13#10#13#10 +
+			'Please exit the app first (tray menu -> Exit), then run uninstall again.',
+			mbError, MB_OK);
+		Result := False;
+	end else begin
+		Result := True;
+	end;
+end;
