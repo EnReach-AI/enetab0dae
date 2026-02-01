@@ -154,10 +154,6 @@ impl Libstudy {
     ))
   }
 
-  pub fn try_load_default() -> anyhow::Result<(Self, PathBuf)> {
-    Self::try_load_with_paths(Self::candidate_paths(None))
-  }
-
   pub fn init(&self, init_params_json: &str) -> anyhow::Result<String> {
     let c = CString::new(init_params_json)?;
     unsafe { call_c_string_with_arg(self.init_libstudy, c.as_ptr()) }

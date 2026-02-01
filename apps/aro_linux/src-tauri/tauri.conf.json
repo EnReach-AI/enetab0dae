@@ -1,8 +1,8 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "ARO App",
+  "productName": "ARO Desktop",
   "version": "0.1.0",
-  "identifier": "com.tauri.dev",
+  "identifier": "com.aro.aroNetwork",
   "build": {
     "frontendDist": "dist"
   },
@@ -10,9 +10,14 @@
     "windows": [
       {
         "title": "ARO Desktop",
-        "width": 800,
-        "height": 600,
-        "resizable": true,
+        "width": 360,
+        "height": 640,
+        "minWidth": 360,
+        "minHeight": 640,
+        "maxWidth": 360,
+        "maxHeight": 640,
+        "resizable": false,
+        "maximizable": false,
         "fullscreen": false,
         "url": "https://0ee63895-262b.ipproxy.aro.network/desktop/"
       }
