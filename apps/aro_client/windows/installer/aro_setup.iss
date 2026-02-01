@@ -72,7 +72,9 @@ function IsAroRunningByMutex(): Boolean;
 var
 	h: LongWord;
 begin
-	h := OpenMutex($001F0001, False, ARO_MUTEX_NAME);
+	// Use minimal access to reduce permission-related false negatives.
+	// SYNCHRONIZE = $00100000
+	h := OpenMutex($00100000, False, ARO_MUTEX_NAME);
 	if h <> 0 then begin
 		CloseHandle(h);
 		Result := True;
@@ -96,5 +98,19 @@ begin
 		Result := False;
 	end else begin
 		Result := True;
+	end;
+end;
+
+procedure CurUninstallStepChanged(CurUninstallStep: TUninstallStep);
+begin
+	// Extra safety: abort right before uninstall starts deleting files.
+	if CurUninstallStep = usUninstall then begin
+		if IsAroRunningByMutex() or IsAroRunningByWindow() then begin
+			MsgBox(
+				'ARO is currently running.'#13#10#13#10 +
+				'Please exit the app first (tray menu -> Exit), then run uninstall again.',
+				mbError, MB_OK);
+			Abort;
+		end;
 	end;
 end;

@@ -528,7 +528,18 @@ class _MyHomePageState extends State<MyHomePage>
 
   @override
   void onTrayIconRightMouseDown() {
-    unawaited(trayManager.popUpContextMenu());
+    // On Windows, showing the context menu on mouse down can sometimes result
+    // in a menu that doesn't dismiss correctly. Use mouse up instead.
+    if (!Platform.isWindows) {
+      unawaited(trayManager.popUpContextMenu());
+    }
+  }
+
+  @override
+  void onTrayIconRightMouseUp() {
+    if (Platform.isWindows) {
+      unawaited(trayManager.popUpContextMenu());
+    }
   }
 
   @override
