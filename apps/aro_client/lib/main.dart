@@ -72,12 +72,15 @@ void main(List<String> args) async {
 
       windowManager.waitUntilReadyToShow(windowOptions, () async {
         await windowManager.show();
+        try {
+          await windowManager.setTitle('ARO Desktop');
+        } catch (_) {}
         if (Platform.isWindows) {
           try {
             final exeDir = p.dirname(Platform.resolvedExecutable);
             final iconPath = p.join(exeDir, 'resources', 'app_icon.ico');
             await trayManager.setIcon(iconPath);
-            await trayManager.setToolTip('ARO');
+            await trayManager.setToolTip('ARO Desktop');
           } catch (e) {
             LoggerService().error('Failed to setup Windows tray icon', e);
           }
@@ -118,7 +121,7 @@ class MyApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MaterialApp(
       debugShowCheckedModeBanner: false,
-      title: 'ARO',
+      title: 'ARO Desktop',
       theme: ThemeData(
         useMaterial3: true,
         colorScheme: ColorScheme.fromSeed(seedColor: Colors.deepOrange),
@@ -197,7 +200,7 @@ class _MyHomePageState extends State<MyHomePage>
 
       if (Platform.isWindows) {
         final exePath = Platform.resolvedExecutable;
-        await Process.start(exePath, []);
+        await Process.start(exePath, ['--wait-for-single-instance']);
         exit(0);
       }
 

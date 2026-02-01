@@ -83,7 +83,7 @@ end;
 
 function IsAroRunningByWindow(): Boolean;
 begin
-	Result := (FindWindowByWindowName('aro_desktop') <> 0);
+	Result := (FindWindowByWindowName('ARO Desktop') <> 0);
 end;
 
 function InitializeUninstall(): Boolean;
