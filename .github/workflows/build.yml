@@ -813,6 +813,13 @@ jobs:
             -o ../plugins/linux/libstudy.so ./pkg/libstudy
           ls -lh ../plugins/linux/libstudy.so
 
+      - name: Copy Core Library to Tauri Resources
+        run: |
+          set -euo pipefail
+          mkdir -p apps/aro_linux/src/resources
+          cp plugins/linux/libstudy.so apps/aro_linux/src/resources/
+          ls -lh apps/aro_linux/src/resources/libstudy.so
+
       - name: Install Tauri CLI
         run: |
           set -euo pipefail
