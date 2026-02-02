@@ -13,8 +13,20 @@ type CStrArgReturnFn = unsafe extern "C" fn(*const c_char) -> *mut c_char;
 
 pub struct Libstudy {
   _lib: Library,
+  node_sign_up: CStrReturnFn,
+  node_report_base_info: CStrArgReturnFn,
+  get_node_stat: CStrReturnFn,
+  get_rewards: CStrReturnFn,
   init_libstudy: CStrArgReturnFn,
+  get_ws_client_status: Option<CStrReturnFn>,
+  start_ws_client: Option<CStrReturnFn>,
+  get_current_version: CStrReturnFn,
   get_last_version: CStrReturnFn,
+  start_proxy_worker: CStrArgReturnFn,
+  stop_proxy_worker: CStrReturnFn,
+  get_proxy_worker_status: CStrReturnFn,
+  restart_proxy_worker: CStrReturnFn,
+  is_proxy_worker_running: CStrReturnFn,
   cleanup: CStrReturnFn,
 }
 
@@ -24,20 +36,75 @@ impl Libstudy {
     let lib = lib.map_err(|e| anyhow::anyhow!("failed to load {:?}: {}", path, e))?;
 
     unsafe {
+      let node_sign_up = *lib
+        .get::<CStrReturnFn>(b"NodeSignUp\0")
+        .map_err(|e| anyhow::anyhow!("missing symbol NodeSignUp: {}", e))?;
+      let node_report_base_info = *lib
+        .get::<CStrArgReturnFn>(b"NodeReportBaseInfo\0")
+        .map_err(|e| anyhow::anyhow!("missing symbol NodeReportBaseInfo: {}", e))?;
+      let get_node_stat = *lib
+        .get::<CStrReturnFn>(b"GetNodeStat\0")
+        .map_err(|e| anyhow::anyhow!("missing symbol GetNodeStat: {}", e))?;
+      let get_rewards = *lib
+        .get::<CStrReturnFn>(b"GetRewards\0")
+        .map_err(|e| anyhow::anyhow!("missing symbol GetRewards: {}", e))?;
+
       let init_libstudy = *lib
         .get::<CStrArgReturnFn>(b"InitLibstudy\0")
         .map_err(|e| anyhow::anyhow!("missing symbol InitLibstudy: {}", e))?;
+
+      let get_ws_client_status = lib
+        .get::<CStrReturnFn>(b"GetWSClientStatus\0")
+        .ok()
+        .map(|s| *s);
+      let start_ws_client = lib
+        .get::<CStrReturnFn>(b"StartWSClient\0")
+        .ok()
+        .map(|s| *s);
+
+      let get_current_version = *lib
+        .get::<CStrReturnFn>(b"GetCurrentVersion\0")
+        .map_err(|e| anyhow::anyhow!("missing symbol GetCurrentVersion: {}", e))?;
       let get_last_version = *lib
         .get::<CStrReturnFn>(b"GetLastVersion\0")
         .map_err(|e| anyhow::anyhow!("missing symbol GetLastVersion: {}", e))?;
+
+      let start_proxy_worker = *lib
+        .get::<CStrArgReturnFn>(b"StartProxyWorker\0")
+        .map_err(|e| anyhow::anyhow!("missing symbol StartProxyWorker: {}", e))?;
+      let stop_proxy_worker = *lib
+        .get::<CStrReturnFn>(b"StopProxyWorker\0")
+        .map_err(|e| anyhow::anyhow!("missing symbol StopProxyWorker: {}", e))?;
+      let get_proxy_worker_status = *lib
+        .get::<CStrReturnFn>(b"GetProxyWorkerStatus\0")
+        .map_err(|e| anyhow::anyhow!("missing symbol GetProxyWorkerStatus: {}", e))?;
+      let restart_proxy_worker = *lib
+        .get::<CStrReturnFn>(b"RestartProxyWorker\0")
+        .map_err(|e| anyhow::anyhow!("missing symbol RestartProxyWorker: {}", e))?;
+      let is_proxy_worker_running = *lib
+        .get::<CStrReturnFn>(b"IsProxyWorkerRunning\0")
+        .map_err(|e| anyhow::anyhow!("missing symbol IsProxyWorkerRunning: {}", e))?;
+
       let cleanup = *lib
         .get::<CStrReturnFn>(b"Cleanup\0")
         .map_err(|e| anyhow::anyhow!("missing symbol Cleanup: {}", e))?;
 
       Ok(Self {
         _lib: lib,
+        node_sign_up,
+        node_report_base_info,
+        get_node_stat,
+        get_rewards,
         init_libstudy,
+        get_ws_client_status,
+        start_ws_client,
+        get_current_version,
         get_last_version,
+        start_proxy_worker,
+        stop_proxy_worker,
+        get_proxy_worker_status,
+        restart_proxy_worker,
+        is_proxy_worker_running,
         cleanup,
       })
     }
@@ -83,6 +150,12 @@ impl Libstudy {
 
     let lib_name = Self::platform_lib_filename();
 
+    // Absolute repo-root candidates (dev builds). These remain valid even if the app changes the
+    // current working directory (e.g. init_libstudy_auto chdir's into app_data_dir).
+    // In release builds this path won't exist and is harmless.
+    let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    let repo_root_from_manifest = manifest_dir.join("..").join("..").join("..");
+
     // 3) near executable (mirrors Flutter candidates)
     if let Some(exe_dir) = Self::exe_dir() {
       #[cfg(target_os = "linux")]
@@ -107,6 +180,8 @@ impl Libstudy {
         // MyApp.app/Contents/MacOS/<bin> -> Frameworks/
         paths.push(exe_dir.join(".." ).join(".." ).join("Frameworks").join(lib_name));
         paths.push(exe_dir.join(".." ).join("Frameworks").join(lib_name));
+        // Some bundles place resources at Contents/Resources
+        paths.push(exe_dir.join(".." ).join("Resources").join(lib_name));
         paths.push(exe_dir.join(lib_name));
       }
     }
@@ -118,6 +193,8 @@ impl Libstudy {
     // 5) dev repo layout (best-effort)
     #[cfg(target_os = "linux")]
     {
+      paths.push(repo_root_from_manifest.join("plugins").join("linux").join(lib_name));
+      paths.push(repo_root_from_manifest.join("plugins").join("linux-arm64").join(lib_name));
       paths.push(PathBuf::from("../plugins/linux/libstudy.so"));
       paths.push(PathBuf::from("../../plugins/linux/libstudy.so"));
       paths.push(PathBuf::from("../../../plugins/linux/libstudy.so"));
@@ -125,10 +202,12 @@ impl Libstudy {
     }
     #[cfg(target_os = "macos")]
     {
+      paths.push(repo_root_from_manifest.join("plugins").join("macos").join(lib_name));
       paths.push(PathBuf::from("../../../plugins/macos/libstudy.dylib"));
     }
     #[cfg(target_os = "windows")]
     {
+      paths.push(repo_root_from_manifest.join("plugins").join("windows").join(lib_name));
       paths.push(PathBuf::from("../../../plugins/windows/libstudy.dll"));
     }
 
@@ -159,8 +238,64 @@ impl Libstudy {
     unsafe { call_c_string_with_arg(self.init_libstudy, c.as_ptr()) }
   }
 
+  pub fn node_sign_up(&self) -> anyhow::Result<String> {
+    unsafe { call_c_string(self.node_sign_up) }
+  }
+
+  pub fn node_report_base_info(&self, sys_info_json: &str) -> anyhow::Result<String> {
+    let c = CString::new(sys_info_json)?;
+    unsafe { call_c_string_with_arg(self.node_report_base_info, c.as_ptr()) }
+  }
+
+  pub fn get_node_stat(&self) -> anyhow::Result<String> {
+    unsafe { call_c_string(self.get_node_stat) }
+  }
+
+  pub fn get_rewards(&self) -> anyhow::Result<String> {
+    unsafe { call_c_string(self.get_rewards) }
+  }
+
+  pub fn get_ws_client_status(&self) -> anyhow::Result<String> {
+    let func = self
+      .get_ws_client_status
+      .ok_or_else(|| anyhow::anyhow!("missing symbol GetWSClientStatus (libstudy build may have it disabled)"))?;
+    unsafe { call_c_string(func) }
+  }
+
+  pub fn start_ws_client(&self) -> anyhow::Result<String> {
+    let func = self
+      .start_ws_client
+      .ok_or_else(|| anyhow::anyhow!("missing symbol StartWSClient (libstudy build may have it disabled)"))?;
+    unsafe { call_c_string(func) }
+  }
+
+  pub fn get_current_version(&self) -> anyhow::Result<String> {
+    unsafe { call_c_string(self.get_current_version) }
+  }
+
   pub fn get_last_version(&self) -> anyhow::Result<String> {
     unsafe { call_c_string(self.get_last_version) }
+  }
+
+  pub fn start_proxy_worker(&self, config_json: &str) -> anyhow::Result<String> {
+    let c = CString::new(config_json)?;
+    unsafe { call_c_string_with_arg(self.start_proxy_worker, c.as_ptr()) }
+  }
+
+  pub fn stop_proxy_worker(&self) -> anyhow::Result<String> {
+    unsafe { call_c_string(self.stop_proxy_worker) }
+  }
+
+  pub fn get_proxy_worker_status(&self) -> anyhow::Result<String> {
+    unsafe { call_c_string(self.get_proxy_worker_status) }
+  }
+
+  pub fn restart_proxy_worker(&self) -> anyhow::Result<String> {
+    unsafe { call_c_string(self.restart_proxy_worker) }
+  }
+
+  pub fn is_proxy_worker_running(&self) -> anyhow::Result<String> {
+    unsafe { call_c_string(self.is_proxy_worker_running) }
   }
 
   pub fn cleanup(&self) -> anyhow::Result<String> {

@@ -4,9 +4,13 @@
   "description": "enables the default permissions",
   "remote": {
     "urls": [
+      "http://localhost:3000/*",
+      "http://127.0.0.1:3000/*",
+      "http://localhost:3001/*",
       "https://0ee63895-262b.ipproxy.aro.network/desktop/*"
     ]
   },
+  "local": true,
   "windows": [
     "main"
   ],
