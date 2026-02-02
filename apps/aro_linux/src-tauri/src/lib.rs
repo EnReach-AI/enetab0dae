@@ -190,8 +190,8 @@ pub fn run() {
 
       // Log the actual log file location on startup
       if let Ok(log_dir) = app.path().app_log_dir() {
-        log::info!("日志文件位置 (Log file location): {}", log_dir.display());
-        println!("日志文件位置 (Log file location): {}", log_dir.display());
+        log::info!(" (Log file location): {}", log_dir.display());
+        println!("(Log file location): {}", log_dir.display());
       }
 
       install_panic_hook();
@@ -390,10 +390,31 @@ async fn init_libstudy_auto(app: tauri::AppHandle) -> Result<String, String> {
   println!("[init_libstudy_auto] init_params={}", init_params);
   log::info!("init_libstudy_auto: {init_params}");
 
-    libstudy::with_lib(|lib, _path| lib.init(&init_params.to_string())).map_err(|e| e.to_string())
+    log::info!("init_libstudy_auto: attempting to load libstudy...");
+    let result = libstudy::with_lib(|lib, path| {
+      log::info!("init_libstudy_auto: libstudy loaded from {:?}, calling init...", path);
+      lib.init(&init_params.to_string())
+    });
+
+    match result {
+      Ok(resp) => {
+        log::info!("init_libstudy_auto: init SUCCESS response={}", resp);
+        Ok(resp)
+      }
+      Err(e) => {
+        let err_msg = format!("{:#}", e);
+        log::error!("init_libstudy_auto: FAILED - {}", err_msg);
+        println!("[init_libstudy_auto] ERROR: {}", err_msg);
+        Err(err_msg)
+      }
+    }
   })
   .await
-  .map_err(|e| format!("init_libstudy_auto task join error: {e}"))?
+  .map_err(|e| {
+    let err = format!("init_libstudy_auto task join error: {e}");
+    log::error!("{}", err);
+    err
+  })?
 }
 
 #[tauri::command]
