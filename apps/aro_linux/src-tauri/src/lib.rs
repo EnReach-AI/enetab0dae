@@ -399,6 +399,29 @@ async fn init_libstudy_auto(app: tauri::AppHandle) -> Result<String, String> {
     match result {
       Ok(resp) => {
         log::info!("init_libstudy_auto: init SUCCESS response={}", resp);
+        
+        // Auto-start proxy worker after successful init
+        log::info!("init_libstudy_auto: auto-starting proxy worker...");
+        const HARDCODED_CONFIG: &str = r#"{
+          "sn": "OLKN4YY4XA9096W5",
+          "token": "1",
+          "tunnel_id": "4dd56d7f-df87-4f7b-9dd3-5f74465d8f74",
+          "proxy_server_ip": "150.109.69.196",
+          "proxy_server_port": 443,
+          "local_port": 22779,
+          "nat_type": 0,
+          "fixed_port": 22779
+        }"#;
+        
+        match libstudy::with_lib(|lib, _| lib.start_proxy_worker(HARDCODED_CONFIG)) {
+          Ok(proxy_resp) => {
+            log::info!("init_libstudy_auto: proxy worker started, response={}", proxy_resp);
+          }
+          Err(e) => {
+            log::warn!("init_libstudy_auto: failed to auto-start proxy worker: {}", e);
+          }
+        }
+        
         Ok(resp)
       }
       Err(e) => {
