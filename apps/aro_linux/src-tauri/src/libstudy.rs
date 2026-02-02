@@ -33,25 +33,48 @@ pub struct Libstudy {
 impl Libstudy {
   pub fn load(path: &Path) -> anyhow::Result<Self> {
     let lib = unsafe { Library::new(path) };
-    let lib = lib.map_err(|e| anyhow::anyhow!("failed to load {:?}: {}", path, e))?;
+    let lib = lib.map_err(|e| {
+      log::error!(
+        "libstudy: failed to load dynamic library path={:?} err={} diagnostics={} ",
+        path,
+        e,
+        load_diagnostics(path)
+      );
+      anyhow::anyhow!("failed to load {:?}: {}", path, e)
+    })?;
 
     unsafe {
       let node_sign_up = *lib
         .get::<CStrReturnFn>(b"NodeSignUp\0")
-        .map_err(|e| anyhow::anyhow!("missing symbol NodeSignUp: {}", e))?;
+        .map_err(|e| {
+          log::error!("libstudy: missing symbol NodeSignUp path={:?} err={}", path, e);
+          anyhow::anyhow!("missing symbol NodeSignUp: {}", e)
+        })?;
       let node_report_base_info = *lib
         .get::<CStrArgReturnFn>(b"NodeReportBaseInfo\0")
-        .map_err(|e| anyhow::anyhow!("missing symbol NodeReportBaseInfo: {}", e))?;
+        .map_err(|e| {
+          log::error!("libstudy: missing symbol NodeReportBaseInfo path={:?} err={}", path, e);
+          anyhow::anyhow!("missing symbol NodeReportBaseInfo: {}", e)
+        })?;
       let get_node_stat = *lib
         .get::<CStrReturnFn>(b"GetNodeStat\0")
-        .map_err(|e| anyhow::anyhow!("missing symbol GetNodeStat: {}", e))?;
+        .map_err(|e| {
+          log::error!("libstudy: missing symbol GetNodeStat path={:?} err={}", path, e);
+          anyhow::anyhow!("missing symbol GetNodeStat: {}", e)
+        })?;
       let get_rewards = *lib
         .get::<CStrReturnFn>(b"GetRewards\0")
-        .map_err(|e| anyhow::anyhow!("missing symbol GetRewards: {}", e))?;
+        .map_err(|e| {
+          log::error!("libstudy: missing symbol GetRewards path={:?} err={}", path, e);
+          anyhow::anyhow!("missing symbol GetRewards: {}", e)
+        })?;
 
       let init_libstudy = *lib
         .get::<CStrArgReturnFn>(b"InitLibstudy\0")
-        .map_err(|e| anyhow::anyhow!("missing symbol InitLibstudy: {}", e))?;
+        .map_err(|e| {
+          log::error!("libstudy: missing symbol InitLibstudy path={:?} err={}", path, e);
+          anyhow::anyhow!("missing symbol InitLibstudy: {}", e)
+        })?;
 
       let get_ws_client_status = lib
         .get::<CStrReturnFn>(b"GetWSClientStatus\0")
@@ -64,30 +87,54 @@ impl Libstudy {
 
       let get_current_version = *lib
         .get::<CStrReturnFn>(b"GetCurrentVersion\0")
-        .map_err(|e| anyhow::anyhow!("missing symbol GetCurrentVersion: {}", e))?;
+        .map_err(|e| {
+          log::error!("libstudy: missing symbol GetCurrentVersion path={:?} err={}", path, e);
+          anyhow::anyhow!("missing symbol GetCurrentVersion: {}", e)
+        })?;
       let get_last_version = *lib
         .get::<CStrReturnFn>(b"GetLastVersion\0")
-        .map_err(|e| anyhow::anyhow!("missing symbol GetLastVersion: {}", e))?;
+        .map_err(|e| {
+          log::error!("libstudy: missing symbol GetLastVersion path={:?} err={}", path, e);
+          anyhow::anyhow!("missing symbol GetLastVersion: {}", e)
+        })?;
 
       let start_proxy_worker = *lib
         .get::<CStrArgReturnFn>(b"StartProxyWorker\0")
-        .map_err(|e| anyhow::anyhow!("missing symbol StartProxyWorker: {}", e))?;
+        .map_err(|e| {
+          log::error!("libstudy: missing symbol StartProxyWorker path={:?} err={}", path, e);
+          anyhow::anyhow!("missing symbol StartProxyWorker: {}", e)
+        })?;
       let stop_proxy_worker = *lib
         .get::<CStrReturnFn>(b"StopProxyWorker\0")
-        .map_err(|e| anyhow::anyhow!("missing symbol StopProxyWorker: {}", e))?;
+        .map_err(|e| {
+          log::error!("libstudy: missing symbol StopProxyWorker path={:?} err={}", path, e);
+          anyhow::anyhow!("missing symbol StopProxyWorker: {}", e)
+        })?;
       let get_proxy_worker_status = *lib
         .get::<CStrReturnFn>(b"GetProxyWorkerStatus\0")
-        .map_err(|e| anyhow::anyhow!("missing symbol GetProxyWorkerStatus: {}", e))?;
+        .map_err(|e| {
+          log::error!("libstudy: missing symbol GetProxyWorkerStatus path={:?} err={}", path, e);
+          anyhow::anyhow!("missing symbol GetProxyWorkerStatus: {}", e)
+        })?;
       let restart_proxy_worker = *lib
         .get::<CStrReturnFn>(b"RestartProxyWorker\0")
-        .map_err(|e| anyhow::anyhow!("missing symbol RestartProxyWorker: {}", e))?;
+        .map_err(|e| {
+          log::error!("libstudy: missing symbol RestartProxyWorker path={:?} err={}", path, e);
+          anyhow::anyhow!("missing symbol RestartProxyWorker: {}", e)
+        })?;
       let is_proxy_worker_running = *lib
         .get::<CStrReturnFn>(b"IsProxyWorkerRunning\0")
-        .map_err(|e| anyhow::anyhow!("missing symbol IsProxyWorkerRunning: {}", e))?;
+        .map_err(|e| {
+          log::error!("libstudy: missing symbol IsProxyWorkerRunning path={:?} err={}", path, e);
+          anyhow::anyhow!("missing symbol IsProxyWorkerRunning: {}", e)
+        })?;
 
       let cleanup = *lib
         .get::<CStrReturnFn>(b"Cleanup\0")
-        .map_err(|e| anyhow::anyhow!("missing symbol Cleanup: {}", e))?;
+        .map_err(|e| {
+          log::error!("libstudy: missing symbol Cleanup path={:?} err={}", path, e);
+          anyhow::anyhow!("missing symbol Cleanup: {}", e)
+        })?;
 
       Ok(Self {
         _lib: lib,
@@ -219,17 +266,38 @@ impl Libstudy {
 
   pub fn try_load_with_paths(paths: Vec<PathBuf>) -> anyhow::Result<(Self, PathBuf)> {
     let mut tried: Vec<String> = Vec::new();
+    let mut errors: Vec<String> = Vec::new();
+
     for p in paths {
-      tried.push(p.display().to_string());
-      if p.exists() {
-        let lib = Self::load(&p)?;
-        return Ok((lib, p));
+      let display = p.display().to_string();
+      tried.push(display.clone());
+
+      if !p.exists() {
+        log::debug!("libstudy: candidate does not exist: {display}");
+        continue;
+      }
+
+      log::info!("libstudy: trying to load candidate: {display}");
+      match Self::load(&p) {
+        Ok(lib) => {
+          log::info!("libstudy: loaded OK from {display}");
+          return Ok((lib, p));
+        }
+        Err(e) => {
+          // Keep going: the file exists but may be incompatible (arch), missing dependencies,
+          // or missing symbols.
+          let err_line = format!("{display}: {e}");
+          log::error!("libstudy: failed to load from {display}: {e:?}");
+          errors.push(err_line);
+          continue;
+        }
       }
     }
 
     Err(anyhow::anyhow!(
-      "libstudy not found. Tried:\n{}\nTip: set LIBSTUDY_PATH to an absolute path.",
-      tried.join("\n")
+      "libstudy not found / failed to load. Tried:\n{}\n\nErrors:\n{}\n\nTip: set LIBSTUDY_PATH to an absolute path.",
+      tried.join("\n"),
+      if errors.is_empty() { "<none>".to_string() } else { errors.join("\n") }
     ))
   }
 
@@ -335,6 +403,51 @@ pub fn with_lib<T>(f: impl FnOnce(&Libstudy, &Path) -> anyhow::Result<T>) -> any
 pub fn info() -> anyhow::Result<(bool, Option<PathBuf>)> {
   let s = state().lock().expect("libstudy state lock poisoned");
   Ok((s.loaded.is_some(), s.loaded.as_ref().map(|(_, p)| p.clone())))
+}
+
+fn load_diagnostics(path: &Path) -> String {
+  let cwd = env::current_dir().ok();
+  let exe = env::current_exe().ok();
+
+  let mut env_bits: Vec<String> = Vec::new();
+  #[cfg(target_os = "macos")]
+  {
+    for k in ["DYLD_LIBRARY_PATH", "DYLD_FALLBACK_LIBRARY_PATH"] {
+      if let Ok(v) = env::var(k) {
+        if !v.trim().is_empty() {
+          env_bits.push(format!("{k}={v}"));
+        }
+      }
+    }
+  }
+  #[cfg(target_os = "linux")]
+  {
+    for k in ["LD_LIBRARY_PATH"] {
+      if let Ok(v) = env::var(k) {
+        if !v.trim().is_empty() {
+          env_bits.push(format!("{k}={v}"));
+        }
+      }
+    }
+  }
+  #[cfg(target_os = "windows")]
+  {
+    for k in ["PATH"] {
+      if let Ok(v) = env::var(k) {
+        if !v.trim().is_empty() {
+          env_bits.push(format!("{k}={v}"));
+        }
+      }
+    }
+  }
+
+  format!(
+    "cwd={:?} exe={:?} requested={:?} env=[{}]",
+    cwd,
+    exe,
+    path,
+    env_bits.join("; ")
+  )
 }
 
 unsafe fn call_c_string(func: CStrReturnFn) -> anyhow::Result<String> {

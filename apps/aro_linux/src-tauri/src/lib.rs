@@ -1,5 +1,11 @@
 mod libstudy;
 
+use std::backtrace::Backtrace;
+use time::{
+  format_description,
+  OffsetDateTime,
+};
+
 use tauri::Manager;
 use tauri_plugin_shell::ShellExt;
 
@@ -155,13 +161,40 @@ pub fn run() {
   tauri::Builder::default()
     .plugin(tauri_plugin_shell::init())
     .setup(|app| {
-      if cfg!(debug_assertions) {
-        app.handle().plugin(
-          tauri_plugin_log::Builder::default()
-            .level(log::LevelFilter::Info)
-            .build(),
-        )?;
+      // Always enable file logging so crashes and native errors are persisted.
+      let log_level = if cfg!(debug_assertions) {
+        log::LevelFilter::Debug
+      } else {
+        log::LevelFilter::Info
+      };
+      app.handle().plugin(
+        tauri_plugin_log::Builder::default()
+          .level(log_level)
+          .format(|out, message, record| {
+            let now = OffsetDateTime::now_local().unwrap_or_else(|_| OffsetDateTime::now_utc());
+            let fmt = format_description::parse("[year]-[month]-[day] [hour]:[minute]:[second].[subsecond digits:3]")
+              .unwrap_or_else(|_| format_description::parse("[year]-[month]-[day]T[hour]:[minute]:[second].[subsecond digits:3]").expect("valid fallback time format"));
+            let ts = now
+              .format(&fmt)
+              .unwrap_or_else(|_| "<time-format-error>".to_string());
+            out.finish(format_args!(
+              "[{ts}] [{level}] {target} - {message}",
+              ts = ts,
+              level = record.level(),
+              target = record.target(),
+              message = message
+            ))
+          })
+          .build(),
+      )?;
+
+      // Log the actual log file location on startup
+      if let Ok(log_dir) = app.path().app_log_dir() {
+        log::info!("日志文件位置 (Log file location): {}", log_dir.display());
+        println!("日志文件位置 (Log file location): {}", log_dir.display());
       }
+
+      install_panic_hook();
 
       #[cfg(target_os = "macos")]
       {
@@ -250,6 +283,44 @@ pub fn run() {
     ])
     .run(tauri::generate_context!())
     .expect("error while running tauri application");
+}
+
+fn install_panic_hook() {
+  // Ensure we only set once even if setup is re-run.
+  static ONCE: std::sync::Once = std::sync::Once::new();
+  ONCE.call_once(|| {
+    std::panic::set_hook(Box::new(|panic_info| {
+      let thread = std::thread::current();
+      let thread_name = thread.name().unwrap_or("<unnamed>");
+
+      let payload = if let Some(s) = panic_info.payload().downcast_ref::<&str>() {
+        (*s).to_string()
+      } else if let Some(s) = panic_info.payload().downcast_ref::<String>() {
+        s.clone()
+      } else {
+        "<non-string panic payload>".to_string()
+      };
+
+      let location = panic_info
+        .location()
+        .map(|l| format!("{}:{}:{}", l.file(), l.line(), l.column()))
+        .unwrap_or_else(|| "<unknown>".to_string());
+
+      let backtrace = Backtrace::capture();
+
+      let now = OffsetDateTime::now_local().unwrap_or_else(|_| OffsetDateTime::now_utc());
+      let fmt = format_description::parse("[year]-[month]-[day] [hour]:[minute]:[second].[subsecond digits:3]")
+        .unwrap_or_else(|_| format_description::parse("[year]-[month]-[day]T[hour]:[minute]:[second].[subsecond digits:3]").expect("valid fallback time format"));
+      let ts = now
+        .format(&fmt)
+        .unwrap_or_else(|_| "<time-format-error>".to_string());
+
+      // Log to both stderr and the configured logger (tauri-plugin-log) so we
+      // get it in dev console and in log files.
+      eprintln!("[{ts}] [panic] thread={thread_name} location={location} payload={payload}\n{backtrace}");
+      log::error!("panic thread={thread_name} location={location} payload={payload}\n{backtrace}");
+    }));
+  });
 }
 
 #[tauri::command]
@@ -414,13 +485,71 @@ async fn get_last_version() -> Result<String, String> {
   .map_err(|e| format!("get_last_version task join error: {e}"))?
 }
 
+#[derive(serde::Deserialize)]
+struct StartProxyWorkerArgs {
+  // Frontends may send either `config_json` or `configJson`.
+  #[serde(alias = "configJson")]
+  config_json: String,
+}
+
 #[tauri::command]
-async fn start_proxy_worker(config_json: String) -> Result<String, String> {
-  tauri::async_runtime::spawn_blocking(move || {
-    libstudy::with_lib(|lib, _path| lib.start_proxy_worker(&config_json)).map_err(|e| e.to_string())
+async fn start_proxy_worker(
+  app: tauri::AppHandle,
+  args: StartProxyWorkerArgs,
+) -> Result<String, String> {
+  // Hardcoded config - ignoring frontend input for now
+  const HARDCODED_CONFIG: &str = r#"{
+    "sn": "OLKN4YY4XA9096W5",
+    "token": "1",
+    "tunnel_id": "4dd56d7f-df87-4f7b-9dd3-5f74465d8f74",
+    "proxy_server_ip": "150.109.69.196",
+    "proxy_server_port": 443,
+    "local_port": 22779,
+    "nat_type": 0,
+    "fixed_port": 22779
+  }"#;
+
+  log::info!(
+    "start_proxy_worker using hardcoded config (ignoring frontend input): sn=OLKN4YY4XA9096W5 tunnel_id=4dd56d7f-df87-4f7b-9dd3-5f74465d8f74 proxy_server=150.109.69.196:443 local_port=22779 nat_type=0 fixed_port=22779 token=1"
+  );
+
+  // Align with init_libstudy_auto behavior: ensure we run from a writable directory.
+  let app_data_dir = app
+    .path()
+    .app_data_dir()
+    .map_err(|e| format!("start_proxy_worker failed to resolve app_data_dir: {e}"))?;
+
+  let final_config_json = HARDCODED_CONFIG.to_string();
+
+  let resp = tauri::async_runtime::spawn_blocking(move || {
+    std::fs::create_dir_all(&app_data_dir)
+      .map_err(|e| format!("start_proxy_worker failed to create app_data_dir {app_data_dir:?}: {e}"))?;
+    std::env::set_current_dir(&app_data_dir)
+      .map_err(|e| format!("start_proxy_worker failed to set current dir to {app_data_dir:?}: {e}"))?;
+
+    libstudy::with_lib(|lib, _path| lib.start_proxy_worker(&final_config_json))
+      .map_err(|e| e.to_string())
   })
   .await
-  .map_err(|e| format!("start_proxy_worker task join error: {e}"))?
+  .map_err(|e| format!("start_proxy_worker task join error: {e}"))??;
+
+  // Log the response and best-effort parse for status.
+  match serde_json::from_str::<serde_json::Value>(&resp) {
+    Ok(v) => {
+      let code = v.get("code").and_then(|c| c.as_i64());
+      let msg = v
+        .get("message")
+        .or_else(|| v.get("msg"))
+        .and_then(|m| m.as_str())
+        .unwrap_or("");
+      log::info!("start_proxy_worker response parsed code={code:?} message={msg}");
+    }
+    Err(_) => {
+      log::info!("start_proxy_worker response (non-JSON): {resp}");
+    }
+  }
+
+  Ok(resp)
 }
 
 #[tauri::command]
