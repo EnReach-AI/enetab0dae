@@ -128,7 +128,7 @@ When the GitHub Actions workflow completes:
 | Distribution | Package Type | Webkit Version | Status |
 |-------------|--------------|----------------|--------|
 | Ubuntu 22.04 | DEB | 4.0 or 4.1 | ✅ Supported |
-| Debian 11 | DEB | 4.0 or 4.1 | ✅ Supported |
+| Debian 12 | DEB | 4.0 or 4.1 | ✅ Supported |
 | Rocky Linux 8 | RPM | 4.0 | ✅ Supported |
 
 ### Known Issues Fixed
