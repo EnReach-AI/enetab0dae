@@ -829,6 +829,10 @@ jobs:
         working-directory: apps/aro_linux
         run: |
           set -euo pipefail
+          
+          # Ensure PKG_CONFIG_PATH is set for Rust build
+          export PKG_CONFIG_PATH="/usr/lib/x86_64-linux-gnu/pkgconfig:/usr/lib64/pkgconfig:/usr/lib/pkgconfig:/usr/share/pkgconfig:${PKG_CONFIG_PATH:-}"
+          
           CONFIG_JSON="$(jq -nc --arg t "${BUNDLE_TARGET}" '{bundle:{targets:[$t]}}')"
           cargo tauri build --ci --config "$CONFIG_JSON"
           ls -lah "src-tauri/target/release/bundle/${BUNDLE_TARGET}" || true
