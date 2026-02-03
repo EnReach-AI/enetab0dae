@@ -893,6 +893,30 @@ jobs:
               "Cflags: ${cflags}" \
               > "$OVERRIDE_PCDIR/$pkg.pc"
           done
+
+          # WebKitGTK/JSC: Debian 11 provides 4.0; create 4.1 aliases if missing
+          for pkg in webkit2gtk-4.1 javascriptcoregtk-4.1; do
+            if ! pkg-config --exists "$pkg"; then
+              fallback_pkg="${pkg/-4.1/-4.0}"
+              if pkg-config --exists "$fallback_pkg"; then
+                echo "Creating override for $pkg using $fallback_pkg"
+                cflags="$(pkg-config --cflags "$fallback_pkg")"
+                libs="$(pkg-config --libs "$fallback_pkg")"
+                printf '%s\n' \
+                  "prefix=/usr" \
+                  "exec_prefix=\${prefix}" \
+                  "libdir=/usr/lib/x86_64-linux-gnu" \
+                  "includedir=/usr/include" \
+                  "" \
+                  "Name: ${pkg}" \
+                  "Description: override pc for ${pkg}" \
+                  "Version: 4.1" \
+                  "Libs: ${libs}" \
+                  "Cflags: ${cflags}" \
+                  > "$OVERRIDE_PCDIR/$pkg.pc"
+              fi
+            fi
+          done
           export PKG_CONFIG_PATH="$OVERRIDE_PCDIR:$PKG_CONFIG_PATH"
           
           # Verify glib-2.0 can be found
