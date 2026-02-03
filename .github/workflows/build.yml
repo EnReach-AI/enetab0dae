@@ -880,18 +880,18 @@ jobs:
             echo "Generating override for $pkg"
             cflags="$(pkg-config --cflags "$pkg")"
             libs="$(pkg-config --libs "$pkg")"
-            cat > "$OVERRIDE_PCDIR/$pkg.pc" <<EOF
-            prefix=/usr
-            exec_prefix=\${prefix}
-            libdir=/usr/lib/x86_64-linux-gnu
-            includedir=/usr/include
-
-            Name: $pkg
-            Description: override pc for $pkg
-            Version: 2.70
-            Libs: $libs
-            Cflags: $cflags
-            EOF
+            printf '%s\n' \
+              "prefix=/usr" \
+              "exec_prefix=\${prefix}" \
+              "libdir=/usr/lib/x86_64-linux-gnu" \
+              "includedir=/usr/include" \
+              "" \
+              "Name: ${pkg}" \
+              "Description: override pc for ${pkg}" \
+              "Version: 2.70" \
+              "Libs: ${libs}" \
+              "Cflags: ${cflags}" \
+              > "$OVERRIDE_PCDIR/$pkg.pc"
           done
           export PKG_CONFIG_PATH="$OVERRIDE_PCDIR:$PKG_CONFIG_PATH"
           
