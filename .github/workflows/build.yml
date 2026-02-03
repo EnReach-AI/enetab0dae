@@ -744,6 +744,10 @@ jobs:
               clang build-essential pkg-config \
               libssl-dev libgtk-3-dev libglib2.0-dev patchelf \
               dpkg fakeroot xz-utils
+            
+            # Ensure glib development files are properly installed
+            echo "Ensuring glib2.0-dev installation..."
+            retry 3 3 env DEBIAN_FRONTEND=noninteractive apt-get -o Acquire::Retries=5 -o Acquire::http::Timeout=60 -o Acquire::https::Timeout=60 install --reinstall -y libglib2.0-dev || true
 
             if ! env DEBIAN_FRONTEND=noninteractive apt-get -o Acquire::Retries=5 -o Acquire::http::Timeout=60 -o Acquire::https::Timeout=60 install -y --no-install-recommends --fix-missing libwebkit2gtk-4.1-dev; then
               retry 3 3 env DEBIAN_FRONTEND=noninteractive apt-get -o Acquire::Retries=5 -o Acquire::http::Timeout=60 -o Acquire::https::Timeout=60 install -y --no-install-recommends --fix-missing libwebkit2gtk-4.0-dev
@@ -841,10 +845,47 @@ jobs:
           set -euo pipefail
           cargo install tauri-cli --version "^2"
 
+      - name: Verify pkg-config after dependencies
+        run: |
+          echo "=== Checking pkg-config setup ==="
+          pkg-config --version
+          echo "PKG_CONFIG_PATH=$PKG_CONFIG_PATH"
+          
+          # Try to find glib-2.0.pc
+          echo "Looking for glib-2.0.pc files..."
+          find /usr/lib /usr/share -name "glib-2.0.pc" 2>/dev/null || echo "No glib-2.0.pc found in standard locations"
+          
+          # List files in pkg-config directories
+          echo ""
+          echo "Files in /usr/lib/x86_64-linux-gnu/pkgconfig (first 10):"
+          ls -la /usr/lib/x86_64-linux-gnu/pkgconfig 2>/dev/null | grep glib | head -10 || echo "Directory not accessible"
+          
+          echo ""
+          echo "Files in /usr/lib/pkgconfig (glib related):"
+          ls -la /usr/lib/pkgconfig 2>/dev/null | grep glib | head -10 || echo "Directory not accessible"
+          
+          # Verify installation
+          echo ""
+          echo "Checking libglib2.0-dev installation:"
+          dpkg -l | grep libglib2.0 || echo "libglib2.0-dev not found in dpkg list"
+
       - name: Build Package (${{ matrix.bundle_target }})
         working-directory: apps/aro_linux
         run: |
           set -euo pipefail
+          
+          # Set PKG_CONFIG_PATH for build step
+          export PKG_CONFIG_PATH="/usr/lib/x86_64-linux-gnu/pkgconfig:/usr/lib/pkgconfig:/usr/share/pkgconfig:${PKG_CONFIG_PATH:-}"
+          echo "Build PKG_CONFIG_PATH=$PKG_CONFIG_PATH"
+          
+          # Verify glib-2.0 can be found
+          pkg-config --exists glib-2.0 || {
+            echo "ERROR: glib-2.0.pc not found during build" >&2
+            echo "Attempting to find it..."
+            find / -name "glib-2.0.pc" 2>/dev/null | head -5 || true
+            exit 1
+          }
+          
           CONFIG_JSON="$(jq -nc --arg t "${BUNDLE_TARGET}" '{bundle:{targets:[$t]}}')"
           cargo tauri build --ci --config "$CONFIG_JSON"
           ls -lah "src-tauri/target/release/bundle/${BUNDLE_TARGET}" || true
