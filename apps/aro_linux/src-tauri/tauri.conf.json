@@ -18,13 +18,13 @@
         "maxWidth": 360,
         "maxHeight": 640,
         "resizable": false,
-        "maximizable": false,
+        "maximizable": true,
         "fullscreen": false,
         "decorations": false,
-        "visible": false,
+        "visible": true,
         "alwaysOnTop": true,
         "visibleOnAllWorkspaces": true,
-        "skipTaskbar": true,
+        "skipTaskbar": false,
         "url": "https://0ee63895-262b.ipproxy.aro.network/desktop/"
       }
     ],
