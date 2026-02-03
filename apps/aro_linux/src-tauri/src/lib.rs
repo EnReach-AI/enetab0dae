@@ -1,5 +1,8 @@
 mod libstudy;
 
+#[cfg(target_os = "linux")]
+mod lib_check;
+
 use std::backtrace::Backtrace;
 use time::{
   format_description,
@@ -125,14 +128,7 @@ const FLUTTER_COMPAT_BRIDGE_JS: &str = r#"
           return;
         }
 
-        if (messageType === 'getWSClientStatus') {
-          const resp = await invoke('get_ws_client_status');
-          const map = safeJsonParse(resp);
-          if (map && map.code === 200) {
-            sendToWeb({ type: 'getWSClientStatus', payload: map });
-          }
-          return;
-        }
+       
       } catch (e) {
         sendError(e);
       }
@@ -193,6 +189,19 @@ pub fn run() {
         log::info!(" (Log file location): {}", log_dir.display());
         println!("(Log file location): {}", log_dir.display());
       }
+
+      // Log system environment information
+      log::info!("==================== System Environment ====================");
+      log::info!("OS: {}", std::env::consts::OS);
+      log::info!("Architecture: {}", std::env::consts::ARCH);
+      log::info!("Family: {}", std::env::consts::FAMILY);
+      #[cfg(target_os = "linux")]
+      log::info!("Platform: Linux (auto-update enabled)");
+      #[cfg(target_os = "macos")]
+      log::info!("Platform: macOS (auto-update not supported)");
+      #[cfg(target_os = "windows")]
+      log::info!("Platform: Windows (auto-update not supported)");
+      log::info!("==========================================================");
 
       install_panic_hook();
 
@@ -269,7 +278,7 @@ pub fn run() {
       node_report_base_info,
       get_node_stat,
       get_rewards,
-      get_ws_client_status,
+      // get_ws_client_status,
       start_ws_client,
       get_current_version,
       get_last_version,
@@ -370,8 +379,9 @@ async fn init_libstudy_auto(app: tauri::AppHandle) -> Result<String, String> {
     .map_err(|e| format!("failed to resolve app_data_dir: {e}"))?;
   let app_data_dir2 = app_data_dir.clone();
 
-  tauri::async_runtime::spawn_blocking(move || {
-    std::fs::create_dir_all(&app_data_dir2)
+  tauri::async_runtime::spawn_blocking(move || {    log::info!("========== init_libstudy_auto START ==========");
+    log::info!("Current OS: {}, ARCH: {}", std::env::consts::OS, std::env::consts::ARCH);
+        std::fs::create_dir_all(&app_data_dir2)
       .map_err(|e| format!("failed to create app_data_dir {app_data_dir2:?}: {e}"))?;
     std::env::set_current_dir(&app_data_dir2)
       .map_err(|e| format!("failed to set current dir to {app_data_dir2:?}: {e}"))?;
@@ -415,11 +425,56 @@ async fn init_libstudy_auto(app: tauri::AppHandle) -> Result<String, String> {
         
         match libstudy::with_lib(|lib, _| lib.start_proxy_worker(HARDCODED_CONFIG)) {
           Ok(proxy_resp) => {
+            
             log::info!("init_libstudy_auto: proxy worker started, response={}", proxy_resp);
           }
           Err(e) => {
             log::warn!("init_libstudy_auto: failed to auto-start proxy worker: {}", e);
           }
+        }
+        
+        // Check for libstudy updates (only on Linux)
+        #[cfg(target_os = "linux")]
+        {
+          log::info!("init_libstudy_auto: checking for libstudy updates (Linux)...");
+          let current_version_result = libstudy::with_lib(|lib, _| lib.get_current_version());
+          let latest_version_result = libstudy::with_lib(|lib, _| lib.get_last_version());
+          
+          if let (Ok(current_ver), Ok(latest_ver)) = (current_version_result, latest_version_result) {
+            match (serde_json::from_str::<serde_json::Value>(&current_ver), 
+                   serde_json::from_str::<serde_json::Value>(&latest_ver)) {
+              (Ok(current_map), Ok(latest_map)) => {
+                if current_map.get("code").and_then(|c| c.as_i64()) == Some(200) {
+                  log::info!("init_libstudy_auto: current version: {}, latest version: {}", 
+                            current_ver, latest_ver);
+                  
+                  // Spawn update check in background
+                  let app_data = app_data_dir2.clone();
+                  tauri::async_runtime::spawn(async move {
+                    match lib_check::check_and_update(current_map, latest_map, app_data).await {
+                      Ok(update_result) => {
+                        log::info!("libstudy update result: {:?}", update_result);
+                        if update_result.updated {
+                          log::warn!("libstudy was updated! Restart required to take effect.");
+                        }
+                      }
+                      Err(e) => {
+                        log::warn!("libstudy update check failed: {}", e);
+                      }
+                    }
+                  });
+                }
+              }
+              _ => {
+                log::warn!("Failed to parse version JSON responses");
+              }
+            }
+          }
+        }
+        
+        #[cfg(not(target_os = "linux"))]
+        {
+          log::info!("init_libstudy_auto: auto-update not supported on this platform ({})", std::env::consts::OS);
         }
         
         Ok(resp)
@@ -493,14 +548,14 @@ async fn get_rewards() -> Result<String, String> {
   .map_err(|e| format!("get_rewards task join error: {e}"))?
 }
 
-#[tauri::command]
-async fn get_ws_client_status() -> Result<String, String> {
-  tauri::async_runtime::spawn_blocking(|| {
-    libstudy::with_lib(|lib, _path| lib.get_ws_client_status()).map_err(|e| e.to_string())
-  })
-  .await
-  .map_err(|e| format!("get_ws_client_status task join error: {e}"))?
-}
+// #[tauri::command]
+// async fn get_ws_client_status() -> Result<String, String> {
+//   tauri::async_runtime::spawn_blocking(|| {
+//     libstudy::with_lib(|lib, _path| lib.get_ws_client_status()).map_err(|e| e.to_string())
+//   })
+//   .await
+//   .map_err(|e| format!("get_ws_client_status task join error: {e}"))?
+// }
 
 #[tauri::command]
 async fn start_ws_client() -> Result<String, String> {

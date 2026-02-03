@@ -20,7 +20,7 @@
         "resizable": false,
         "maximizable": false,
         "fullscreen": false,
-        "url": "https://0ee63895-262b.ipproxy.aro.network/desktop/"
+        "url": "http://localhost:3000"
       }
     ],
     "security": {

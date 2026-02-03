@@ -18,7 +18,7 @@ pub struct Libstudy {
   get_node_stat: CStrReturnFn,
   get_rewards: CStrReturnFn,
   init_libstudy: CStrArgReturnFn,
-  get_ws_client_status: Option<CStrReturnFn>,
+  // get_ws_client_status: Option<CStrReturnFn>,
   start_ws_client: Option<CStrReturnFn>,
   get_current_version: CStrReturnFn,
   get_last_version: CStrReturnFn,
@@ -76,10 +76,10 @@ impl Libstudy {
           anyhow::anyhow!("missing symbol InitLibstudy: {}", e)
         })?;
 
-      let get_ws_client_status = lib
-        .get::<CStrReturnFn>(b"GetWSClientStatus\0")
-        .ok()
-        .map(|s| *s);
+      // let get_ws_client_status = lib
+      //   .get::<CStrReturnFn>(b"GetWSClientStatus\0")
+      //   .ok()
+      //   .map(|s| *s);
       let start_ws_client = lib
         .get::<CStrReturnFn>(b"StartWSClient\0")
         .ok()
@@ -143,7 +143,7 @@ impl Libstudy {
         get_node_stat,
         get_rewards,
         init_libstudy,
-        get_ws_client_status,
+        // get_ws_client_status,
         start_ws_client,
         get_current_version,
         get_last_version,
@@ -326,12 +326,12 @@ impl Libstudy {
     unsafe { call_c_string(self.get_rewards) }
   }
 
-  pub fn get_ws_client_status(&self) -> anyhow::Result<String> {
-    let func = self
-      .get_ws_client_status
-      .ok_or_else(|| anyhow::anyhow!("missing symbol GetWSClientStatus (libstudy build may have it disabled)"))?;
-    unsafe { call_c_string(func) }
-  }
+  // pub fn get_ws_client_status(&self) -> anyhow::Result<String> {
+  //   let func = self
+  //     .get_ws_client_status
+  //     .ok_or_else(|| anyhow::anyhow!("missing symbol GetWSClientStatus (libstudy build may have it disabled)"))?;
+  //   unsafe { call_c_string(func) }
+  // }
 
   pub fn start_ws_client(&self) -> anyhow::Result<String> {
     let func = self
