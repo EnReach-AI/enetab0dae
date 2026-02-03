@@ -684,6 +684,7 @@ jobs:
           path: ${{ env.FLUTTER_DIR }}/AROClient-Setup.exe
           if-no-files-found: warn
 
+
   build-linux2:
     needs: prepare
     if: needs.prepare.outputs.aro_linux == 'true'
@@ -751,10 +752,6 @@ jobs:
             if ! env DEBIAN_FRONTEND=noninteractive apt-get -o Acquire::Retries=5 -o Acquire::http::Timeout=60 -o Acquire::https::Timeout=60 install -y --no-install-recommends --fix-missing libayatana-appindicator3-dev; then
               retry 3 3 env DEBIAN_FRONTEND=noninteractive apt-get -o Acquire::Retries=5 -o Acquire::http::Timeout=60 -o Acquire::https::Timeout=60 install -y --no-install-recommends --fix-missing libappindicator3-dev
             fi
-
-            # Set PKG_CONFIG_PATH for Debian-based systems
-            export PKG_CONFIG_PATH="/usr/lib/x86_64-linux-gnu/pkgconfig:/usr/lib/pkgconfig:/usr/share/pkgconfig:${PKG_CONFIG_PATH:-}"
-            echo "PKG_CONFIG_PATH=${PKG_CONFIG_PATH}" >> $GITHUB_ENV
           elif command -v dnf >/dev/null 2>&1; then
             # Rocky/RHEL often need EPEL for appindicator/ayatana packages.
             dnf install -y epel-release dnf-plugins-core || dnf install -y epel-release || true
@@ -779,10 +776,6 @@ jobs:
             if ! dnf install -y webkit2gtk4.1-devel; then
               dnf install -y webkit2gtk3-devel
             fi
-
-            # Set PKG_CONFIG_PATH for Rocky/RHEL-based systems
-            export PKG_CONFIG_PATH="/usr/lib64/pkgconfig:/usr/share/pkgconfig:${PKG_CONFIG_PATH:-}"
-            echo "PKG_CONFIG_PATH=${PKG_CONFIG_PATH}" >> $GITHUB_ENV
           else
             echo "Unsupported distro (no apt-get/dnf)." >&2
             exit 1
@@ -816,58 +809,6 @@ jobs:
             -o ../plugins/linux/libstudy.so ./pkg/libstudy
           ls -lh ../plugins/linux/libstudy.so
 
-      - name: Copy Core Library to Tauri Resources
-        run: |
-          set -euo pipefail
-          mkdir -p apps/aro_linux/src/resources
-          cp plugins/linux/libstudy.so apps/aro_linux/src/resources/
-          ls -lh apps/aro_linux/src/resources/libstudy.so
-
-      - name: Verify and fix pkg-config setup
-        run: |
-          set -euo pipefail
-          
-          echo "=== Verifying pkg-config setup ==="
-          
-          # Ensure PKG_CONFIG_PATH is set
-          export PKG_CONFIG_PATH="/usr/lib/x86_64-linux-gnu/pkgconfig:/usr/lib64/pkgconfig:/usr/lib/pkgconfig:/usr/share/pkgconfig:${PKG_CONFIG_PATH:-}"
-          echo "PKG_CONFIG_PATH=$PKG_CONFIG_PATH"
-          
-          # Find all glib-2.0.pc files
-          echo "Searching for glib-2.0.pc files..."
-          find /usr -name "glib-2.0.pc" 2>/dev/null || echo "No glib-2.0.pc found via find"
-          
-          # List pkg-config directories
-          for dir in /usr/lib/x86_64-linux-gnu/pkgconfig /usr/lib64/pkgconfig /usr/lib/pkgconfig /usr/share/pkgconfig; do
-            if [ -d "$dir" ]; then
-              echo "Checking $dir:"
-              ls -la "$dir"/glib*.pc 2>/dev/null || echo "  No glib .pc files"
-            fi
-          done
-          
-          # Try pkg-config
-          if pkg-config --exists glib-2.0; then
-            echo "✓ pkg-config can find glib-2.0"
-            pkg-config --modversion glib-2.0
-            pkg-config --cflags glib-2.0
-          else
-            echo "✗ pkg-config cannot find glib-2.0"
-            echo "Attempting to reinstall glib development package..."
-            
-            if [ -f /etc/debian_version ]; then
-              apt-get update -qq
-              apt-get install -y --reinstall libglib2.0-dev
-            elif command -v dnf >/dev/null 2>&1; then
-              dnf reinstall -y glib2-devel
-            fi
-            
-            # Verify again
-            if ! pkg-config --exists glib-2.0; then
-              echo "FATAL: Cannot find glib-2.0 after reinstall"
-              exit 1
-            fi
-          fi
-
       - name: Install Tauri CLI
         run: |
           set -euo pipefail
@@ -875,13 +816,8 @@ jobs:
 
       - name: Build Package (${{ matrix.bundle_target }})
         working-directory: apps/aro_linux
-        env:
-          PKG_CONFIG_PATH: "/usr/lib/x86_64-linux-gnu/pkgconfig:/usr/lib64/pkgconfig:/usr/lib/pkgconfig:/usr/share/pkgconfig"
         run: |
           set -euo pipefail
-          
-          echo "Building with PKG_CONFIG_PATH=$PKG_CONFIG_PATH"
-          
           CONFIG_JSON="$(jq -nc --arg t "${BUNDLE_TARGET}" '{bundle:{targets:[$t]}}')"
           cargo tauri build --ci --config "$CONFIG_JSON"
           ls -lah "src-tauri/target/release/bundle/${BUNDLE_TARGET}" || true
@@ -892,3 +828,4 @@ jobs:
           name: aro-desktop-${{ matrix.bundle_target }}-${{ matrix.artifact_suffix }}
           path: apps/aro_linux/src-tauri/target/release/bundle/${{ matrix.bundle_target }}/*.${{ matrix.bundle_target }}
           if-no-files-found: error
+
