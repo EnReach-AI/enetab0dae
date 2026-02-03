@@ -872,6 +872,17 @@ jobs:
           # Set PKG_CONFIG_PATH for build step
           export PKG_CONFIG_PATH="/usr/lib/x86_64-linux-gnu/pkgconfig:/usr/lib/pkgconfig:/usr/share/pkgconfig:${PKG_CONFIG_PATH:-}"
           echo "Build PKG_CONFIG_PATH=$PKG_CONFIG_PATH"
+
+          # Debian 11 compatibility: bypass glib version checks by providing explicit flags
+          export GLIB_2_0_NO_PKG_CONFIG=1
+          export GOBJECT_2_0_NO_PKG_CONFIG=1
+          export GIO_2_0_NO_PKG_CONFIG=1
+          export GLIB_2_0_CFLAGS="$(pkg-config --cflags glib-2.0)"
+          export GLIB_2_0_LIBS="$(pkg-config --libs glib-2.0)"
+          export GOBJECT_2_0_CFLAGS="$(pkg-config --cflags gobject-2.0)"
+          export GOBJECT_2_0_LIBS="$(pkg-config --libs gobject-2.0)"
+          export GIO_2_0_CFLAGS="$(pkg-config --cflags gio-2.0)"
+          export GIO_2_0_LIBS="$(pkg-config --libs gio-2.0)"
           
           # Verify glib-2.0 can be found
           pkg-config --exists glib-2.0 || {
