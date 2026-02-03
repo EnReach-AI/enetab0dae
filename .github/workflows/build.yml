@@ -873,16 +873,27 @@ jobs:
           export PKG_CONFIG_PATH="/usr/lib/x86_64-linux-gnu/pkgconfig:/usr/lib/pkgconfig:/usr/share/pkgconfig:${PKG_CONFIG_PATH:-}"
           echo "Build PKG_CONFIG_PATH=$PKG_CONFIG_PATH"
 
-          # Debian 11 compatibility: bypass glib version checks by providing explicit flags
-          export GLIB_2_0_NO_PKG_CONFIG=1
-          export GOBJECT_2_0_NO_PKG_CONFIG=1
-          export GIO_2_0_NO_PKG_CONFIG=1
-          export GLIB_2_0_CFLAGS="$(pkg-config --cflags glib-2.0)"
-          export GLIB_2_0_LIBS="$(pkg-config --libs glib-2.0)"
-          export GOBJECT_2_0_CFLAGS="$(pkg-config --cflags gobject-2.0)"
-          export GOBJECT_2_0_LIBS="$(pkg-config --libs gobject-2.0)"
-          export GIO_2_0_CFLAGS="$(pkg-config --cflags gio-2.0)"
-          export GIO_2_0_LIBS="$(pkg-config --libs gio-2.0)"
+          # Debian 11 compatibility: provide override .pc files with version >= 2.70
+          OVERRIDE_PCDIR="/tmp/pkgconfig-overrides"
+          mkdir -p "$OVERRIDE_PCDIR"
+          for pkg in glib-2.0 gobject-2.0 gio-2.0; do
+            echo "Generating override for $pkg"
+            cflags="$(pkg-config --cflags "$pkg")"
+            libs="$(pkg-config --libs "$pkg")"
+            cat > "$OVERRIDE_PCDIR/$pkg.pc" <<EOF
+            prefix=/usr
+            exec_prefix=\${prefix}
+            libdir=/usr/lib/x86_64-linux-gnu
+            includedir=/usr/include
+
+            Name: $pkg
+            Description: override pc for $pkg
+            Version: 2.70
+            Libs: $libs
+            Cflags: $cflags
+            EOF
+          done
+          export PKG_CONFIG_PATH="$OVERRIDE_PCDIR:$PKG_CONFIG_PATH"
           
           # Verify glib-2.0 can be found
           pkg-config --exists glib-2.0 || {
