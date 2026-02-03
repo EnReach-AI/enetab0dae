@@ -833,16 +833,23 @@ jobs:
             echo "Found glib version: $GLIB_VERSION"
             
             # Check if version is >= 2.70 (required by Tauri)
-            GLIB_MAJOR=$(echo "$GLIB_VERSION" | cut -d. -f1)
-            GLIB_MINOR=$(echo "$GLIB_VERSION" | cut -d. -f2)
+            # Extract major and minor, removing any non-numeric suffixes
+            GLIB_MAJOR=$(echo "$GLIB_VERSION" | cut -d. -f1 | sed 's/[^0-9].*$//')
+            GLIB_MINOR=$(echo "$GLIB_VERSION" | cut -d. -f2 | sed 's/[^0-9].*$//')
             
-            if [ "$GLIB_MAJOR" -gt 2 ] || ([ "$GLIB_MAJOR" -eq 2 ] && [ "$GLIB_MINOR" -ge 70 ]); then
-              echo "compatible=true" >> $GITHUB_OUTPUT
-              echo "✓ glib version $GLIB_VERSION is compatible (>= 2.70)"
+            # Validate we got numeric values
+            if [[ "$GLIB_MAJOR" =~ ^[0-9]+$ ]] && [[ "$GLIB_MINOR" =~ ^[0-9]+$ ]]; then
+              if [ "$GLIB_MAJOR" -gt 2 ] || ([ "$GLIB_MAJOR" -eq 2 ] && [ "$GLIB_MINOR" -ge 70 ]); then
+                echo "compatible=true" >> $GITHUB_OUTPUT
+                echo "✓ glib version $GLIB_VERSION is compatible (>= 2.70)"
+              else
+                echo "compatible=false" >> $GITHUB_OUTPUT
+                echo "✗ glib version $GLIB_VERSION is too old (< 2.70)"
+                echo "::warning::Skipping build for ${{ matrix.distro }} due to incompatible glib version $GLIB_VERSION (required >= 2.70)"
+              fi
             else
               echo "compatible=false" >> $GITHUB_OUTPUT
-              echo "✗ glib version $GLIB_VERSION is too old (< 2.70)"
-              echo "::warning::Skipping build for ${{ matrix.distro }} due to incompatible glib version $GLIB_VERSION (required >= 2.70)"
+              echo "::warning::Could not parse glib version $GLIB_VERSION, skipping build for ${{ matrix.distro }}"
             fi
           else
             echo "compatible=false" >> $GITHUB_OUTPUT
