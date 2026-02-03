@@ -693,12 +693,9 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - distro: "ubuntu:22.04"
-            artifact_suffix: "ubuntu-22-04"
-            bundle_target: "deb"
-          # Debian 11 removed: glib 2.66 < 2.70 required by Tauri dependencies
-          - distro: "debian:12"
-            artifact_suffix: "debian-12"
+          # Build deb on Debian 11 for minimum runtime compatibility (Debian 11+).
+          - distro: "debian:11"
+            artifact_suffix: "debian-11"
             bundle_target: "deb"
           - distro: "rockylinux:8"
             artifact_suffix: "rockylinux-8"
