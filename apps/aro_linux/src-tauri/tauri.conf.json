@@ -20,6 +20,11 @@
         "resizable": false,
         "maximizable": false,
         "fullscreen": false,
+        "decorations": false,
+        "visible": false,
+        "alwaysOnTop": true,
+        "visibleOnAllWorkspaces": true,
+        "skipTaskbar": true,
         "url": "http://localhost:3000"
       }
     ],
