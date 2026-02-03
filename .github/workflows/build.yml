@@ -752,6 +752,133 @@ jobs:
             if ! env DEBIAN_FRONTEND=noninteractive apt-get -o Acquire::Retries=5 -o Acquire::http::Timeout=60 -o Acquire::https::Timeout=60 install -y --no-install-recommends --fix-missing libayatana-appindicator3-dev; then
               retry 3 3 env DEBIAN_FRONTEND=noninteractive apt-get -o Acquire::Retries=5 -o Acquire::http::Timeout=60 -o Acquire::https::Timeout=60 install -y --no-install-recommends --fix-missing libappindicator3-dev
             fi
+
+            # Set PKG_CONFIG_PATH for Debian-based systems
+            export PKG_CONFIG_PATH="/usr/lib/x86_64-linux-gnu/pkgconfig:/usr/lib/pkgconfig:/usr/share/pkgconfig:${PKG_CONFIG_PATH:-}"
+            echo "PKG_CONFIG_PATH=${PKG_CONFIG_PATH}" >> $GITHUB_ENV
+          elif command -v dnf >/dev/null 2>&1; then
+            # Rocky/RHEL often need EPEL for appindicator/ayatana packages.
+            dnf install -y epel-release dnf-plugins-core || dnf install -y epel-release || true
+            dnf config-manager --set-enabled powertools || dnf config-manager --set-enabled PowerTools || true
+
+            dnf -y makecache
+            dnf install -y git curl jq which ca-certificates \
+              clang gcc gcc-c++ make pkgconfig \
+              openssl-devel gtk3-devel glib2-devel \
+              rpm-build
+
+            # AppIndicator headers (tray). Try legacy libappindicator first, then ayatana.
+            if ! dnf install -y libappindicator-gtk3-devel; then
+              if ! dnf install -y libayatana-appindicator-gtk3-devel; then
+                echo "ERROR: missing appindicator development package (libappindicator-gtk3-devel or libayatana-appindicator-gtk3-devel)." >&2
+                echo "Hint: ensure EPEL is available for this distro." >&2
+                exit 1
+              fi
+            fi
+
+            # Prefer WebKitGTK 4.1 when available; fall back to 4.0 (webkit2gtk3) for older distros.
+            if ! dnf install -y webkit2gtk4.1-devel; then
+              dnf install -y webkit2gtk3-devel
+            fi
+
+            # Set PKG_CONFIG_PATH for Rocky/RHEL-based systems
+            export PKG_CONFIG_PATH="/usr/lib64/pkgconfig:/usr/share/pkgconfig:${PKG_CONFIG_PATH:-}"
+            echo "PKG_CONFIG_PATH=${PKG_CONFIG_PATH}" >> $GITHUB_ENV
+          else
+            echo "Unsupported distro (no apt-get/dnf)." >&2
+            exit 1
+          fi
+
+      - name: Set up Go
+        uses: actions/setup-go@v4
+        with:
+          go-version: "1.25"
+
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            apps/aro_linux/src-tauri/target
+          key: ${{ runner.os }}-cargo-tauri-${{ matrix.artifact_suffix }}-${{ hashFiles('apps/aro_linux/src-tauri/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-tauri-${{ matrix.artifact_suffix }}-
+
+      - name: Build Core Library (Linux x64)
+        run: |
+          set -euo pipefail
+          cd core
+          CGO_ENABLED=1 GOOS=linux GOARCH=amd64 go build \
+            -buildmode=c-shared -trimpath -ldflags="-s -w -buildid=" \
+            -o ../plugins/linux/libstudy.so ./pkg/libstudy
+          ls -lh ../plugins/linux/libstudy.so
+
+      - name: Copy Core Library to Tauri Resources
+        run: |
+          set -euo pipefail
+          mkdir -p apps/aro_linux/src/resources
+          cp plugins/linux/libstudy.so apps/aro_linux/src/resources/
+          ls -lh apps/aro_linux/src/resources/libstudy.so
+
+      - name: Install Tauri CLI
+        run: |
+          set -euo pipefail
+          cargo install tauri-cli --version "^2"
+
+      - name: Build Package (${{ matrix.bundle_target }})
+        working-directory: apps/aro_linux
+        run: |
+          set -euo pipefail
+          CONFIG_JSON="$(jq -nc --arg t "${BUNDLE_TARGET}" '{bundle:{targets:[$t]}}')"
+          cargo tauri build --ci --config "$CONFIG_JSON"
+          ls -lah "src-tauri/target/release/bundle/${BUNDLE_TARGET}" || true
+
+      - name: Upload Package
+        uses: actions/upload-artifact@v4
+        with:
+          name: aro-desktop-${{ matrix.bundle_target }}-${{ matrix.artifact_suffix }}
+          path: apps/aro_linux/src-tauri/target/release/bundle/${{ matrix.bundle_target }}/*.${{ matrix.bundle_target }}
+          if-no-files-found: error
+
+      - uses: actions/checkout@v4
+
+      - name: Install Dependencies
+        run: |
+          set -euo pipefail
+
+          retry() {
+            local attempts="${1:-5}"
+            local sleep_seconds="${2:-3}"
+            shift 2 || true
+            local n=0
+            until "$@"; do
+              n=$((n + 1))
+              if [ "$n" -ge "$attempts" ]; then
+                return 1
+              fi
+              sleep $((sleep_seconds * n))
+            done
+          }
+
+          if [ -f /etc/debian_version ]; then
+            retry 5 3 apt-get -o Acquire::Retries=5 -o Acquire::http::Timeout=60 -o Acquire::https::Timeout=60 update
+            retry 5 3 env DEBIAN_FRONTEND=noninteractive apt-get -o Acquire::Retries=5 -o Acquire::http::Timeout=60 -o Acquire::https::Timeout=60 install -y --no-install-recommends --fix-missing \
+              git curl jq ca-certificates \
+              clang build-essential pkg-config \
+              libssl-dev libgtk-3-dev libglib2.0-dev patchelf \
+              dpkg fakeroot xz-utils
+
+            if ! env DEBIAN_FRONTEND=noninteractive apt-get -o Acquire::Retries=5 -o Acquire::http::Timeout=60 -o Acquire::https::Timeout=60 install -y --no-install-recommends --fix-missing libwebkit2gtk-4.1-dev; then
+              retry 3 3 env DEBIAN_FRONTEND=noninteractive apt-get -o Acquire::Retries=5 -o Acquire::http::Timeout=60 -o Acquire::https::Timeout=60 install -y --no-install-recommends --fix-missing libwebkit2gtk-4.0-dev
+            fi
+
+            if ! env DEBIAN_FRONTEND=noninteractive apt-get -o Acquire::Retries=5 -o Acquire::http::Timeout=60 -o Acquire::https::Timeout=60 install -y --no-install-recommends --fix-missing libayatana-appindicator3-dev; then
+              retry 3 3 env DEBIAN_FRONTEND=noninteractive apt-get -o Acquire::Retries=5 -o Acquire::http::Timeout=60 -o Acquire::https::Timeout=60 install -y --no-install-recommends --fix-missing libappindicator3-dev
+            fi
           elif command -v dnf >/dev/null 2>&1; then
             # Rocky/RHEL often need EPEL for appindicator/ayatana packages.
             dnf install -y epel-release dnf-plugins-core || dnf install -y epel-release || true
