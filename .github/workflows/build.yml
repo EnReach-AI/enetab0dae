@@ -873,6 +873,48 @@ jobs:
           export PKG_CONFIG_PATH="/usr/lib/x86_64-linux-gnu/pkgconfig:/usr/lib/pkgconfig:/usr/share/pkgconfig:${PKG_CONFIG_PATH:-}"
           echo "Build PKG_CONFIG_PATH=$PKG_CONFIG_PATH"
 
+          # Create symlinks for missing library versions (Debian 11 compatibility)
+          # This allows the linker to find webkit2gtk-4.1, javascriptcoregtk-4.1, soup-3.0
+          # by linking to the actual 4.0/2.4 versions that exist
+          LIBDIR="/usr/lib/x86_64-linux-gnu"
+          if [ -d "$LIBDIR" ]; then
+            # webkit2gtk 4.1 -> 4.0
+            for lib in "$LIBDIR"/libwebkit2gtk-4.so* "$LIBDIR"/libwebkit2gtk-4.0* ; do
+              if [ -e "$lib" ]; then
+                basename_lib="$(basename "$lib")"
+                link_name="${basename_lib/-4.0/-4.1}"
+                if [ "$link_name" != "$basename_lib" ]; then
+                  echo "Creating symlink: $LIBDIR/$link_name -> $basename_lib"
+                  ln -sf "$basename_lib" "$LIBDIR/$link_name" || true
+                fi
+              fi
+            done
+            
+            # javascriptcoregtk 4.1 -> 4.0
+            for lib in "$LIBDIR"/libjavascriptcoregtk-4* ; do
+              if [ -e "$lib" ]; then
+                basename_lib="$(basename "$lib")"
+                link_name="${basename_lib/-4.0/-4.1}"
+                if [ "$link_name" != "$basename_lib" ]; then
+                  echo "Creating symlink: $LIBDIR/$link_name -> $basename_lib"
+                  ln -sf "$basename_lib" "$LIBDIR/$link_name" || true
+                fi
+              fi
+            done
+            
+            # libsoup 3.0 -> 2.4
+            for lib in "$LIBDIR"/libsoup-2.4* ; do
+              if [ -e "$lib" ]; then
+                basename_lib="$(basename "$lib")"
+                link_name="${basename_lib/2.4/3.0}"
+                if [ "$link_name" != "$basename_lib" ]; then
+                  echo "Creating symlink: $LIBDIR/$link_name -> $basename_lib"
+                  ln -sf "$basename_lib" "$LIBDIR/$link_name" || true
+                fi
+              fi
+            done
+          fi
+
           # Debian 11 compatibility: provide override .pc files with version >= 2.70
           OVERRIDE_PCDIR="/tmp/pkgconfig-overrides"
           mkdir -p "$OVERRIDE_PCDIR"
@@ -895,35 +937,53 @@ jobs:
           done
 
           # WebKitGTK/JSC: Debian 11 provides 4.0; create 4.1 aliases if missing
-          for pkg in webkit2gtk-4.1 javascriptcoregtk-4.1; do
-            if ! pkg-config --exists "$pkg"; then
-              fallback_pkg="${pkg/-4.1/-4.0}"
-              if pkg-config --exists "$fallback_pkg"; then
-                echo "Creating override for $pkg using $fallback_pkg"
-                cflags="$(pkg-config --cflags "$fallback_pkg")"
-                libs="$(pkg-config --libs "$fallback_pkg")"
-                printf '%s\n' \
-                  "prefix=/usr" \
-                  "exec_prefix=\${prefix}" \
-                  "libdir=/usr/lib/x86_64-linux-gnu" \
-                  "includedir=/usr/include" \
-                  "" \
-                  "Name: ${pkg}" \
-                  "Description: override pc for ${pkg}" \
-                  "Version: 4.1" \
-                  "Libs: ${libs}" \
-                  "Cflags: ${cflags}" \
-                  > "$OVERRIDE_PCDIR/$pkg.pc"
-              fi
+          # We need to replace the library names in the Libs field to point to actual libraries
+          if ! pkg-config --exists "webkit2gtk-4.1"; then
+            if pkg-config --exists "webkit2gtk-4.0"; then
+              echo "Creating override for webkit2gtk-4.1 using webkit2gtk-4.0"
+              cflags="$(pkg-config --cflags "webkit2gtk-4.0")"
+              libs="$(pkg-config --libs "webkit2gtk-4.0" | sed 's/-lwebkit2gtk-4\.0/-lwebkit2gtk-4.0/g')"
+              printf '%s\n' \
+                "prefix=/usr" \
+                "exec_prefix=\${prefix}" \
+                "libdir=/usr/lib/x86_64-linux-gnu" \
+                "includedir=/usr/include" \
+                "" \
+                "Name: webkit2gtk-4.1" \
+                "Description: override pc for webkit2gtk-4.1" \
+                "Version: 4.1" \
+                "Libs: ${libs}" \
+                "Cflags: ${cflags}" \
+                > "$OVERRIDE_PCDIR/webkit2gtk-4.1.pc"
             fi
-          done
+          fi
+
+          if ! pkg-config --exists "javascriptcoregtk-4.1"; then
+            if pkg-config --exists "javascriptcoregtk-4.0"; then
+              echo "Creating override for javascriptcoregtk-4.1 using javascriptcoregtk-4.0"
+              cflags="$(pkg-config --cflags "javascriptcoregtk-4.0")"
+              libs="$(pkg-config --libs "javascriptcoregtk-4.0" | sed 's/-ljavascriptcoregtk-4\.0/-ljavascriptcoregtk-4.0/g')"
+              printf '%s\n' \
+                "prefix=/usr" \
+                "exec_prefix=\${prefix}" \
+                "libdir=/usr/lib/x86_64-linux-gnu" \
+                "includedir=/usr/include" \
+                "" \
+                "Name: javascriptcoregtk-4.1" \
+                "Description: override pc for javascriptcoregtk-4.1" \
+                "Version: 4.1" \
+                "Libs: ${libs}" \
+                "Cflags: ${cflags}" \
+                > "$OVERRIDE_PCDIR/javascriptcoregtk-4.1.pc"
+            fi
+          fi
 
           # libsoup3: Debian 11 provides libsoup-2.4; create libsoup-3.0 alias if missing
           if ! pkg-config --exists "libsoup-3.0"; then
             if pkg-config --exists "libsoup-2.4"; then
               echo "Creating override for libsoup-3.0 using libsoup-2.4"
               cflags="$(pkg-config --cflags "libsoup-2.4")"
-              libs="$(pkg-config --libs "libsoup-2.4")"
+              libs="$(pkg-config --libs "libsoup-2.4" | sed 's/-lsoup-2\.4/-lsoup-2.4/g')"
               printf '%s\n' \
                 "prefix=/usr" \
                 "exec_prefix=\${prefix}" \
