@@ -87,7 +87,7 @@ When the GitHub Actions workflow completes:
 
 1. **Download artifacts**:
    - `linux-packages-ubuntu-22-04` (DEB)
-   - `linux-packages-debian-11` (DEB)
+   - `linux-packages-debian-12` (DEB)
    - `linux-packages-rockylinux-8` (RPM)
 
 2. **Install on target system**:
@@ -162,5 +162,5 @@ When the GitHub Actions workflow completes:
 - libstudy-linux (x64)
 - libstudy-linux-arm64
 - linux-packages-ubuntu-22-04 (DEB)
-- linux-packages-debian-11 (DEB)
+- linux-packages-debian-12 (DEB)
 - linux-packages-rockylinux-8 (RPM)

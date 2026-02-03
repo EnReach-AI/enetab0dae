@@ -336,8 +336,8 @@ jobs:
         include:
           - distro: "ubuntu:22.04"
             artifact_suffix: "ubuntu-22-04"
-          - distro: "debian:11"
-            artifact_suffix: "debian-11"
+          - distro: "debian:12"
+            artifact_suffix: "debian-12"
           - distro: "rockylinux:8"
             artifact_suffix: "rockylinux-8"
     runs-on: ubuntu-latest
@@ -691,9 +691,6 @@ jobs:
         include:
           - distro: "ubuntu:22.04"
             artifact_suffix: "ubuntu-22-04"
-            bundle_target: "deb"
-          - distro: "debian:11"
-            artifact_suffix: "debian-11"
             bundle_target: "deb"
           - distro: "debian:12"
             artifact_suffix: "debian-12"
