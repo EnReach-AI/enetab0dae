@@ -12,6 +12,9 @@ use time::{
 use tauri::Manager;
 use tauri_plugin_shell::ShellExt;
 
+#[cfg(target_os = "macos")]
+const MACOS_TRAY_ICON: tauri::image::Image<'static> = tauri::include_image!("./icons/32x32.png");
+
 const FLUTTER_COMPAT_BRIDGE_JS: &str = r#"
 (function () {
   try {
@@ -215,10 +218,38 @@ pub fn run() {
           Err(e) => log::warn!("macos set_activation_policy failed: {e}"),
         }
 
-        match handle.set_dock_visibility(true) {
-          Ok(_) => log::info!("macos dock visibility set to true"),
-          Err(e) => log::warn!("macos set_dock_visibility(true) failed: {e}"),
-        }
+        // NOTE: Tauri v2 does not expose `set_dock_visibility` on `AppHandle`.
+        // Setting activation policy to `Regular` is sufficient to show in Dock.
+        log::info!("macos dock visibility: using ActivationPolicy::Regular");
+
+        // Create a macOS tray (status bar) icon. Enabling the `tray-icon` feature is not
+        // enough; the tray icon must be instantiated at runtime.
+        let tray_show = tauri::menu::MenuItem::with_id(app, "tray_show", "Show", true, None::<&str>)?;
+        let tray_hidden = tauri::menu::MenuItem::with_id(app, "tray_hidden", "Hide", true, None::<&str>)?;
+        let tray_quit = tauri::menu::MenuItem::with_id(app, "tray_quit", "Quit", true, None::<&str>)?;
+        let tray_menu = tauri::menu::Menu::with_items(app, &[&tray_show, &tray_hidden,   &tray_quit])?;
+
+        let _tray = tauri::tray::TrayIconBuilder::with_id("main")
+          .icon(MACOS_TRAY_ICON)
+          .menu(&tray_menu)
+          .on_menu_event(|app, event| match event.id().as_ref() {
+            "tray_show" => {
+              if let Some(w) = app.get_webview_window("main") {
+                let _ = w.show();
+                let _ = w.set_focus();
+              }
+            }
+            "tray_hidden" => {
+              if let Some(w) = app.get_webview_window("main") {
+                let _ = w.hide();
+            }
+            }
+            "tray_quit" => {
+              app.exit(0);
+            }
+            _ => {}
+          })
+          .build(app)?;
 
         let labels: Vec<String> = handle.webview_windows().keys().cloned().collect();
         log::info!("webview window labels: {labels:?}");
@@ -244,6 +275,20 @@ pub fn run() {
           log::warn!("failed to inject Flutter compat bridge: {e}");
         } else {
           log::info!("Flutter compat bridge injected");
+        }
+      }
+
+      // The window is configured as `visible: false` in `tauri.conf.json`.
+      // On macOS we explicitly show/focus it above; do the same on Linux/Windows
+      // so the app does not run "headless" with no way to open it.
+      #[cfg(any(target_os = "linux", target_os = "windows"))]
+      {
+        if let Some(main) = app.get_webview_window("main") {
+          log::info!("showing main window on startup");
+          let _ = main.show();
+          let _ = main.set_focus();
+        } else {
+          log::warn!("main window not found; cannot show on startup");
         }
       }
 
@@ -423,15 +468,15 @@ async fn init_libstudy_auto(app: tauri::AppHandle) -> Result<String, String> {
           "fixed_port": 22779
         }"#;
         
-        match libstudy::with_lib(|lib, _| lib.start_proxy_worker(HARDCODED_CONFIG)) {
-          Ok(proxy_resp) => {
+        // match libstudy::with_lib(|lib, _| lib.start_proxy_worker(HARDCODED_CONFIG)) {
+        //   Ok(proxy_resp) => {
             
-            log::info!("init_libstudy_auto: proxy worker started, response={}", proxy_resp);
-          }
-          Err(e) => {
-            log::warn!("init_libstudy_auto: failed to auto-start proxy worker: {}", e);
-          }
-        }
+        //     log::info!("init_libstudy_auto: proxy worker started, response={}", proxy_resp);
+        //   }
+        //   Err(e) => {
+        //     log::warn!("init_libstudy_auto: failed to auto-start proxy worker: {}", e);
+        //   }
+        // }
         
         // Check for libstudy updates (only on Linux)
         #[cfg(target_os = "linux")]
