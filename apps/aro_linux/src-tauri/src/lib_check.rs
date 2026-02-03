@@ -137,7 +137,7 @@ pub async fn check_and_update(
         // Cross-device rename fallback.
         fs::copy(&tmp_path, &lib_path)?;
         fs::remove_file(&tmp_path)?;
-        Ok(())
+        Ok::<(), std::io::Error>(())
     })?;
 
     log::info!("libstudy updated to {} at {:?}", latest_version, lib_path);
