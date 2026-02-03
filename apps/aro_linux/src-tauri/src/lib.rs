@@ -588,13 +588,13 @@ async fn get_last_version() -> Result<String, String> {
 struct StartProxyWorkerArgs {
   // Frontends may send either `config_json` or `configJson`.
   #[serde(alias = "configJson")]
-  config_json: String,
+  _config_json: String,
 }
 
 #[tauri::command]
 async fn start_proxy_worker(
   app: tauri::AppHandle,
-  args: StartProxyWorkerArgs,
+  _args: StartProxyWorkerArgs,
 ) -> Result<String, String> {
   // Hardcoded config - ignoring frontend input for now
   const HARDCODED_CONFIG: &str = r#"{
