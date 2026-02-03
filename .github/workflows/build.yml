@@ -336,6 +336,8 @@ jobs:
         include:
           - distro: "ubuntu:22.04"
             artifact_suffix: "ubuntu-22-04"
+          - distro: "debian:11"
+            artifact_suffix: "debian-11"
           - distro: "debian:12"
             artifact_suffix: "debian-12"
           - distro: "rockylinux:8"
@@ -692,6 +694,9 @@ jobs:
           - distro: "ubuntu:22.04"
             artifact_suffix: "ubuntu-22-04"
             bundle_target: "deb"
+          - distro: "debian:11"
+            artifact_suffix: "debian-11"
+            bundle_target: "deb"
           - distro: "debian:12"
             artifact_suffix: "debian-12"
             bundle_target: "deb"
@@ -817,12 +822,41 @@ jobs:
           cp plugins/linux/libstudy.so apps/aro_linux/src/resources/
           ls -lh apps/aro_linux/src/resources/libstudy.so
 
+      - name: Check glib version compatibility
+        id: check_glib
+        run: |
+          set -euo pipefail
+          
+          # Check if pkg-config and glib are available
+          if command -v pkg-config >/dev/null 2>&1 && pkg-config --exists glib-2.0; then
+            GLIB_VERSION=$(pkg-config --modversion glib-2.0)
+            echo "Found glib version: $GLIB_VERSION"
+            
+            # Check if version is >= 2.70 (required by Tauri)
+            GLIB_MAJOR=$(echo "$GLIB_VERSION" | cut -d. -f1)
+            GLIB_MINOR=$(echo "$GLIB_VERSION" | cut -d. -f2)
+            
+            if [ "$GLIB_MAJOR" -gt 2 ] || ([ "$GLIB_MAJOR" -eq 2 ] && [ "$GLIB_MINOR" -ge 70 ]); then
+              echo "compatible=true" >> $GITHUB_OUTPUT
+              echo "✓ glib version $GLIB_VERSION is compatible (>= 2.70)"
+            else
+              echo "compatible=false" >> $GITHUB_OUTPUT
+              echo "✗ glib version $GLIB_VERSION is too old (< 2.70)"
+              echo "::warning::Skipping build for ${{ matrix.distro }} due to incompatible glib version $GLIB_VERSION (required >= 2.70)"
+            fi
+          else
+            echo "compatible=false" >> $GITHUB_OUTPUT
+            echo "::warning::glib-2.0 not found, skipping build for ${{ matrix.distro }}"
+          fi
+
       - name: Install Tauri CLI
+        if: steps.check_glib.outputs.compatible == 'true'
         run: |
           set -euo pipefail
           cargo install tauri-cli --version "^2"
 
       - name: Build Package (${{ matrix.bundle_target }})
+        if: steps.check_glib.outputs.compatible == 'true'
         working-directory: apps/aro_linux
         run: |
           set -euo pipefail
@@ -831,6 +865,7 @@ jobs:
           ls -lah "src-tauri/target/release/bundle/${BUNDLE_TARGET}" || true
 
       - name: Upload Package
+        if: steps.check_glib.outputs.compatible == 'true'
         uses: actions/upload-artifact@v4
         with:
           name: aro-desktop-${{ matrix.bundle_target }}-${{ matrix.artifact_suffix }}

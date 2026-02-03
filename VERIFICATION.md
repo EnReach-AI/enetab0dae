@@ -87,6 +87,7 @@ When the GitHub Actions workflow completes:
 
 1. **Download artifacts**:
    - `linux-packages-ubuntu-22-04` (DEB)
+   - `linux-packages-debian-11` (DEB) - ⚠️ May be skipped if glib < 2.70
    - `linux-packages-debian-12` (DEB)
    - `linux-packages-rockylinux-8` (RPM)
 
@@ -128,6 +129,7 @@ When the GitHub Actions workflow completes:
 | Distribution | Package Type | Webkit Version | Status |
 |-------------|--------------|----------------|--------|
 | Ubuntu 22.04 | DEB | 4.0 or 4.1 | ✅ Supported |
+| Debian 11 | DEB | 4.0 or 4.1 | ⚠️ Limited (glib 2.66 < required 2.70) |
 | Debian 12 | DEB | 4.0 or 4.1 | ✅ Supported |
 | Rocky Linux 8 | RPM | 4.0 | ✅ Supported |
 
@@ -162,5 +164,6 @@ When the GitHub Actions workflow completes:
 - libstudy-linux (x64)
 - libstudy-linux-arm64
 - linux-packages-ubuntu-22-04 (DEB)
+- linux-packages-debian-11 (DEB) - ⚠️ May be skipped
 - linux-packages-debian-12 (DEB)
 - linux-packages-rockylinux-8 (RPM)
