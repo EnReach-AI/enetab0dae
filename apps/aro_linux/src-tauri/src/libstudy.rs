@@ -197,6 +197,10 @@ impl Libstudy {
 
     let lib_name = Self::platform_lib_filename();
 
+    // Prefer a library placed in the current working directory.
+    // On Linux, init_libstudy_auto sets cwd to app_data_dir, which is where auto-updates are stored.
+    paths.push(PathBuf::from(format!("./{lib_name}")));
+
     // Absolute repo-root candidates (dev builds). These remain valid even if the app changes the
     // current working directory (e.g. init_libstudy_auto chdir's into app_data_dir).
     // In release builds this path won't exist and is harmless.
@@ -237,7 +241,6 @@ impl Libstudy {
     }
 
     // 4) current dir and system lookup
-    paths.push(PathBuf::from(format!("./{lib_name}")));
     paths.push(PathBuf::from(lib_name));
 
     // 5) dev repo layout (best-effort)
