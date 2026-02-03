@@ -742,7 +742,7 @@ jobs:
             retry 5 3 env DEBIAN_FRONTEND=noninteractive apt-get -o Acquire::Retries=5 -o Acquire::http::Timeout=60 -o Acquire::https::Timeout=60 install -y --no-install-recommends --fix-missing \
               git curl jq ca-certificates \
               clang build-essential pkg-config \
-              libssl-dev libgtk-3-dev libglib2.0-dev patchelf \
+              libssl-dev libgtk-3-dev libglib2.0-dev libgobject-2.0-dev patchelf \
               dpkg fakeroot xz-utils
 
             if ! env DEBIAN_FRONTEND=noninteractive apt-get -o Acquire::Retries=5 -o Acquire::http::Timeout=60 -o Acquire::https::Timeout=60 install -y --no-install-recommends --fix-missing libwebkit2gtk-4.1-dev; then
@@ -869,7 +869,7 @@ jobs:
             retry 5 3 env DEBIAN_FRONTEND=noninteractive apt-get -o Acquire::Retries=5 -o Acquire::http::Timeout=60 -o Acquire::https::Timeout=60 install -y --no-install-recommends --fix-missing \
               git curl jq ca-certificates \
               clang build-essential pkg-config \
-              libssl-dev libgtk-3-dev libglib2.0-dev patchelf \
+              libssl-dev libgtk-3-dev libglib2.0-dev libgobject-2.0-dev patchelf \
               dpkg fakeroot xz-utils
 
             if ! env DEBIAN_FRONTEND=noninteractive apt-get -o Acquire::Retries=5 -o Acquire::http::Timeout=60 -o Acquire::https::Timeout=60 install -y --no-install-recommends --fix-missing libwebkit2gtk-4.1-dev; then
@@ -879,6 +879,10 @@ jobs:
             if ! env DEBIAN_FRONTEND=noninteractive apt-get -o Acquire::Retries=5 -o Acquire::http::Timeout=60 -o Acquire::https::Timeout=60 install -y --no-install-recommends --fix-missing libayatana-appindicator3-dev; then
               retry 3 3 env DEBIAN_FRONTEND=noninteractive apt-get -o Acquire::Retries=5 -o Acquire::http::Timeout=60 -o Acquire::https::Timeout=60 install -y --no-install-recommends --fix-missing libappindicator3-dev
             fi
+
+            # Set PKG_CONFIG_PATH for Debian-based systems
+            export PKG_CONFIG_PATH="/usr/lib/x86_64-linux-gnu/pkgconfig:/usr/lib/pkgconfig:/usr/share/pkgconfig:${PKG_CONFIG_PATH:-}"
+            echo "PKG_CONFIG_PATH=${PKG_CONFIG_PATH}" >> $GITHUB_ENV
           elif command -v dnf >/dev/null 2>&1; then
             # Rocky/RHEL often need EPEL for appindicator/ayatana packages.
             dnf install -y epel-release dnf-plugins-core || dnf install -y epel-release || true
