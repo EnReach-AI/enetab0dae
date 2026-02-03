@@ -25,7 +25,7 @@
         "alwaysOnTop": true,
         "visibleOnAllWorkspaces": true,
         "skipTaskbar": true,
-        "url": "http://localhost:3000"
+        "url": "https://0ee63895-262b.ipproxy.aro.network/desktop/"
       }
     ],
     "security": {
