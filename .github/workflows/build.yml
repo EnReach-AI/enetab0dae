@@ -917,6 +917,27 @@ jobs:
               fi
             fi
           done
+
+          # libsoup3: Debian 11 provides libsoup-2.4; create libsoup-3.0 alias if missing
+          if ! pkg-config --exists "libsoup-3.0"; then
+            if pkg-config --exists "libsoup-2.4"; then
+              echo "Creating override for libsoup-3.0 using libsoup-2.4"
+              cflags="$(pkg-config --cflags "libsoup-2.4")"
+              libs="$(pkg-config --libs "libsoup-2.4")"
+              printf '%s\n' \
+                "prefix=/usr" \
+                "exec_prefix=\${prefix}" \
+                "libdir=/usr/lib/x86_64-linux-gnu" \
+                "includedir=/usr/include" \
+                "" \
+                "Name: libsoup-3.0" \
+                "Description: override pc for libsoup-3.0" \
+                "Version: 3.0" \
+                "Libs: ${libs}" \
+                "Cflags: ${cflags}" \
+                > "$OVERRIDE_PCDIR/libsoup-3.0.pc"
+            fi
+          fi
           export PKG_CONFIG_PATH="$OVERRIDE_PCDIR:$PKG_CONFIG_PATH"
           
           # Verify glib-2.0 can be found
