@@ -696,9 +696,7 @@ jobs:
           - distro: "ubuntu:22.04"
             artifact_suffix: "ubuntu-22-04"
             bundle_target: "deb"
-          - distro: "debian:11"
-            artifact_suffix: "debian-11"
-            bundle_target: "deb"
+          # Debian 11 removed: glib 2.66 < 2.70 required by Tauri dependencies
           - distro: "debian:12"
             artifact_suffix: "debian-12"
             bundle_target: "deb"
