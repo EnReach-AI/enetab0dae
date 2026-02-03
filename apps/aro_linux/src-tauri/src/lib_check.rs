@@ -1,5 +1,6 @@
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
+use std::cmp::Ordering;
 use std::path::PathBuf;
 use std::{fs, io::Cursor};
 
@@ -34,8 +35,22 @@ pub async fn check_and_update(
     latest_version_map: serde_json::Value,
     app_data_dir: PathBuf,
 ) -> Result<UpdateResult> {
-    let current_version = extract_version(&current_version_map).unwrap_or("0.0.0");
-    let latest_version = extract_version(&latest_version_map).unwrap_or("0.0.0");
+    let current_version = extract_version(&current_version_map);
+    let latest_version = extract_version(&latest_version_map);
+
+    // If we can't determine versions, do not update (safe default).
+    // This prevents accidental downgrades (e.g. treating current as 0.0.0).
+    let (Some(current_version), Some(latest_version)) = (current_version, latest_version) else {
+        log::warn!(
+            "libstudy update: unable to extract versions; skipping update. current.data={:?} latest.data={:?}",
+            current_version_map.get("data"),
+            latest_version_map.get("data")
+        );
+        return Ok(UpdateResult {
+            updated: false,
+            message: "Unable to determine current/latest version; skipping update".to_string(),
+        });
+    };
 
     log::info!(
         "Checking libstudy update: current={}, latest={}",
@@ -44,11 +59,42 @@ pub async fn check_and_update(
     );
 
     // Compare versions using semver when possible. Never downgrade.
-    if !is_update_needed(current_version, latest_version) {
-        return Ok(UpdateResult {
-            updated: false,
-            message: format!("Already up to date ({})", current_version),
-        });
+    match compare_versions(&current_version, &latest_version) {
+        Some(Ordering::Less) => {
+            // ok, proceed with update
+        }
+        Some(Ordering::Equal) => {
+            log::info!("libstudy update: skip (already up to date): current==latest=={}", current_version);
+            return Ok(UpdateResult {
+                updated: false,
+                message: format!("Already up to date ({})", current_version),
+            });
+        }
+        Some(Ordering::Greater) => {
+            log::warn!(
+                "libstudy update: skip (downgrade prevented): current={} latest={}",
+                current_version,
+                latest_version
+            );
+            return Ok(UpdateResult {
+                updated: false,
+                message: format!(
+                    "Downgrade prevented (current {} > latest {})",
+                    current_version, latest_version
+                ),
+            });
+        }
+        None => {
+            log::warn!(
+                "libstudy update: unable to compare versions (non-semver); skipping update. current={} latest={}",
+                current_version,
+                latest_version
+            );
+            return Ok(UpdateResult {
+                updated: false,
+                message: "Unable to compare versions; skipping update".to_string(),
+            });
+        }
     }
 
     let download_url = latest_version_map
@@ -98,44 +144,47 @@ pub async fn check_and_update(
 
     Ok(UpdateResult {
         updated: true,
-        message: format!(
-            "Updated from {} to {}",
-            current_version, latest_version
-        ),
+        message: format!("Updated from {} to {}", current_version, latest_version),
     })
 }
 
-fn extract_version(map: &serde_json::Value) -> Option<&str> {
+fn extract_version(map: &serde_json::Value) -> Option<String> {
     // Common shapes we have seen:
-    // 1) { code:200, data:"0.0.7" }
-    // 2) { code:200, data:{ version:"0.0.3", ... } }
+    // 1) {"code":200, "data":"0.0.7"}
+    // 2) {"code":200, "data":{"version":"0.0.3", ... }}
+    // 3) {"code":200, "data":{"data":"0.0.7"}} (nested variants)
     let data = map.get("data")?;
-    if let Some(s) = data.as_str() {
-        let s = s.trim();
-        return (!s.is_empty()).then_some(s);
-    }
-    let s = data.get("version")?.as_str()?.trim();
-    (!s.is_empty()).then_some(s)
+
+    let raw = match data {
+        serde_json::Value::String(s) => s.as_str(),
+        serde_json::Value::Number(n) => return Some(n.to_string()),
+        serde_json::Value::Object(obj) => {
+            if let Some(serde_json::Value::String(s)) = obj.get("version") {
+                s.as_str()
+            } else if let Some(serde_json::Value::String(s)) = obj.get("data") {
+                s.as_str()
+            } else {
+                return None;
+            }
+        }
+        _ => return None,
+    };
+
+    let normalized = normalize_version(raw).to_string();
+    (!normalized.is_empty()).then_some(normalized)
 }
 
 fn normalize_version(v: &str) -> &str {
     v.trim().strip_prefix('v').unwrap_or(v.trim())
 }
 
-fn is_update_needed(current: &str, latest: &str) -> bool {
+fn compare_versions(current: &str, latest: &str) -> Option<Ordering> {
     let current_n = normalize_version(current);
     let latest_n = normalize_version(latest);
 
     match (Version::parse(current_n), Version::parse(latest_n)) {
-        (Ok(c), Ok(l)) => c < l,
-        _ => {
-            log::warn!(
-                "libstudy update: non-semver compare fallback current={} latest={}",
-                current,
-                latest
-            );
-            current_n < latest_n
-        }
+        (Ok(c), Ok(l)) => Some(c.cmp(&l)),
+        _ => None,
     }
 }
 
