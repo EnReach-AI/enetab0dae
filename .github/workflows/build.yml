@@ -824,7 +824,8 @@ jobs:
       - name: Install Tauri CLI
         run: |
           set -euo pipefail
-          cargo install tauri-cli --version "^2"
+          # Keep tauri-cli aligned with the tauri crate used by the app to avoid bundler mismatches.
+          cargo install tauri-cli --version "2.0.6" --locked
 
       - name: Build Package (${{ matrix.bundle_target }})
         working-directory: apps/aro_linux

@@ -2,6 +2,13 @@
   "bundle": {
     "targets": [
       "deb"
-    ]
+    ],
+    "linux": {
+      "deb": {
+        "postInstallScript": "installer/deb/postinst",
+        "preRemoveScript": "installer/deb/prerm",
+        "postRemoveScript": "installer/deb/postrm"
+      }
+    }
   }
 }

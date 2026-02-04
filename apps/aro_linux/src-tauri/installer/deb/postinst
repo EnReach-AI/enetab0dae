@@ -1,0 +1,7 @@
+#!/bin/sh
+set -eu
+
+# ARO Desktop (Tauri) - Debian post-install script
+# libstudy is stored/updated in the user's app data directory at runtime.
+
+exit 0

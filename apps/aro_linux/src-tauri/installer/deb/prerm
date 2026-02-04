@@ -1,0 +1,7 @@
+#!/bin/sh
+set -eu
+
+# ARO Desktop (Tauri) - Debian pre-remove script
+# Nothing to clean up at the system level.
+
+exit 0

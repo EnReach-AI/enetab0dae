@@ -1,0 +1,40 @@
+#!/bin/sh
+set -eu
+
+# ARO Desktop (Tauri) - Debian post-remove script
+#
+# NOTE:
+# - `remove`: package removed, user data is typically kept.
+# - `purge`: configuration/user-data cleanup.
+#
+# We remove per-user app data on purge:
+#   ~/.local/share/com.aro.ARONetwork/
+
+APP_ID="com.aro.ARONetwork"
+REL_DIR=".local/share/${APP_ID}"
+
+remove_dir_under_home() {
+  home_dir="$1"
+  if [ -n "$home_dir" ] && [ -d "$home_dir" ]; then
+    target="${home_dir}/${REL_DIR}"
+    if [ -d "$target" ]; then
+      rm -rf "$target" || true
+    fi
+  fi
+}
+
+case "${1:-}" in
+  purge)
+    # Best-effort: remove for all local users under /home and root.
+    for d in /home/* /root; do
+      if [ -d "$d" ]; then
+        remove_dir_under_home "$d"
+      fi
+    done
+    ;;
+  remove|upgrade|failed-upgrade|abort-install|abort-upgrade|disappear)
+    # Keep user data by default.
+    ;;
+esac
+
+exit 0
