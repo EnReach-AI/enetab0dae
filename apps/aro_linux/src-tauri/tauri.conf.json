@@ -46,7 +46,11 @@
       "icons/icon.ico"
     ],
     "linux": {
-      "deb": {}
+      "deb": {
+        "postInstallScript": "packaging/linux/postinst.sh",
+        "preRemoveScript": "packaging/linux/prerm.sh",
+        "postRemoveScript": "packaging/linux/postrm.sh"
+      }
     }
   }
 }

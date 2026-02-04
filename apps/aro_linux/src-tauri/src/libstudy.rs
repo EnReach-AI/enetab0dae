@@ -157,7 +157,7 @@ impl Libstudy {
     }
   }
 
-  fn platform_lib_filename() -> &'static str {
+  pub fn platform_lib_filename() -> &'static str {
     #[cfg(target_os = "windows")]
     {
       return "libstudy.dll";
@@ -211,9 +211,6 @@ impl Libstudy {
     if let Some(exe_dir) = Self::exe_dir() {
       #[cfg(target_os = "linux")]
       {
-        // Tauri Linux bundle layout: exe at /usr/bin/app, resources at /usr/lib/ARO Desktop/resources/
-        paths.push(PathBuf::from("/usr/lib/ARO Desktop/resources").join(lib_name));
-        
         paths.push(exe_dir.join("lib").join(lib_name));
         paths.push(exe_dir.join(lib_name));
         paths.push(exe_dir.join("resources").join(lib_name));

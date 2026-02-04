@@ -12,6 +12,72 @@ use time::{
 use tauri::Manager;
 use tauri_plugin_shell::ShellExt;
 
+#[cfg(target_os = "linux")]
+use tauri_plugin_dialog::DialogExt;
+
+fn ensure_libstudy_in_app_data(app: &tauri::AppHandle) -> Result<std::path::PathBuf, String> {
+  let app_data_dir = app
+    .path()
+    .app_data_dir()
+    .map_err(|e| format!("failed to resolve app_data_dir: {e}"))?;
+
+  std::fs::create_dir_all(&app_data_dir)
+    .map_err(|e| format!("failed to create app_data_dir {app_data_dir:?}: {e}"))?;
+
+  let lib_name = libstudy::Libstudy::platform_lib_filename();
+  let dst = app_data_dir.join(lib_name);
+  if dst.exists() {
+    log::info!("libstudy: app_data library already exists at {dst:?}");
+    return Ok(dst);
+  }
+
+  let resource_dir = app
+    .path()
+    .resource_dir()
+    .map_err(|e| format!("failed to resolve resource_dir: {e}"))?;
+
+  let candidates = [
+    resource_dir.join(lib_name),
+    resource_dir.join("resources").join(lib_name),
+    std::path::PathBuf::from("resources").join(lib_name),
+  ];
+
+  for src in candidates {
+    if src.exists() {
+      log::info!("libstudy: copying bundled library from {src:?} to {dst:?}");
+      std::fs::copy(&src, &dst)
+        .map_err(|e| format!("failed to copy libstudy from {src:?} to {dst:?}: {e}"))?;
+
+      #[cfg(target_os = "linux")]
+      {
+        use std::os::unix::fs::PermissionsExt;
+        if let Ok(meta) = std::fs::metadata(&src) {
+          let _ = std::fs::set_permissions(&dst, std::fs::Permissions::from_mode(meta.permissions().mode()));
+        }
+      }
+
+      return Ok(dst);
+    }
+  }
+
+  Err(format!(
+    "libstudy was not found in resources. resource_dir={resource_dir:?} expected={lib_name}"
+  ))
+}
+
+fn set_default_libstudy_override(app: &tauri::AppHandle) {
+  match ensure_libstudy_in_app_data(app) {
+    Ok(p) => {
+      libstudy::set_override_path(Some(p.clone()));
+      log::info!("libstudy: default override path set to {p:?} (updates will replace this file)");
+    }
+    Err(e) => {
+      // Do not hard-fail app startup; libstudy can still load from other candidates.
+      log::warn!("libstudy: unable to prepare app_data library: {e}");
+    }
+  }
+}
+
 #[cfg(target_os = "macos")]
 const MACOS_TRAY_ICON: tauri::image::Image<'static> = tauri::include_image!("./icons/32x32.png");
 
@@ -157,9 +223,12 @@ const FLUTTER_COMPAT_BRIDGE_JS: &str = r#"
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-  tauri::Builder::default()
-    .plugin(tauri_plugin_shell::init())
-    .setup(|app| {
+  let builder = tauri::Builder::default().plugin(tauri_plugin_shell::init());
+
+  #[cfg(target_os = "linux")]
+  let builder = builder.plugin(tauri_plugin_dialog::init());
+
+  builder.setup(|app| {
       // Always enable file logging so crashes and native errors are persisted.
       let log_level = if cfg!(debug_assertions) {
         log::LevelFilter::Debug
@@ -207,6 +276,10 @@ pub fn run() {
       log::info!("==========================================================");
 
       install_panic_hook();
+
+      // Ensure libstudy is always loaded from the same per-user location.
+      // This makes install + update paths consistent: ~/.local/share/<identifier>/libstudy.so
+      set_default_libstudy_override(&app.handle());
 
       #[cfg(target_os = "macos")]
       {
@@ -416,6 +489,12 @@ fn init_libstudy(api_base_url: Option<String>, ws_base_url: Option<String>) -> R
 
 #[tauri::command]
 async fn init_libstudy_auto(app: tauri::AppHandle) -> Result<String, String> {
+  // Ensure the per-user copy exists and prefer it for loading.
+  set_default_libstudy_override(&app);
+
+  #[cfg(target_os = "linux")]
+  let app_for_update_prompt = app.clone();
+
   // Mirror Flutter behavior: set working dir to app support dir before init,
   // so libstudy can store keypair files in a writable location.
   let app_data_dir = app
@@ -468,15 +547,15 @@ async fn init_libstudy_auto(app: tauri::AppHandle) -> Result<String, String> {
           "fixed_port": 22779
         }"#;
         
-        // match libstudy::with_lib(|lib, _| lib.start_proxy_worker(HARDCODED_CONFIG)) {
-        //   Ok(proxy_resp) => {
+        match libstudy::with_lib(|lib, _| lib.start_proxy_worker(HARDCODED_CONFIG)) {
+          Ok(proxy_resp) => {
             
-        //     log::info!("init_libstudy_auto: proxy worker started, response={}", proxy_resp);
-        //   }
-        //   Err(e) => {
-        //     log::warn!("init_libstudy_auto: failed to auto-start proxy worker: {}", e);
-        //   }
-        // }
+            log::info!("init_libstudy_auto: proxy worker started, response={}", proxy_resp);
+          }
+          Err(e) => {
+            log::warn!("init_libstudy_auto: failed to auto-start proxy worker: {}", e);
+          }
+        }
         
         // Check for libstudy updates (only on Linux)
         #[cfg(target_os = "linux")]
@@ -495,12 +574,25 @@ async fn init_libstudy_auto(app: tauri::AppHandle) -> Result<String, String> {
                   
                   // Spawn update check in background
                   let app_data = app_data_dir2.clone();
+                  let app_for_update_prompt2 = app_for_update_prompt.clone();
                   tauri::async_runtime::spawn(async move {
                     match lib_check::check_and_update(current_map, latest_map, app_data).await {
                       Ok(update_result) => {
                         log::info!("libstudy update result: {:?}", update_result);
                         if update_result.updated {
                           log::warn!("libstudy was updated! Restart required to take effect.");
+
+                          // Native prompt (Tauri dialog) so the user sees it even without DevTools.
+                          let msg = format!(
+                            "Update completed. Please restart the app to take effect.。\n{}",
+                            update_result.message
+                          );
+                          // Non-blocking. Ignore errors if dialog backend is unavailable.
+                          let _ = app_for_update_prompt2
+                            .dialog()
+                            .message(msg)
+                            .title("ARO Desktop")
+                            .show(|_| {});
                         }
                       }
                       Err(e) => {
@@ -641,6 +733,9 @@ async fn start_proxy_worker(
   app: tauri::AppHandle,
   _args: StartProxyWorkerArgs,
 ) -> Result<String, String> {
+  // Ensure the per-user copy exists and prefer it for loading.
+  set_default_libstudy_override(&app);
+
   // Hardcoded config - ignoring frontend input for now
   const HARDCODED_CONFIG: &str = r#"{
     "sn": "OLKN4YY4XA9096W5",
