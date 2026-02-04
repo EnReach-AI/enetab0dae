@@ -824,8 +824,9 @@ jobs:
       - name: Install Tauri CLI
         run: |
           set -euo pipefail
-          # Keep tauri-cli aligned with the tauri crate used by the app to avoid bundler mismatches.
-          cargo install tauri-cli --version "2.0.6" --locked
+          # NOTE: tauri-cli does not publish every tauri crate patch version (e.g. 2.0.6 doesn't exist on crates.io).
+          # Pin to a known-good v2 CLI release to avoid unexpected breaking changes.
+          cargo install tauri-cli --version "2.2.7" --locked
 
       - name: Build Package (${{ matrix.bundle_target }})
         working-directory: apps/aro_linux
