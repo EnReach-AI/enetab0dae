@@ -613,7 +613,7 @@ jobs:
           $installerScript = @"
           #define MyAppName "ARO Desktop"
           #define MyAppVersion "1.0.0"
-          #define MyAppExeName "aro_desktop.exe"
+          #define MyAppExeName "ARO Desktop.exe"
           #define SourcePath ".\build\windows\x64\runner\Release\"
 
           [Setup]

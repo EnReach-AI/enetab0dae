@@ -1,7 +1,7 @@
 [package]
-name = "ARO"
+name = "ARO Desktop"
 version = "0.1.0"
-description = "ARO Linux"
+description = "ARO Desktop"
 authors = ['leecolton167@gmail.com']
 license = ""
 repository = ""
