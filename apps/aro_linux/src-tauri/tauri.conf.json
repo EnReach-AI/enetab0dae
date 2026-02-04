@@ -35,6 +35,7 @@
   "bundle": {
     "active": true,
     "targets": "all",
+    "shortDescription": "ARO Desktop",
     "resources": [
       "resources/*"
     ],
@@ -47,9 +48,19 @@
     ],
     "linux": {
       "deb": {
+        "desktopTemplate": "packaging/linux/aro-desktop.desktop.hbs",
+        "files": {
+          "packaging/linux/com.aro.ARONetwork.metainfo.xml": "/usr/share/metainfo/com.aro.ARONetwork.metainfo.xml"
+        },
         "postInstallScript": "packaging/linux/postinst.sh",
         "preRemoveScript": "packaging/linux/prerm.sh",
         "postRemoveScript": "packaging/linux/postrm.sh"
+      },
+      "rpm": {
+        "desktopTemplate": "packaging/linux/aro-desktop.desktop.hbs",
+        "files": {
+          "packaging/linux/com.aro.ARONetwork.metainfo.xml": "/usr/share/metainfo/com.aro.ARONetwork.metainfo.xml"
+        }
       }
     }
   }

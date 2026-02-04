@@ -45,8 +45,7 @@ fn ensure_libstudy_in_app_data(app: &tauri::AppHandle) -> Result<std::path::Path
   for src in candidates {
     if src.exists() {
       log::info!("libstudy: copying bundled library from {src:?} to {dst:?}");
-      std::fs::copy(&src, &dst)
-        .map_err(|e| format!("failed to copy libstudy from {src:?} to {dst:?}: {e}"))?;
+    
 
       #[cfg(target_os = "linux")]
       {
@@ -584,7 +583,7 @@ async fn init_libstudy_auto(app: tauri::AppHandle) -> Result<String, String> {
 
                           // Native prompt (Tauri dialog) so the user sees it even without DevTools.
                           let msg = format!(
-                            "Update completed. Please restart the app to take effect.。\n{}",
+                            "Update completed. Please restart the app to take effect.\n{}",
                             update_result.message
                           );
                           // Non-blocking. Ignore errors if dialog backend is unavailable.
