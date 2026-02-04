@@ -828,6 +828,11 @@ jobs:
           # Pin to a known-good v2 CLI release to avoid unexpected breaking changes.
           cargo install tauri-cli --version "2.2.7" --locked
 
+      - name: Ensure Debian scripts executable
+        run: |
+          set -euo pipefail
+          chmod +x apps/aro_linux/src-tauri/installer/deb/*
+
       - name: Build Package (${{ matrix.bundle_target }})
         working-directory: apps/aro_linux
         run: |

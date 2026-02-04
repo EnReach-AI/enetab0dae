@@ -23,6 +23,24 @@ remove_dir_under_home() {
   fi
 }
 
+remove_dir_for_user() {
+  user="$1"
+  if [ -z "$user" ] || [ "$user" = "root" ]; then
+    return 0
+  fi
+  if command -v getent >/dev/null 2>&1; then
+    home_dir="$(getent passwd "$user" | cut -d: -f6 || true)"
+    if [ -n "$home_dir" ]; then
+      remove_dir_under_home "$home_dir"
+      return 0
+    fi
+  fi
+  # Fallback: common home location.
+  if [ -d "/home/$user" ]; then
+    remove_dir_under_home "/home/$user"
+  fi
+}
+
 case "${1:-}" in
   purge)
     # Best-effort: remove for all local users under /home and root.
@@ -33,7 +51,18 @@ case "${1:-}" in
     done
     ;;
   remove|upgrade|failed-upgrade|abort-install|abort-upgrade|disappear)
-    # Keep user data by default.
+    # User requested: remove per-user app data on uninstall too.
+    # Prefer cleaning only the invoking user (sudo) if we can detect it.
+    if [ -n "${SUDO_USER:-}" ]; then
+      remove_dir_for_user "$SUDO_USER"
+    else
+      # Fallback: remove for all local users under /home and root.
+      for d in /home/* /root; do
+        if [ -d "$d" ]; then
+          remove_dir_under_home "$d"
+        fi
+      done
+    fi
     ;;
 esac
 
