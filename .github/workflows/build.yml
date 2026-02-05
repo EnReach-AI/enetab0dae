@@ -119,6 +119,11 @@ jobs:
         with:
           go-version: "1.25"
 
+      - name: Configure private repository access
+        run: |
+          go env -w GOPRIVATE=github.com/aro-network/*
+          git config --global url."git@github.com:".insteadOf "https://github.com/"
+
       - name: Build Linux x64
         run: |
           cd core
@@ -152,6 +157,11 @@ jobs:
         uses: actions/setup-go@v4
         with:
           go-version: "1.25"
+
+      - name: Configure private repository access
+        run: |
+          go env -w GOPRIVATE=github.com/aro-network/*
+          git config --global url."git@github.com:".insteadOf "https://github.com/"
 
       - name: Install ARM64 cross-compiler
         run: sudo apt-get update && sudo apt-get install -y gcc-aarch64-linux-gnu
@@ -190,6 +200,11 @@ jobs:
         with:
           go-version: "1.25"
 
+      - name: Configure private repository access
+        run: |
+          go env -w GOPRIVATE=github.com/aro-network/*
+          git config --global url."git@github.com:".insteadOf "https://github.com/"
+
       - name: Install MinGW
         run: sudo apt-get update && sudo apt-get install -y mingw-w64
 
@@ -227,6 +242,11 @@ jobs:
         with:
           go-version: "1.25"
 
+      - name: Configure private repository access
+        run: |
+          go env -w GOPRIVATE=github.com/aro-network/*
+          git config --global url."git@github.com:".insteadOf "https://github.com/"
+
       - name: Build macOS ARM64
         run: |
           cd core
@@ -260,6 +280,11 @@ jobs:
         uses: actions/setup-go@v4
         with:
           go-version: "1.25"
+
+      - name: Configure private repository access
+        run: |
+          go env -w GOPRIVATE=github.com/aro-network/*
+          git config --global url."git@github.com:".insteadOf "https://github.com/"
 
       - name: Set up Android NDK
         uses: nttld/setup-ndk@v1
@@ -300,6 +325,11 @@ jobs:
         uses: actions/setup-go@v4
         with:
           go-version: "1.25"
+
+      - name: Configure private repository access
+        run: |
+          go env -w GOPRIVATE=github.com/aro-network/*
+          git config --global url."git@github.com:".insteadOf "https://github.com/"
 
       - name: Build iOS ARM64
         run: |
