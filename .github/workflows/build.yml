@@ -515,7 +515,7 @@ jobs:
           if-no-files-found: warn
 
   build-linux2:
-    needs: prepare
+    needs: [prepare, build-core-linux, build-core-linux-arm64]
     if: needs.prepare.outputs.aro_linux == 'true'
     name: Build Tauri Linux Packages (ARO Desktop)
     strategy:
@@ -547,6 +547,25 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
+
+      - name: Download Linux x64 Core Library
+        uses: actions/download-artifact@v4
+        with:
+          name: libstudy-linux
+          path: plugins/linux
+
+      - name: Download Linux ARM64 Core Library
+        uses: actions/download-artifact@v4
+        with:
+          name: libstudy-linux-arm64
+          path: plugins/linux-arm64
+
+      - name: Copy Core Libraries to Tauri Resources
+        run: |
+          set -euo pipefail
+          mkdir -p apps/aro_linux/src-tauri/resources
+          cp plugins/linux/libstudy.so apps/aro_linux/src-tauri/resources/
+          ls -lh apps/aro_linux/src-tauri/resources/libstudy.so
 
       - name: Install Dependencies
         run: |
@@ -651,22 +670,6 @@ jobs:
           key: ${{ runner.os }}-cargo-tauri-${{ matrix.artifact_suffix }}-${{ hashFiles('apps/aro_linux/src-tauri/Cargo.lock') }}
           restore-keys: |
             ${{ runner.os }}-cargo-tauri-${{ matrix.artifact_suffix }}-
-
-      - name: Build Core Library (Linux x64)
-        run: |
-          set -euo pipefail
-          cd core
-          CGO_ENABLED=1 GOOS=linux GOARCH=amd64 go build \
-            -buildmode=c-shared -trimpath -ldflags="-s -w -buildid=" \
-            -o ../plugins/linux/libstudy.so ./pkg/libstudy
-          ls -lh ../plugins/linux/libstudy.so
-
-      - name: Copy Core Library to Tauri Resources
-        run: |
-          set -euo pipefail
-          mkdir -p apps/aro_linux/src-tauri/resources
-          cp plugins/linux/libstudy.so apps/aro_linux/src-tauri/resources/
-          ls -lh apps/aro_linux/src-tauri/resources/libstudy.so
 
       - name: Install Tauri CLI
         run: |
