@@ -796,11 +796,12 @@ jobs:
 
       - name: Downgrade glib-sys for Rocky Linux 8
         if: matrix.distro == 'rockylinux:8'
+        working-directory: apps/aro_linux/src-tauri
         run: |
           set -euo pipefail
           cargo update -p glib-sys --precise 0.18.0
           # Verify the version in Cargo.lock
-          grep -A 2 'name = "glib-sys"' apps/aro_linux/src-tauri/Cargo.lock | grep 'version = "0.18.0"'
+          grep -A 2 'name = "glib-sys"' Cargo.lock | grep 'version = "0.18.0"'
 
 
       - name: Cache Cargo
