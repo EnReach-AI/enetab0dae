@@ -402,3 +402,5 @@ func GetLastVersion() *C.char {
 // 所有功能都通过导出的 C 函数实现
 func main() {
 }
+
+
