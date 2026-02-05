@@ -693,14 +693,14 @@ jobs:
           - distro: "ubuntu:22.04"
             artifact_suffix: "ubuntu-22-04"
             bundle_target: "deb"
-          - distro: "debian:11"
-            artifact_suffix: "debian-11"
-            bundle_target: "deb"
+
           - distro: "debian:12"
             artifact_suffix: "debian-12"
             bundle_target: "deb"
-          - distro: "rockylinux:8"
-            artifact_suffix: "rockylinux-8"
+          # NOTE: Tauri (gtk-rs/glib-sys 0.18.x) requires GLib >= 2.70.
+          # Rocky Linux 8 ships GLib 2.56, so building there will fail.
+          - distro: "rockylinux:9"
+            artifact_suffix: "rockylinux-9"
             bundle_target: "rpm"
     runs-on: ubuntu-latest
     container:
@@ -759,10 +759,17 @@ jobs:
             dnf config-manager --set-enabled powertools || dnf config-manager --set-enabled PowerTools || true
 
             dnf -y makecache
+            # pkg-config binary is provided by pkgconf-pkg-config on RHEL/Rocky.
             dnf install -y git curl jq which ca-certificates \
-              clang gcc gcc-c++ make pkgconfig \
-              openssl-devel gtk3-devel glib2-devel \
+              clang gcc gcc-c++ make pkgconf-pkg-config \
+              openssl-devel gtk3-devel glib2 glib2-devel \
               rpm-build
+
+            # Diagnostics: ensure glib-2.0.pc is present and visible to pkg-config.
+            command -v pkg-config
+            pkg-config --version
+            rpm -q glib2 glib2-devel || true
+            ls -lah /usr/lib64/pkgconfig/glib-2.0.pc /usr/lib/pkgconfig/glib-2.0.pc 2>/dev/null || true
 
             # AppIndicator headers (tray). Try legacy libappindicator first, then ayatana.
             if ! dnf install -y libappindicator-gtk3-devel; then
@@ -779,7 +786,7 @@ jobs:
             fi
 
             # Set PKG_CONFIG_PATH for Rocky/RHEL-based systems
-            export PKG_CONFIG_PATH="/usr/lib64/pkgconfig:/usr/share/pkgconfig:${PKG_CONFIG_PATH:-}"
+            export PKG_CONFIG_PATH="/usr/lib64/pkgconfig:/usr/lib/pkgconfig:/usr/share/pkgconfig:/usr/local/lib/pkgconfig:/usr/local/share/pkgconfig:${PKG_CONFIG_PATH:-}"
             echo "PKG_CONFIG_PATH=${PKG_CONFIG_PATH}" >> $GITHUB_ENV
           else
             echo "Unsupported distro (no apt-get/dnf)." >&2
