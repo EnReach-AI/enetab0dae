@@ -6,6 +6,7 @@ const (
 	PROGRAM_APP OtaProgram = "aro-app"
 )
 
+
 const (
 	VERSION string = "0.0.8"
 )
