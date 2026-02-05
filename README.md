@@ -215,4 +215,7 @@ plugins/
 - `API_BASE`: API 服务地址（默认：https://testnet-api.aro.network）
 - `WS_URL`: WebSocket 服务地址（默认：https://testnet-ws.aro.network）
 
+构建测试test:
+gcc -Wall -g -o test_libstudy test_libstudy.c -ldl
 
+./test_libstudy
