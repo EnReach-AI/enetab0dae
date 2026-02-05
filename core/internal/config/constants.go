@@ -5,7 +5,6 @@ package config
 // API 相关配置 key
 const (
 	KeyAPIURL   = "API_URL"
-	KeyWSURL    = "WS_URL"
 	KeyClientId = "CLIENT_ID"
 	KeySN       = "SERIAL_NUMBER"
 	USER_ID     = "USER_ID"
@@ -38,11 +37,6 @@ const (
 	KeyDebug      = "DEBUG"
 )
 
-// 环境值
-const (
-	EnvTestnet = "testnet"
-	EnvMainnet = "mainnet"
-)
 
 // 日志级别
 const (

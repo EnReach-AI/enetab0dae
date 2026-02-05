@@ -80,6 +80,7 @@ aro-ext-app/core/.env
 **/aro_rsa
 **/aro_rsa.pub
 
+core/test_c/
 
 .history
 

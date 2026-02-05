@@ -29,7 +29,6 @@ func TestGetConfigValue(t *testing.T) {
 		expectedType string
 	}{
 		{KeyAPIURL, "string"},
-		{KeyWSURL, "string"},
 		{KeyLogLevel, "string"},
 		{KeyTimeout, "int"},
 	}
@@ -110,7 +109,6 @@ func TestConfigConstants(t *testing.T) {
 		expected string
 	}{
 		{KeyAPIURL, "API_URL"},
-		{KeyWSURL, "WS_URL"},
 		{KeyLogLevel, "LOG_LEVEL"},
 		{KeyTimeout, "TIMEOUT"},
 		{KeyRetryCount, "RETRY_COUNT"},
@@ -135,10 +133,6 @@ func TestDefaultValues(t *testing.T) {
 	// 验证重要的默认值
 	if cfg.Get(KeyAPIURL) != "https://testnet-api.aro.network" {
 		t.Error("API_URL default value mismatch")
-	}
-
-	if cfg.Get(KeyWSURL) != "https://testnet-ws.aro.network" {
-		t.Error("WS_URL default value mismatch")
 	}
 
 	if cfg.GetInt(KeyTimeout) != 30 {

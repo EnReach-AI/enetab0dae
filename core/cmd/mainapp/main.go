@@ -4,9 +4,11 @@ import (
 	"aro-ext-app/core/internal/api_client"
 	"aro-ext-app/core/internal/constant"
 	"aro-ext-app/core/internal/crypto"
+	"aro-ext-app/core/internal/starter"
 	"aro-ext-app/core/internal/storage"
 	"log"
 	"runtime"
+
 )
 
 // Global variables
@@ -22,6 +24,7 @@ var (
 func main() {
 	log.Print(runtime.GOOS)
 	log.Println(runtime.GOARCH)
+	starter.RunBackendThread()
 }
 
 // func init() {

@@ -13,14 +13,18 @@ import "C"
 
 import (
 	"aro-ext-app/core/internal/api_client"
+	"aro-ext-app/core/internal/config"
 	"aro-ext-app/core/internal/constant"
 	"aro-ext-app/core/internal/crypto"
-	"aro-ext-app/core/internal/proxy_worker"
+	"aro-ext-app/core/internal/starter"
 	"aro-ext-app/core/internal/storage"
+	"aro-ext-app/core/utils"
 	"encoding/json"
 	"fmt"
 	"log"
 	"os"
+
+	agentConstant "github.com/aro-network/aro-edge-agent/agent/constant"
 
 	"github.com/sirupsen/logrus"
 	"gopkg.in/natefinch/lumberjack.v2"
@@ -52,11 +56,6 @@ func goStringFromC(s *C.char) string {
 }
 
 // recoverAndLog 捕获 panic 并返回错误 JSON
-func recoverAndLog(funcName string) {
-	if r := recover(); r != nil {
-		logrus.WithField("func", funcName).WithField("panic", r).Error("panic recovered")
-	}
-}
 
 func toCStringJSON(v interface{}) *C.char {
 	data, _ := json.Marshal(v)
@@ -93,34 +92,10 @@ var (
 		BaseWSURL:  constant.WS_SERVER_ENDPOINT,
 	}
 	storageApi *storage.Storage
+	
 )
 
-const (
-	Version string = "0.0.9"
-)
-
-// init package initialization function，automatically called when dynamic library is loaded
-// auto initialize keypair and apiClient
-// func init() {
-// 	// try to load keypair from current directory
-// 	var err error
-// 	keyPair, err = crypto.GetOrCreateKeyPair("")
-// 	if err != nil {
-// 		log.Printf("Warning: unable to load keypair during package initialization: %v", err)
-// 		return
-// 	}
-// 	log.Println("libstudy package initialization: keypair auto-loaded/generated")
-
-// 	// auto initialize clientID and apiClient
-// 	clientID = crypto.GenerateClientID()
-// 	apiClient = api_client.NewAPIClient(serverConfig.BaseAPIURL, clientID, keyPair)
-// 	log.Printf("API client auto-initialized with URL: %+v, ClientID: %s", apiClient, clientID)
-
-// 	// auto initialize WebSocket client
-// 	//wsClient = ws_client.NewWSClient(serverConfig.BaseWSURL)
-// 	//log.Printf("WebSocket client initialized with URL: %s", serverConfig.BaseWSURL)
-// }
-
+var cfg = config.GetConfig()
 // ======================
 // API 调用导出函数（通过 dlopen 暴露）
 // =============================
@@ -133,19 +108,26 @@ const (
 //
 //export NodeSignUp
 func NodeSignUp() *C.char {
-	defer recoverAndLog("NodeSignUp")
+	defer utils.RecoverAndLog("NodeSignUp")
 	log.Println("NodeSignUp called")
-	if apiClient == nil {
-		return reply(500, "apiClient not initialized, call InitLibstudy first", nil)
+	if agentConstant.DEVICE_INFO.SerialNumber != "" {
+		sn := agentConstant.DEVICE_INFO.SerialNumber
+		var apiResponse = api_client.APIResponse{
+			Code:    200,
+			Message: "success",
+			Data: map[string]interface{}{
+				"serialNumber": sn,
+			},
+		}
+		return toCStringJSON(apiResponse)
 	}
-	resp, err := apiClient.NodeSignUp()
-	if err != nil {
-		return reply(500, err.Error(), nil)
+	var apiResponse = api_client.APIResponse{
+		Code:    400,
+		Message: "failed",
+		Data:    nil,
 	}
 
-	data, _ := json.Marshal(resp)
-	log.Println("NodeSignUp response: ", string(data))
-	return toCStringJSON(resp)
+	return toCStringJSON(apiResponse)
 }
 
 // NodeReportBaseInfo 上报节点基础信息（/api/liteNode/node/reportBaseInfo）
@@ -154,24 +136,14 @@ func NodeSignUp() *C.char {
 //
 //export NodeReportBaseInfo
 func NodeReportBaseInfo(sysInfoJSON *C.char) *C.char {
-	defer recoverAndLog("NodeReportBaseInfo")
+	defer utils.RecoverAndLog("NodeReportBaseInfo")
 	log.Println("NodeReportBaseInfo called")
-	if apiClient == nil {
-		return reply(500, "apiClient not initialized, call InitLibstudy first", nil)
+	var apiResponse = api_client.APIResponse{
+		Code:    200,
+		Message: "success",
+		Data:    nil,
 	}
-	var sysInfo api_client.NodeReportBaseInfoRequest
-	if err := json.Unmarshal([]byte(goStringFromC(sysInfoJSON)), &sysInfo); err != nil {
-		return reply(400, fmt.Sprintf("JSON parsing failed: %s", err.Error()), nil)
-	}
-
-	resp, err := apiClient.NodeReportBaseInfo(sysInfo)
-	if err != nil {
-		return reply(500, err.Error(), nil)
-	}
-
-	data, _ := json.Marshal(resp)
-	log.Println("NodeReportBaseInfo response: ", string(data))
-	return toCStringJSON(resp)
+	return toCStringJSON(apiResponse)
 }
 
 // GetNodeStat 获取节点统计信息（/api/liteNode/stat）
@@ -179,19 +151,14 @@ func NodeReportBaseInfo(sysInfoJSON *C.char) *C.char {
 //
 //export GetNodeStat
 func GetNodeStat() *C.char {
-	defer recoverAndLog("GetNodeStat")
+	defer utils.RecoverAndLog("GetNodeStat")
 	log.Println("GetNodeStat called")
-	if apiClient == nil {
-		return reply(500, "apiClient not initialized, call InitLibstudy first", nil)
+	var apiResponse = api_client.APIResponse{
+		Code:    200,
+		Message: "success",
+		Data:    nil,
 	}
-	resp, err := apiClient.GetNodeStat()
-	if err != nil {
-		return reply(500, err.Error(), nil)
-	}
-
-	data, _ := json.Marshal(resp)
-	log.Println("GetNodeStat response: ", string(data))
-	return toCStringJSON(resp)
+	return toCStringJSON(apiResponse)
 }
 
 // GetRewards 获取奖励信息（/api/liteNode/rewards）
@@ -199,78 +166,35 @@ func GetNodeStat() *C.char {
 //
 //export GetRewards
 func GetRewards() *C.char {
-	defer recoverAndLog("GetRewards")
+	defer utils.RecoverAndLog("GetRewards")
 	log.Println("GetRewards called")
-	if apiClient == nil {
-		return reply(500, "apiClient not initialized, call InitLibstudy first", nil)
+	var apiResponse = api_client.APIResponse{
+		Code:    200,
+		Message: "success",
+		Data:    nil,
 	}
-	resp, err := apiClient.GetRewards()
-	if err != nil {
-		return reply(500, err.Error(), nil)
-	}
-
-	data, _ := json.Marshal(resp)
-	log.Println("GetRewards response: ", string(data))
-	return toCStringJSON(resp)
+	return toCStringJSON(apiResponse)
 }
 
-// ======================
-// WebSocket 相关导出函数
-// ======================
 
-// GetWSClientStatus 获取 WebSocket 客户端连接状态
-// 返回：JSON 格式的响应，包含运行状态
-//
-//export GetWSClientStatus
-// func GetWSClientStatus() *C.char {
-// 	defer recoverAndLog("GetWSClientStatus")
-// 	log.Println("GetWSClientStatus called")
 
-// 	status, lastError, isRunning := ws_client.GetWebSocketStatus()
+func GetAppStatus() *C.char {
+	defer utils.RecoverAndLog("GetAppStatus")
+	log.Println("GetAppStatus called")
+	var status = "connected" 
+	if agentConstant.GRPC_STATUS == 0{
+		status = "disconnected"
+	}
+	if agentConstant.NODE_INFO.BanIP {
+		status = "Restricted ip"
+	}
+	return reply(200, "success", status)
+}
 
-// 	data := map[string]interface{}{
-// 		"is_running": isRunning,
-// 		"status":     status,
-// 		"error":      lastError,
-// 	}
-// 	var code int
-// 	switch status {
-// 	case "connecting":
-// 		code = 400
-// 	case "forbidden":
-// 		code = 401
-// 	default:
-// 		code = 200
-// 	}
-// 	return reply(code, "WebSocket client status fetched", data)
-// }
-
-// // StartWSClient 手动启动 WebSocket 客户端
-// // 返回：JSON 格式的响应，包含启动结果和当前状态
-// //
-// //export StartWSClient
-// func StartWSClient() *C.char {
-// 	defer recoverAndLog("StartWSClient")
-// 	log.Println("StartWSClient called")
-
-// 	if ws_client.IsWebSocketRunning() {
-// 		return reply(200, "WebSocket client already running", map[string]bool{"is_running": true})
-// 	}
-
-// 	// 启动客户端（内部包含重连机制）
-// 	ws_client.StartWebSocketClient()
-
-// 	return reply(200, "WebSocket client start triggered", map[string]bool{"is_running": ws_client.IsWebSocketRunning()})
-// }
-
-// InitLibstudy 初始化 libstudy 库
-// 加载或创建密钥对、初始化 API 客户端和 WebSocket 客户端
-// 参数：initParamsJSON - JSON 格式的初始化参数，包含 ServerConfig
-// 返回：JSON formatted响应（包含初始化状态和各个组件的信息）
 //
 //export InitLibstudy
 func InitLibstudy(initParamsJSON *C.char) *C.char {
-	defer recoverAndLog("InitLibstudy")
+	defer utils.RecoverAndLog("InitLibstudy")
 
 	log.Println("InitLibstudy called")
 
@@ -290,36 +214,10 @@ func InitLibstudy(initParamsJSON *C.char) *C.char {
 		if initParams.Config.BaseAPIURL != "" {
 			serverConfig.BaseAPIURL = initParams.Config.BaseAPIURL
 		}
-		if initParams.Config.BaseWSURL != "" {
-			serverConfig.BaseWSURL = initParams.Config.BaseWSURL
-		}
+		cfg.SetAndSave(config.KeyAPIURL, serverConfig.BaseAPIURL)
 	}
-
-	// 加载或创建密钥对
-	var err error
-	keyPair, err = crypto.GetOrCreateKeyPair("")
-	if err != nil {
-		details["keypair_error"] = err.Error()
-		return reply(500, fmt.Sprintf("Failed to initialize libstudy: %v", err), details)
-	}
-	details["keypair_status"] = "loaded/created"
-	details["keypair_path"] = ""
-
-	// 更新全局 Server Config
-	details["api_url"] = serverConfig.BaseAPIURL
-	// details["ws_url"] = serverConfig.BaseWSURL
-
-	// 初始化客户端 ID
-	clientID = crypto.GenerateClientID()
-	details["client_id"] = clientID
-
-	// 初始化 API 客户端
-	apiClient = api_client.NewAPIClient(serverConfig.BaseAPIURL, clientID, keyPair)
-	// ws_client.SetWsClientUrl(serverConfig.BaseWSURL)
-	details["api_client_status"] = "initialized"
-
-	log.Println("InitLibstudy success")
-	os.Stderr.Sync() // 确保日志完全写入
+	starter.RunBackendThread()
+	
 	return reply(200, "Libstudy initialized successfully", details)
 }
 
@@ -327,16 +225,16 @@ func InitLibstudy(initParamsJSON *C.char) *C.char {
 //
 //export GetCurrentVersion
 func GetCurrentVersion() *C.char {
-	defer recoverAndLog("GetCurrentVersion")
+	defer utils.RecoverAndLog("GetCurrentVersion")
 	log.Println("GetCurrentVersion called")
 	// 从 core/version 包读取注入的版本信息
 	os.Stderr.Sync()
-	return reply(200, "ok", Version)
+	return reply(200, "success", constant.VERSION)
 }
 
 //export GetLastVersion
 func GetLastVersion() *C.char {
-	defer recoverAndLog("GetLastVersion")
+	defer utils.RecoverAndLog("GetLastVersion")
 	log.Println("GetLastVersion called")
 	if apiClient == nil {
 		return reply(500, "apiClient not initialized, call InitLibstudy first", nil)
@@ -372,46 +270,46 @@ func GetLastVersion() *C.char {
 // 返回：JSON 格式的响应，包含成功状态和错误信息
 //
 //export StartProxyWorker
-func StartProxyWorker(configJSON *C.char) *C.char {
-	defer recoverAndLog("StartProxyWorker")
-	log.Println("StartProxyWorker called")
-	var config proxy_worker.ProxyWorkerConfig
+// func StartProxyWorker(configJSON *C.char) *C.char {
+// 	// defer utils.RecoverAndLog("StartProxyWorker")
+// 	// log.Println("StartProxyWorker called")
+// 	// var config proxy_worker.ProxyWorkerConfig
 
-	// 解析 JSON 配置
-	if err := json.Unmarshal([]byte(goStringFromC(configJSON)), &config); err != nil {
-		return reply(400, fmt.Sprintf("JSON parsing failed: %s", err.Error()), nil)
-	}
+// 	// // 解析 JSON 配置
+// 	// if err := json.Unmarshal([]byte(goStringFromC(configJSON)), &config); err != nil {
+// 	// 	return reply(400, fmt.Sprintf("JSON parsing failed: %s", err.Error()), nil)
+// 	// }
 
-	// 获取管理器实例
-	manager := proxy_worker.GetManager()
+// 	// // 获取管理器实例
+// 	// manager := proxy_worker.GetManager()
 
-	// 启动 worker
-	if err := manager.Start(config); err != nil {
-		return reply(500, err.Error(), nil)
-	}
+// 	// // 启动 worker
+// 	// if err := manager.Start(config); err != nil {
+// 	// 	return reply(500, err.Error(), nil)
+// 	// }
 
-	// 获取状态
-	status := manager.GetStatus()
-	statusJSON, _ := json.Marshal(status)
+// 	// // 获取状态
+// 	// status := manager.GetStatus()
+// 	// statusJSON, _ := json.Marshal(status)
 
-	_ = statusJSON
-	return reply(200, "Proxy worker started successfully", status)
-}
+// 	// _ = statusJSON
+// 	return reply(200, "Proxy worker started successfully", nil)
+// }
 
 // StopProxyWorker 停止代理工作节点
 // 返回：JSON 格式的响应，包含成功状态和错误信息
 //
 //export StopProxyWorker
-func StopProxyWorker() *C.char {
-	defer recoverAndLog("StopProxyWorker")
-	log.Println("StopProxyWorker called")
-	manager := proxy_worker.GetManager()
+// func StopProxyWorker() *C.char {
+// 	defer utils.RecoverAndLog("StopProxyWorker")
+// 	log.Println("StopProxyWorker called")
+// 	manager := proxy_worker.GetManager()
 
-	if err := manager.Stop(); err != nil {
-		return reply(500, err.Error(), nil)
-	}
-	return reply(200, "Proxy worker stopped successfully", nil)
-}
+// 	if err := manager.Stop(); err != nil {
+// 		return reply(500, err.Error(), nil)
+// 	}
+// 	return reply(200, "Proxy worker stopped successfully", nil)
+// }
 
 // GetProxyWorkerStatus 获取代理工作节点状态
 // 返回：JSON 格式的状态信息，包含以下字段：
@@ -424,79 +322,79 @@ func StopProxyWorker() *C.char {
 //   - error: 错误信息（如果有）
 //
 //export GetProxyWorkerStatus
-func GetProxyWorkerStatus() *C.char {
-	defer recoverAndLog("GetProxyWorkerStatus")
-	log.Println("GetProxyWorkerStatus called")
-	manager := proxy_worker.GetManager()
-	status := manager.GetStatus()
-	return reply(200, "Proxy worker status fetched", status)
-}
+// func GetProxyWorkerStatus() *C.char {
+// 	defer utils.RecoverAndLog("GetProxyWorkerStatus")
+// 	log.Println("GetProxyWorkerStatus called")
+// 	manager := proxy_worker.GetManager()
+// 	status := manager.GetStatus()
+// 	return reply(200, "Proxy worker status fetched", status)
+// }
 
-// RestartProxyWorker 重启代理工作节点
-// 使用之前的配置重新启动 worker
-// 返回：JSON 格式的响应，包含成功状态和错误信息
-//
-//export RestartProxyWorker
-func RestartProxyWorker() *C.char {
-	defer recoverAndLog("RestartProxyWorker")
-	log.Println("RestartProxyWorker called")
-	manager := proxy_worker.GetManager()
+// // RestartProxyWorker 重启代理工作节点
+// // 使用之前的配置重新启动 worker
+// // 返回：JSON 格式的响应，包含成功状态和错误信息
+// //
+// //export RestartProxyWorker
+// func RestartProxyWorker() *C.char {
+// 	defer utils.RecoverAndLog("RestartProxyWorker")
+// 	log.Println("RestartProxyWorker called")
+// 	manager := proxy_worker.GetManager()
 
-	if err := manager.Restart(); err != nil {
-		return reply(500, err.Error(), nil)
-	}
+// 	if err := manager.Restart(); err != nil {
+// 		return reply(500, err.Error(), nil)
+// 	}
 
-	// 获取新的状态
-	status := manager.GetStatus()
-	statusJSON, _ := json.Marshal(status)
+// 	// 获取新的状态
+// 	status := manager.GetStatus()
+// 	statusJSON, _ := json.Marshal(status)
 
-	_ = statusJSON
-	return reply(200, "Proxy worker restarted successfully", status)
-}
+// 	_ = statusJSON
+// 	return reply(200, "Proxy worker restarted successfully", status)
+// }
 
-// IsProxyWorkerRunning 检查代理工作节点是否正在运行
-// 返回：JSON 格式的响应，包含运行状态
-//
-//export IsProxyWorkerRunning
-func IsProxyWorkerRunning() *C.char {
-	defer recoverAndLog("IsProxyWorkerRunning")
-	log.Println("IsProxyWorkerRunning called")
-	manager := proxy_worker.GetManager()
-	isRunning := manager.IsRunning()
-	return reply(200, "ok", map[string]bool{"is_running": isRunning})
-}
+// // IsProxyWorkerRunning 检查代理工作节点是否正在运行
+// // 返回：JSON 格式的响应，包含运行状态
+// //
+// //export IsProxyWorkerRunning
+// func IsProxyWorkerRunning() *C.char {
+// 	defer utils.RecoverAndLog("IsProxyWorkerRunning")
+// 	log.Println("IsProxyWorkerRunning called")
+// 	manager := proxy_worker.GetManager()
+// 	isRunning := manager.IsRunning()
+// 	return reply(200, "ok", map[string]bool{"is_running": isRunning})
+// }
 
-// Cleanup 清理所有资源，在应用退出前调用
-// 停止所有后台任务，关闭连接，释放资源
-// 返回：JSON 格式的响应
-//
-//export Cleanup
-func Cleanup() *C.char {
-	defer recoverAndLog("Cleanup")
-	log.Println("Cleanup called")
+// // Cleanup 清理所有资源，在应用退出前调用
+// // 停止所有后台任务，关闭连接，释放资源
+// // 返回：JSON 格式的响应
+// //
+// //export Cleanup
+// func Cleanup() *C.char {
+// 	defer utils.RecoverAndLog("Cleanup")
+// 	log.Println("Cleanup called")
 
-	data := map[string]interface{}{}
+// 	data := map[string]interface{}{}
 
-	// 停止 proxy worker（如果在运行）
-	manager := proxy_worker.GetManager()
-	if manager.IsRunning() {
-		if err := manager.Stop(); err != nil {
-			log.Printf("Cleanup: failed to stop proxy worker: %v", err)
-			data["proxy_worker_stop_error"] = err.Error()
-		} else {
-			log.Println("Cleanup: proxy worker stopped")
-		}
-	}
+// 	// 停止 proxy worker（如果在运行）
+// 	manager := proxy_worker.GetManager()
+// 	if manager.IsRunning() {
+// 		if err := manager.Stop(); err != nil {
+// 			log.Printf("Cleanup: failed to stop proxy worker: %v", err)
+// 			data["proxy_worker_stop_error"] = err.Error()
+// 		} else {
+// 			log.Println("Cleanup: proxy worker stopped")
+// 		}
+// 	}
 
-	// 清空全局变量
-	apiClient = nil
-	keyPair = nil
-	clientID = ""
+// 	// 清空全局变量
+// 	apiClient = nil
+// 	keyPair = nil
+// 	clientID = ""
 
-	log.Println("Cleanup: all resources cleaned")
-	os.Stderr.Sync() // 确保日志写入
-	return reply(200, "Cleanup completed", data)
-}
+// 	log.Println("Cleanup: all resources cleaned")
+// 	os.Stderr.Sync() // 确保日志写入
+// 	return reply(200, "Cleanup completed", data)
+// }
 
 // main 是空的，仅作为编译共享库的入口点
 // 所有功能都通过导出的 C 函数实现

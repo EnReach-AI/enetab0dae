@@ -41,7 +41,6 @@ func GetConfig() *Config {
 func (c *Config) loadDefaults() {
 	defaults := map[string]string{
 		"API_URL":        "https://testnet-api.aro.network",
-		"WS_URL":         "https://testnet-ws.aro.network",
 		"LOG_LEVEL":      "info",
 		"LOG_FILE":       "",
 		"KEYPAIR_PATH":   ".",
@@ -125,7 +124,6 @@ func (c *Config) loadFromPath(path string) error {
 func (c *Config) loadFromEnv() {
 	envVars := []string{
 		"API_URL",
-		"WS_URL",
 		"LOG_LEVEL",
 		"LOG_FILE",
 		"KEYPAIR_PATH",

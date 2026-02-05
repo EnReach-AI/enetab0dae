@@ -227,33 +227,33 @@ func GenerateClientID() string {
 		return clientId
 	}
 
-	// 生成基础 UUID
-	baseUUID := uuid.New().String()
+	// 生成基础 UUID (去除连字符，转大写，32个字符)
+	baseUUID := strings.ToUpper(strings.ReplaceAll(uuid.New().String(), "-", ""))
 
 	// 获取平台代码（1位数字）
-	platformCode := getPlatformCode()
+	platformCode := GetPlatformCode()
 
 	// 将平台代码替换 UUID 的第一个字符，看起来像正常的 UUID
-	clientID := platformCode +"-"+ baseUUID
+	clientID := platformCode + baseUUID
 
 	cfg.SetAndSave(config.KeyClientId, clientID)
 	return clientID
 }
 
-// getPlatformCode 获取平台代码（单个数字，不易被察觉）
-func getPlatformCode() string {
+// GetPlatformCode 获取平台代码（单个数字，不易被察觉）
+func GetPlatformCode() string {
 	goos := strings.ToLower(runtime.GOOS)
 	switch goos {
 	case "linux":
-		return "1"
+		return "3"
 	case "windows":
-		return "2"
-	case "darwin":
-		return "3" // macOS
-	case "android":
 		return "4"
+	case "darwin":
+		return "5" // macOS
+	case "android":
+		return "6"
 	case "ios":
-		return "5"
+		return "7"
 	default:
 		return "9" // 未知平台
 	}
