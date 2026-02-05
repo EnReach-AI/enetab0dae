@@ -1,5 +1,5 @@
 [package]
-name = "ARO-Desktop"
+name = "ARO"
 version = "0.1.0"
 description = "ARO Desktop for Linux"
 authors = ['leecolton167@gmail.com']
