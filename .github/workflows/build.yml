@@ -613,7 +613,7 @@ jobs:
           $installerScript = @"
           #define MyAppName "ARO Desktop"
           #define MyAppVersion "1.0.0"
-          #define MyAppExeName "ARO Desktop.exe"
+          #define MyAppExeName "aro_desktop.exe"
           #define SourcePath ".\build\windows\x64\runner\Release\"
 
           [Setup]
@@ -793,6 +793,15 @@ jobs:
 
       - name: Set up Rust
         uses: dtolnay/rust-toolchain@stable
+
+      - name: Downgrade glib-sys for Rocky Linux 8
+        if: matrix.distro == 'rockylinux:8'
+        run: |
+          set -euo pipefail
+          cargo update -p glib-sys --precise 0.18.0
+          # Verify the version in Cargo.lock
+          grep -A 2 'name = "glib-sys"' apps/aro_linux/src-tauri/Cargo.lock | grep 'version = "0.18.0"'
+
 
       - name: Cache Cargo
         uses: actions/cache@v4
