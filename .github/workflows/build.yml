@@ -327,234 +327,6 @@ jobs:
   # ============================================================
   # Client App Build Jobs
   # ============================================================
-  build-linux:
-    if: false
-    needs: [build-core-linux, build-core-linux-arm64]
-    name: Build Flutter Linux Packages
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - distro: "ubuntu:22.04"
-            artifact_suffix: "ubuntu-22-04"
-          - distro: "debian:11"
-            artifact_suffix: "debian-11"
-          - distro: "rockylinux:8"
-            artifact_suffix: "rockylinux-8"
-    runs-on: ubuntu-latest
-    container:
-      image: ${{ matrix.distro }}
-
-    env:
-      FLUTTER_DIR: apps/aro_client
-      FLUTTER_VERSION: 3.38.5
-
-    defaults:
-      run:
-        shell: bash
-
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Download Linux core library (x64)
-        if: needs.build-core-linux.result == 'success'
-        uses: actions/download-artifact@v4
-        with:
-          name: libstudy-linux
-          path: plugins/linux
-
-      - name: Download Linux core library (arm64)
-        if: needs.build-core-linux-arm64.result == 'success'
-        uses: actions/download-artifact@v4
-        with:
-          name: libstudy-linux-arm64
-          path: plugins/linux-arm64
-
-      - name: Copy core libraries into app
-        run: |
-          set -euo pipefail
-          if [ -f plugins/linux/libstudy.so ]; then
-            mkdir -p "${FLUTTER_DIR}/lib/ffi/linux"
-            cp -f plugins/linux/libstudy.so "${FLUTTER_DIR}/lib/ffi/linux/"
-            ls -lh "${FLUTTER_DIR}/lib/ffi/linux/libstudy.so"
-          fi
-
-          if [ -f plugins/linux-arm64/libstudy.so ]; then
-            mkdir -p "${FLUTTER_DIR}/lib/ffi/linux-arm64"
-            cp -f plugins/linux-arm64/libstudy.so "${FLUTTER_DIR}/lib/ffi/linux-arm64/"
-            ls -lh "${FLUTTER_DIR}/lib/ffi/linux-arm64/libstudy.so"
-          fi
-
-      - name: Install Dependencies
-        run: |
-          if [ -f /etc/debian_version ]; then
-            set -euo pipefail
-            retry() {
-              local attempts="${1:-5}"
-              local sleep_seconds="${2:-3}"
-              shift 2 || true
-              local n=0
-              until "$@"; do
-                n=$((n + 1))
-                if [ "$n" -ge "$attempts" ]; then
-                  return 1
-                fi
-                sleep $((sleep_seconds * n))
-              done
-            }
-
-            retry 5 3 apt-get -o Acquire::Retries=5 -o Acquire::http::Timeout=60 -o Acquire::https::Timeout=60 update
-            retry 5 3 env DEBIAN_FRONTEND=noninteractive apt-get -o Acquire::Retries=5 -o Acquire::http::Timeout=60 -o Acquire::https::Timeout=60 install -y --no-install-recommends --fix-missing \
-              git curl jq clang cmake ninja-build \
-              pkg-config libgtk-3-dev ruby ruby-dev build-essential unzip debianutils
-            if ! env DEBIAN_FRONTEND=noninteractive apt-get -o Acquire::Retries=5 -o Acquire::http::Timeout=60 -o Acquire::https::Timeout=60 install -y --no-install-recommends --fix-missing libwebkit2gtk-4.1-dev; then
-              retry 3 3 env DEBIAN_FRONTEND=noninteractive apt-get -o Acquire::Retries=5 -o Acquire::http::Timeout=60 -o Acquire::https::Timeout=60 install -y --no-install-recommends --fix-missing libwebkit2gtk-4.0-dev
-            fi
-            # Install appindicator (required by tray_manager plugin)
-            if ! env DEBIAN_FRONTEND=noninteractive apt-get -o Acquire::Retries=5 -o Acquire::http::Timeout=60 -o Acquire::https::Timeout=60 install -y --no-install-recommends --fix-missing libayatana-appindicator3-dev; then
-              retry 3 3 env DEBIAN_FRONTEND=noninteractive apt-get -o Acquire::Retries=5 -o Acquire::http::Timeout=60 -o Acquire::https::Timeout=60 install -y --no-install-recommends --fix-missing libappindicator3-dev
-            fi
-            retry 5 5 gem install --no-document fpm
-
-          elif command -v dnf >/dev/null 2>&1; then
-            dnf install -y epel-release dnf-plugins-core
-            dnf config-manager --set-enabled powertools || dnf config-manager --set-enabled PowerTools || true
-            dnf -y module reset ruby || true
-            dnf -y module enable ruby:3.1 || dnf -y module enable ruby:3.0 || true
-            dnf makecache
-            dnf install -y git curl jq which gtk3-devel webkit2gtk3-devel libappindicator-gtk3-devel ruby ruby-devel rubygems unzip cmake clang rpm-build
-            dnf groupinstall -y "Development Tools"
-            if ruby -e 'exit(RUBY_VERSION.to_f >= 2.6 ? 0 : 1)'; then
-              gem install --no-document fpm
-            else
-              gem install --no-document fpm -v 1.15.1
-            fi
-
-            # install ninja binary
-            if ! command -v ninja &> /dev/null; then
-              dnf install -y ninja-build || dnf install -y ninja || true
-            fi
-
-            if ! command -v ninja &> /dev/null; then
-              curl -L https://github.com/ninja-build/ninja/releases/download/v1.11.1/ninja-linux.zip -o /tmp/ninja.zip
-              unzip /tmp/ninja.zip -d /usr/local/bin
-              chmod +x /usr/local/bin/ninja
-            fi
-          fi
-
-      - uses: subosito/flutter-action@v2
-        with:
-          flutter-version: ${{ env.FLUTTER_VERSION }}
-          cache: true
-
-      - name: Mark Flutter directory as safe for git
-        run: |
-          set -euo pipefail
-          if command -v flutter >/dev/null 2>&1; then
-            FLUTTER_BIN="$(command -v flutter)"
-            FLUTTER_ROOT="$(cd "$(dirname "$FLUTTER_BIN")/.." && pwd)"
-            git config --global --add safe.directory "$FLUTTER_ROOT"
-          fi
-          git config --global --add safe.directory "/__t/flutter/stable-${{ env.FLUTTER_VERSION }}-x64" || true
-
-      # Flutter build
-      - name: Build Flutter Linux App
-        working-directory: ${{ env.FLUTTER_DIR }}
-        run: |
-          export PATH="/usr/local/bin:$PATH"
-          flutter config --enable-linux-desktop
-          flutter precache --linux
-          flutter pub get
-          python3 - <<'PY'
-          from pathlib import Path
-
-          p = Path("linux/flutter/ephemeral/.plugin_symlinks/desktop_webview_window/linux/CMakeLists.txt")
-          if not p.exists():
-              raise SystemExit(0)
-
-          s = p.read_text(encoding="utf-8")
-          old = "pkg_check_modules(WebKit REQUIRED IMPORTED_TARGET webkit2gtk-4.1)"
-          if old not in s:
-              raise SystemExit(0)
-
-          new = "\n".join(
-              [
-                  "pkg_check_modules(WebKit IMPORTED_TARGET webkit2gtk-4.1)",
-                  "if (NOT WebKit_FOUND)",
-                  "  pkg_check_modules(WebKit REQUIRED IMPORTED_TARGET webkit2gtk-4.0)",
-                  "endif()",
-              ]
-          )
-          p.write_text(s.replace(old, new), encoding="utf-8")
-          PY
-          flutter build linux --release
-
-      - name: Copy FFI Libraries
-        working-directory: ${{ env.FLUTTER_DIR }}
-        run: |
-          mkdir -p build/linux/x64/release/bundle/lib
-          cp lib/ffi/linux/*.so build/linux/x64/release/bundle/lib/ || true
-
-      - name: Verify FFI Libraries
-        working-directory: ${{ env.FLUTTER_DIR }}
-        run: |
-          set -euo pipefail
-          test -f build/linux/x64/release/bundle/lib/libstudy.so
-          ls -lh build/linux/x64/release/bundle/lib/libstudy.so
-
-      - name: Create Desktop Entry
-        working-directory: ${{ env.FLUTTER_DIR }}
-        run: |
-          cat <<EOF > aro-client.desktop
-          [Desktop Entry]
-          Name=ARO Client
-          Exec=/opt/aro-client/aro_linux_client
-          Icon=aro-client
-          Type=Application
-          Categories=Utility;
-          EOF
-
-      - name: Package DEB
-        if: matrix.distro != 'rockylinux:8'
-        working-directory: ${{ env.FLUTTER_DIR }}
-        run: |
-          VERSION=$(grep 'version:' pubspec.yaml | cut -d ' ' -f2 | cut -d '+' -f1)
-          chmod +x packaging/linux/postinst.sh packaging/linux/prerm.sh || true
-          fpm -s dir -t deb \
-            -n aro-client -v "$VERSION" \
-            --description "ARO Client" \
-            --depends libgtk-3-0 \
-            --depends "libwebkit2gtk-4.0-37 | libwebkit2gtk-4.1-0" \
-            --after-install packaging/linux/postinst.sh \
-            --before-remove packaging/linux/prerm.sh \
-            build/linux/x64/release/bundle/=/opt/aro-client/ \
-            aro-client.desktop=/usr/share/applications/aro-client.desktop \
-            lib/assets/app_icon_1024.png=/usr/share/icons/hicolor/1024x1024/apps/aro-client.png
-
-      - name: Package RPM
-        if: matrix.distro == 'rockylinux:8'
-        working-directory: ${{ env.FLUTTER_DIR }}
-        run: |
-          VERSION=$(grep 'version:' pubspec.yaml | cut -d ' ' -f2 | cut -d '+' -f1)
-          chmod +x packaging/linux/postinst.sh packaging/linux/prerm.sh || true
-          fpm -s dir -t rpm \
-            -n aro-client -v "$VERSION" \
-            --description "ARO Client" \
-            --depends gtk3 \
-            --depends webkit2gtk3 \
-            --after-install packaging/linux/postinst.sh \
-            --before-remove packaging/linux/prerm.sh \
-            build/linux/x64/release/bundle/=/opt/aro-client/ \
-            aro-client.desktop=/usr/share/applications/aro-client.desktop \
-            lib/assets/app_icon_1024.png=/usr/share/icons/hicolor/1024x1024/apps/aro-client.png
-
-      - name: Upload Packages
-        uses: actions/upload-artifact@v4
-        with:
-          name: linux-packages-${{ matrix.artifact_suffix }}
-          path: |
-            ${{ env.FLUTTER_DIR }}/*.deb
-            ${{ env.FLUTTER_DIR }}/*.rpm
 
   build-windows:
     needs: [prepare, build-core-windows]
@@ -698,9 +470,9 @@ jobs:
             artifact_suffix: "debian-12"
             bundle_target: "deb"
           # NOTE: Tauri (gtk-rs/glib-sys 0.18.x) requires GLib >= 2.70.
-          # Rocky Linux 8 ships GLib 2.56, so building there will fail.
-          - distro: "rockylinux:9"
-            artifact_suffix: "rockylinux-9"
+          # Rocky Linux 8/9 ship GLib < 2.70, so compiling inside those containers fails.
+          - distro: "rockylinux:10"
+            artifact_suffix: "rockylinux-10"
             bundle_target: "rpm"
     runs-on: ubuntu-latest
     container:
@@ -755,12 +527,20 @@ jobs:
             echo "PKG_CONFIG_PATH=${PKG_CONFIG_PATH}" >> $GITHUB_ENV
           elif command -v dnf >/dev/null 2>&1; then
             # Rocky/RHEL often need EPEL for appindicator/ayatana packages.
-            dnf install -y epel-release dnf-plugins-core || dnf install -y epel-release || true
+            dnf install -y dnf-plugins-core || true
+            dnf install -y epel-release || true
+            # EL8/EL9/EL10: repo name varies (powertools/PowerTools/crb). Not all images have it.
+            dnf config-manager --set-enabled crb || true
             dnf config-manager --set-enabled powertools || dnf config-manager --set-enabled PowerTools || true
 
             dnf -y makecache
+            # Some images ship curl-minimal; swap to curl to avoid dependency conflicts.
+            if rpm -q curl-minimal >/dev/null 2>&1; then
+              dnf -y swap curl-minimal curl --allowerasing || true
+            fi
+
             # pkg-config binary is provided by pkgconf-pkg-config on RHEL/Rocky.
-            dnf install -y git curl jq which ca-certificates \
+            dnf install -y --allowerasing git curl jq which ca-certificates \
               clang gcc gcc-c++ make pkgconf-pkg-config \
               openssl-devel gtk3-devel glib2 glib2-devel \
               rpm-build
@@ -800,16 +580,6 @@ jobs:
 
       - name: Set up Rust
         uses: dtolnay/rust-toolchain@stable
-
-      - name: Downgrade glib-sys for Rocky Linux 8
-        if: matrix.distro == 'rockylinux:8'
-        working-directory: apps/aro_linux/src-tauri
-        run: |
-          set -euo pipefail
-          cargo update -p glib-sys --precise 0.18.0
-          # Verify the version in Cargo.lock
-          grep -A 2 'name = "glib-sys"' Cargo.lock | grep 'version = "0.18.0"'
-
 
       - name: Cache Cargo
         uses: actions/cache@v4
