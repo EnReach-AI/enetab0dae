@@ -1,0 +1,7 @@
+#!/bin/sh
+set -eu
+
+# ARO Desktop (Tauri) - RPM pre-remove script
+# Nothing to clean up at the system level.
+
+exit 0

@@ -1,0 +1,55 @@
+#!/bin/sh
+set -eu
+
+# ARO Desktop (Tauri) - RPM post-install script
+# NOTE: We intentionally do NOT run dnf/yum inside maintainer scripts.
+# We only check for common runtime deps and print a helpful hint if missing.
+
+missing_pkgs=""
+
+have_pkg() {
+  # Usage: have_pkg <package_name>
+  pkg="$1"
+  if command -v rpm >/dev/null 2>&1; then
+    rpm -q "$pkg" >/dev/null 2>&1
+    return $?
+  fi
+  return 1
+}
+
+add_missing() {
+  pkg="$1"
+  if [ -z "$missing_pkgs" ]; then
+    missing_pkgs="$pkg"
+  else
+    missing_pkgs="$missing_pkgs $pkg"
+  fi
+}
+
+# WebKitGTK runtime: prefer 4.1, fall back to older naming when applicable.
+if ! have_pkg "webkit2gtk4.1" && ! have_pkg "webkit2gtk3" && ! have_pkg "webkit2gtk4.0"; then
+  add_missing "webkit2gtk4.1"
+fi
+
+# AppIndicator runtime: prefer Ayatana, fall back to legacy.
+if ! have_pkg "libayatana-appindicator-gtk3" && ! have_pkg "libappindicator-gtk3"; then
+  add_missing "libayatana-appindicator-gtk3"
+fi
+
+if [ -n "$missing_pkgs" ]; then
+  echo "" >&2
+  echo "ARO Desktop: some runtime dependencies appear to be missing." >&2
+  if command -v dnf >/dev/null 2>&1; then
+    echo "Install them with:" >&2
+    echo "  sudo dnf install -y $missing_pkgs" >&2
+  elif command -v yum >/dev/null 2>&1; then
+    echo "Install them with:" >&2
+    echo "  sudo yum install -y $missing_pkgs" >&2
+  else
+    echo "Install these packages with your system package manager:" >&2
+    echo "  $missing_pkgs" >&2
+  fi
+  echo "" >&2
+fi
+
+exit 0
