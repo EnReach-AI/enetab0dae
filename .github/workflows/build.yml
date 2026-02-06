@@ -793,7 +793,8 @@ jobs:
       - name: Install Flatpak tooling
         run: |
           set -euo pipefail
-          sudo apt-get install -y --no-install-recommends flatpak flatpak-builder
+          # flatpak-builder uses eu-strip (elfutils) for stripping/debug split.
+          sudo apt-get install -y --no-install-recommends flatpak flatpak-builder elfutils
           sudo flatpak remote-add --if-not-exists flathub https://flathub.org/repo/flathub.flatpakrepo
           sudo flatpak install -y flathub org.gnome.Platform//47 org.gnome.Sdk//47
 
