@@ -801,7 +801,8 @@ jobs:
       - name: Build Flatpak bundle
         run: |
           set -euo pipefail
-          flatpak-builder --force-clean --repo=flatpak-repo flatpak-build apps/aro_linux/flatpak/com.aro.ARONetwork.yml
+          flatpak-builder --force-clean --repo=flatpak-repo --default-branch=stable --arch=x86_64 \
+            flatpak-build apps/aro_linux/flatpak/com.aro.ARONetwork.yml
           flatpak build-bundle flatpak-repo aro-desktop.flatpak com.aro.ARONetwork stable \
             --runtime-repo=https://flathub.org/repo/flathub.flatpakrepo
           ls -lah aro-desktop.flatpak
