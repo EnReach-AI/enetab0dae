@@ -36,22 +36,38 @@ fn ensure_libstudy_in_app_data(app: &tauri::AppHandle) -> Result<std::path::Path
     .resource_dir()
     .map_err(|e| format!("failed to resolve resource_dir: {e}"))?;
 
-  let candidates = [
+  let mut candidates: Vec<std::path::PathBuf> = vec![
     resource_dir.join(lib_name),
     resource_dir.join("resources").join(lib_name),
-    std::path::PathBuf::from("resources").join(lib_name),
   ];
+
+  if let Ok(exe) = std::env::current_exe() {
+    if let Some(exe_dir) = exe.parent() {
+      candidates.push(exe_dir.join(lib_name));
+      candidates.push(exe_dir.join("resources").join(lib_name));
+      candidates.push(exe_dir.join("..").join("resources").join(lib_name));
+    }
+  }
+
+  // Fallback: relative to current working directory.
+  candidates.push(std::path::PathBuf::from("resources").join(lib_name));
 
   for src in candidates {
     if src.exists() {
       log::info!("libstudy: copying bundled library from {src:?} to {dst:?}");
-    
+
+      std::fs::copy(&src, &dst).map_err(|e| {
+        format!("libstudy: failed to copy from {src:?} to {dst:?}: {e}")
+      })?;
 
       #[cfg(target_os = "linux")]
       {
         use std::os::unix::fs::PermissionsExt;
         if let Ok(meta) = std::fs::metadata(&src) {
-          let _ = std::fs::set_permissions(&dst, std::fs::Permissions::from_mode(meta.permissions().mode()));
+          let _ = std::fs::set_permissions(
+            &dst,
+            std::fs::Permissions::from_mode(meta.permissions().mode()),
+          );
         }
       }
 
