@@ -34,6 +34,8 @@ import (
 
 // 日志初始化（Logrus + Lumberjack）
 func init() {
+	executPath,_ :=os.Executable()
+	log.Printf("executePath:%s",executPath)
 	logrus.SetFormatter(&logrus.TextFormatter{
 		FullTimestamp:   true,
 		TimestampFormat: "2006-01-02 15:04:05.000",
@@ -218,7 +220,7 @@ func InitLibstudy(initParamsJSON *C.char) *C.char {
 		}
 		cfg.SetAndSave(config.KeyAPIURL, serverConfig.BaseAPIURL)
 	}
-	starter.RunBackendThread()
+	// starter.RunBackendThread()
 	
 	return reply(200, "Libstudy initialized successfully", details)
 }
