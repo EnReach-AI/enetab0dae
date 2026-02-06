@@ -18,7 +18,6 @@ import (
 	"aro-ext-app/core/internal/config"
 	"aro-ext-app/core/internal/constant"
 	"aro-ext-app/core/internal/crypto"
-	"aro-ext-app/core/internal/starter"
 	"aro-ext-app/core/internal/storage"
 	"aro-ext-app/core/utils"
 	"encoding/json"
@@ -34,8 +33,7 @@ import (
 
 // 日志初始化（Logrus + Lumberjack）
 func init() {
-	executPath,_ :=os.Executable()
-	log.Printf("executePath:%s",executPath)
+	
 	logrus.SetFormatter(&logrus.TextFormatter{
 		FullTimestamp:   true,
 		TimestampFormat: "2006-01-02 15:04:05.000",
@@ -48,6 +46,8 @@ func init() {
 		Compress:   false, // 不压缩
 	})
 	logrus.SetLevel(logrus.InfoLevel)
+	executPath,_ :=os.Executable()
+	log.Printf("executePath:%s",executPath)
 	logrus.Info("==== libstudy started ====")
 }
 
