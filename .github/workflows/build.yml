@@ -148,6 +148,7 @@ jobs:
         with:
           name: libstudy-linux
           path: plugins/linux/
+          retention-days: 3
 
   build-core-linux-arm64:
     needs: prepare
@@ -195,6 +196,7 @@ jobs:
         with:
           name: libstudy-linux-arm64
           path: plugins/linux-arm64/
+          retention-days: 3
 
   build-core-windows:
     needs: prepare
@@ -242,6 +244,7 @@ jobs:
         with:
           name: libstudy-windows
           path: plugins/windows/
+          retention-days: 3
 
   build-core-macos:
     needs: prepare
@@ -286,6 +289,7 @@ jobs:
         with:
           name: libstudy-macos
           path: plugins/macos/
+          retention-days: 3
 
   build-core-android:
     needs: prepare
@@ -336,6 +340,7 @@ jobs:
         with:
           name: libstudy-android
           path: plugins/android/
+          retention-days: 3
 
   build-core-ios:
     needs: prepare
@@ -383,7 +388,7 @@ jobs:
         with:
           name: libstudy-ios
           path: plugins/ios/
-
+          retention-days: 3
   # ============================================================
   # Client App Build Jobs
   # ============================================================
@@ -513,6 +518,7 @@ jobs:
           name: windows-installer
           path: ${{ env.FLUTTER_DIR }}/AROClient-Setup.exe
           if-no-files-found: warn
+          retention-days: 3
 
   build-linux2:
     needs: [prepare, build-core-linux, build-core-linux-arm64]
@@ -698,3 +704,4 @@ jobs:
           name: aro-desktop-${{ matrix.bundle_target }}-${{ matrix.artifact_suffix }}
           path: apps/aro_linux/src-tauri/target/release/bundle/${{ matrix.bundle_target }}/*.${{ matrix.bundle_target }}
           if-no-files-found: error
+          retention-days: 3
