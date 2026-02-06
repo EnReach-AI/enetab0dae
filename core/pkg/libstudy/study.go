@@ -11,8 +11,6 @@ package main
 */
 import "C"
 
-
-
 import (
 	"aro-ext-app/core/internal/api_client"
 	"aro-ext-app/core/internal/config"
@@ -24,6 +22,8 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"path/filepath"
+	"runtime"
 
 	agentConstant "github.com/aro-network/aro-edge-agent/agent/constant"
 
@@ -31,23 +31,64 @@ import (
 	"gopkg.in/natefinch/lumberjack.v2"
 )
 
+// getLogFilePath 获取日志文件路径，优先级：环境变量 > 当前工作目录/log > 临时目录
+func getLogFilePath() string {
+
+	// 尝试在当前工作目录的 log 子目录中创建日志
+	cwd, err := os.Getwd()
+	if err == nil {
+		logDir := filepath.Join(cwd, "log")
+		if err := os.MkdirAll(logDir, 0755); err == nil {
+			logPath := filepath.Join(logDir, "libstudy.log")
+			// 测试是否可写
+			if f, err := os.OpenFile(logPath, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0644); err == nil {
+				f.Close()
+				return logPath
+			}
+		}
+	}
+
+	// 备选方案：根据平台选择合适的默认位置
+	switch runtime.GOOS {
+	case "darwin":
+		homeDir, err := os.UserHomeDir()
+		if err != nil {
+			break
+		}
+		logDir := filepath.Join(homeDir, "Library", "Logs")
+		os.MkdirAll(logDir, 0755)
+		return filepath.Join(logDir, "libstudy.log")
+	case "windows":
+		appDataDir := os.Getenv("APPDATA")
+		if appDataDir == "" {
+			break
+		}
+		logDir := filepath.Join(appDataDir, "libstudy", "log")
+		os.MkdirAll(logDir, 0755)
+		return filepath.Join(logDir, "libstudy.log")
+	}
+
+	// 最后的备选方案：使用临时目录
+	logDir := filepath.Join(os.TempDir(), "libstudy")
+	os.MkdirAll(logDir, 0755)
+	return filepath.Join(logDir, "libstudy.log")
+}
+
 // 日志初始化（Logrus + Lumberjack）
 func init() {
-	
+
 	logrus.SetFormatter(&logrus.TextFormatter{
 		FullTimestamp:   true,
 		TimestampFormat: "2006-01-02 15:04:05.000",
 	})
 	logrus.SetOutput(&lumberjack.Logger{
-		Filename:   "libstudy.log",
+		Filename:   getLogFilePath(),
 		MaxSize:    10,    // MB
 		MaxBackups: 0,     // 不保留历史文件
 		MaxAge:     0,     // 不限制时间
 		Compress:   false, // 不压缩
 	})
 	logrus.SetLevel(logrus.InfoLevel)
-	executPath,_ :=os.Executable()
-	logrus.Infof("executePath:%s",executPath)
 	logrus.Info("==== libstudy started ====")
 }
 
@@ -96,10 +137,10 @@ var (
 		BaseWSURL:  constant.WS_SERVER_ENDPOINT,
 	}
 	storageApi *storage.Storage
-	
 )
 
 var cfg = config.GetConfig()
+
 // ======================
 // API 调用导出函数（通过 dlopen 暴露）
 // =============================
@@ -180,13 +221,11 @@ func GetRewards() *C.char {
 	return toCStringJSON(apiResponse)
 }
 
-
-
 func GetAppStatus() *C.char {
 	defer utils.RecoverAndLog("GetAppStatus")
 	log.Println("GetAppStatus called")
-	var status = "connected" 
-	if agentConstant.GRPC_STATUS == 0{
+	var status = "connected"
+	if agentConstant.GRPC_STATUS == 0 {
 		status = "disconnected"
 	}
 	if agentConstant.NODE_INFO.BanIP {
@@ -221,7 +260,7 @@ func InitLibstudy(initParamsJSON *C.char) *C.char {
 		cfg.SetAndSave(config.KeyAPIURL, serverConfig.BaseAPIURL)
 	}
 	// starter.RunBackendThread()
-	
+
 	return reply(200, "Libstudy initialized successfully", details)
 }
 
@@ -404,5 +443,3 @@ func GetLastVersion() *C.char {
 // 所有功能都通过导出的 C 函数实现
 func main() {
 }
-
-
