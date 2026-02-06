@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop">
+  <id>com.aro.ARONetwork</id>
+  <name>ARO Desktop</name>
+  <summary>ARO Desktop Client</summary>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>Proprietary</project_license>
+  <description>
+    <p>ARO Desktop application packaged for Flatpak to support a wider range of Linux distributions.</p>
+  </description>
+  <launchable type="desktop-id">com.aro.ARONetwork.desktop</launchable>
+</component>

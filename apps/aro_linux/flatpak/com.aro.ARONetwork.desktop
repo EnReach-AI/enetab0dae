@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=ARO Desktop
+Comment=ARO Desktop Client
+Exec=aro-desktop
+Icon=com.aro.ARONetwork
+Terminal=false
+Categories=Network;
+StartupNotify=true
