@@ -704,8 +704,16 @@ jobs:
         working-directory: apps/aro_linux
         run: |
           set -euo pipefail
-          CONFIG_JSON="$(jq -nc --arg t "${BUNDLE_TARGET}" '{bundle:{targets:[$t]}}')"
-          cargo tauri build --ci --config "$CONFIG_JSON" --config "${{ matrix.tauri_config }}"
+
+          # Tauri CLI only accepts a single --config argument. Generate one merged config
+          # (base + common Linux overrides + per-distro overrides) and pass it once.
+          jq -s 'reduce .[] as $item ({}; . * $item)' \
+            src-tauri/tauri.conf.json \
+            src-tauri/tauri.linux.conf.json \
+            "${{ matrix.tauri_config }}" \
+            > src-tauri/tauri.merged.conf.json
+
+          cargo tauri build --ci --config src-tauri/tauri.merged.conf.json
           ls -lah "src-tauri/target/release/bundle/${BUNDLE_TARGET}" || true
 
       - name: Upload Package
