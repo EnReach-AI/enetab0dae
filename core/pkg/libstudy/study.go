@@ -47,7 +47,7 @@ func init() {
 	})
 	logrus.SetLevel(logrus.InfoLevel)
 	executPath,_ :=os.Executable()
-	log.Printf("executePath:%s",executPath)
+	logrus.Infof("executePath:%s",executPath)
 	logrus.Info("==== libstudy started ====")
 }
 
