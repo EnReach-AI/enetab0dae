@@ -114,7 +114,7 @@ func (c *APIClient) Get(path string) (*APIResponse, error) {
 	}
 
 	if apiResp.Code != 0 && apiResp.Code != 200 {
-		return &apiResp, fmt.Errorf("API error: code=%d, message=%s", apiResp.Code, apiResp.Message)
+		return &apiResp, fmt.Errorf("API error:path=%s code=%d, message=%s", path, apiResp.Code, apiResp.Message)
 	}
 
 	return &apiResp, nil
@@ -133,7 +133,7 @@ func (c *APIClient) Post(path string, body interface{}) (*APIResponse, error) {
 	}
 
 	if apiResp.Code != 0 && apiResp.Code != 200 {
-		return &apiResp, fmt.Errorf("API error: code=%d, message=%s", apiResp.Code, apiResp.Message)
+		return &apiResp, fmt.Errorf("API error:path=%s code=%d, message=%s", path, apiResp.Code, apiResp.Message)
 	}
 
 	return &apiResp, nil
