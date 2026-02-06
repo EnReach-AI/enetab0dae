@@ -4,4 +4,53 @@ set -eu
 # ARO Desktop (Tauri) - Debian post-install script
 # libstudy is stored/updated in the user's app data directory at runtime.
 
+# NOTE:
+# We intentionally do NOT run apt/dpkg inside maintainer scripts.
+# Instead we check common runtime deps and print a helpful hint if missing.
+
+missing_pkgs=""
+
+have_pkg() {
+	# Usage: have_pkg <package_name>
+	# Returns 0 if installed.
+	pkg="$1"
+	if command -v dpkg-query >/dev/null 2>&1; then
+		dpkg-query -W -f='${Status}' "$pkg" 2>/dev/null | grep -q "install ok installed"
+		return $?
+	fi
+	return 1
+}
+
+add_missing() {
+	pkg="$1"
+	if [ -z "$missing_pkgs" ]; then
+		missing_pkgs="$pkg"
+	else
+		missing_pkgs="$missing_pkgs $pkg"
+	fi
+}
+
+# WebKitGTK runtime: prefer 4.1, fall back to 4.0 (Debian 12).
+if ! have_pkg "libwebkit2gtk-4.1-0" && ! have_pkg "libwebkit2gtk-4.0-37"; then
+	# Suggest both; apt will install the right one for the distro.
+	add_missing "libwebkit2gtk-4.1-0"
+	add_missing "libwebkit2gtk-4.0-37"
+fi
+
+# AppIndicator runtime: prefer Ayatana, fall back to legacy appindicator.
+if ! have_pkg "libayatana-appindicator3-1" && ! have_pkg "libappindicator3-1"; then
+	add_missing "libayatana-appindicator3-1"
+	add_missing "libappindicator3-1"
+fi
+
+if [ -n "$missing_pkgs" ]; then
+	echo "" >&2
+	echo "ARO Desktop: some runtime dependencies appear to be missing." >&2
+	echo "Install them with (recommended):" >&2
+	echo "  sudo apt-get update && sudo apt-get install -y $missing_pkgs" >&2
+	echo "If you installed with dpkg directly, re-run install via:" >&2
+	echo "  sudo apt install ./aro-desktop*.deb" >&2
+	echo "" >&2
+fi
+
 exit 0

@@ -5,9 +5,22 @@
     ],
     "linux": {
       "deb": {
+        "depends": [
+          "libwebkit2gtk-4.1-0 | libwebkit2gtk-4.0-37",
+          "libayatana-appindicator3-1 | libappindicator3-1"
+        ],
         "postInstallScript": "installer/deb/postinst",
         "preRemoveScript": "installer/deb/prerm",
         "postRemoveScript": "installer/deb/postrm"
+      },
+      "rpm": {
+        "depends": [
+          "webkit2gtk4.1",
+          "libayatana-appindicator-gtk3"
+        ],
+        "postInstallScript": "installer/rpm/postinst",
+        "preRemoveScript": "installer/rpm/prerm",
+        "postRemoveScript": "installer/rpm/postrm"
       }
     }
   }

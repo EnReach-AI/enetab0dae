@@ -50,6 +50,12 @@
         "postInstallScript": "packaging/linux/postinst.sh",
         "preRemoveScript": "packaging/linux/prerm.sh",
         "postRemoveScript": "packaging/linux/postrm.sh"
+      },
+      "rpm": {
+        "depends": [
+          "webkit2gtk3",
+          "libappindicator-gtk3"
+        ]
       }
     }
   }

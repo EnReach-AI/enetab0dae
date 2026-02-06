@@ -528,19 +528,22 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - distro: "ubuntu:22.04"
-            artifact_suffix: "ubuntu-22-04"
+          - distro: "ubuntu:24.04"
+            artifact_suffix: "ubuntu-24-04"
             bundle_target: "deb"
+            tauri_config: "src-tauri/tauri.ubuntu24.conf.json"
 
           - distro: "debian:12"
             artifact_suffix: "debian-12"
             bundle_target: "deb"
+            tauri_config: "src-tauri/tauri.debian12.conf.json"
           # NOTE: Tauri (gtk-rs/glib-sys 0.18.x) requires GLib >= 2.70.
           # Rocky Linux 8/9 ship GLib < 2.70, so compiling inside those containers fails.
           # `rockylinux:10` is not (currently) published on Docker Hub, so use an EL10-compatible base.
           - distro: "quay.io/centos/centos:stream10"
             artifact_suffix: "centos-stream-10"
             bundle_target: "rpm"
+            tauri_config: "src-tauri/tauri.centos-stream10.conf.json"
     runs-on: ubuntu-latest
     container:
       image: ${{ matrix.distro }}
@@ -637,9 +640,11 @@ jobs:
             rpm -q glib2 glib2-devel || true
             ls -lah /usr/lib64/pkgconfig/glib-2.0.pc /usr/lib/pkgconfig/glib-2.0.pc 2>/dev/null || true
 
-            # AppIndicator headers (tray). Try legacy libappindicator first, then ayatana.
-            if ! dnf install -y libappindicator-gtk3-devel; then
-              if ! dnf install -y libayatana-appindicator-gtk3-devel; then
+            # AppIndicator headers (tray).
+            # Prefer Ayatana first because modern distros ship it by default and it avoids
+            # generating runtime deps on legacy libappindicator3.
+            if ! dnf install -y libayatana-appindicator-gtk3-devel; then
+              if ! dnf install -y libappindicator-gtk3-devel; then
                 echo "ERROR: missing appindicator development package (libappindicator-gtk3-devel or libayatana-appindicator-gtk3-devel)." >&2
                 echo "Hint: ensure EPEL is available for this distro." >&2
                 exit 1
@@ -690,12 +695,17 @@ jobs:
           set -euo pipefail
           chmod +x apps/aro_linux/src-tauri/installer/deb/*
 
+      - name: Ensure RPM scripts executable
+        run: |
+          set -euo pipefail
+          chmod +x apps/aro_linux/src-tauri/installer/rpm/*
+
       - name: Build Package (${{ matrix.bundle_target }})
         working-directory: apps/aro_linux
         run: |
           set -euo pipefail
           CONFIG_JSON="$(jq -nc --arg t "${BUNDLE_TARGET}" '{bundle:{targets:[$t]}}')"
-          cargo tauri build --ci --config "$CONFIG_JSON"
+          cargo tauri build --ci --config "$CONFIG_JSON" --config "${{ matrix.tauri_config }}"
           ls -lah "src-tauri/target/release/bundle/${BUNDLE_TARGET}" || true
 
       - name: Upload Package
