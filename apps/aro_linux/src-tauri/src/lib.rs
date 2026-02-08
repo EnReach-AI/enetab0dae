@@ -728,17 +728,6 @@ async fn get_rewards() -> Result<String, String> {
   .map_err(|e| format!("get_rewards task join error: {e}"))?
 }
 
-// #[tauri::command]
-// async fn get_ws_client_status() -> Result<String, String> {
-//   tauri::async_runtime::spawn_blocking(|| {
-//     libstudy::with_lib(|lib, _path| lib.get_ws_client_status()).map_err(|e| e.to_string())
-//   })
-//   .await
-//   .map_err(|e| format!("get_ws_client_status task join error: {e}"))?
-// }
-
-
-
 #[tauri::command]
 async fn get_current_version() -> Result<String, String> {
   tauri::async_runtime::spawn_blocking(|| {
