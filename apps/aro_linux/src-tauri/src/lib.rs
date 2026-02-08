@@ -15,21 +15,8 @@ use tauri_plugin_shell::ShellExt;
 #[cfg(target_os = "linux")]
 use tauri_plugin_dialog::DialogExt;
 
-fn ensure_libstudy_in_app_data(app: &tauri::AppHandle) -> Result<std::path::PathBuf, String> {
-  let app_data_dir = app
-    .path()
-    .app_data_dir()
-    .map_err(|e| format!("failed to resolve app_data_dir: {e}"))?;
-
-  std::fs::create_dir_all(&app_data_dir)
-    .map_err(|e| format!("failed to create app_data_dir {app_data_dir:?}: {e}"))?;
-
+fn find_bundled_libstudy(app: &tauri::AppHandle) -> Result<std::path::PathBuf, String> {
   let lib_name = libstudy::Libstudy::platform_lib_filename();
-  let dst = app_data_dir.join(lib_name);
-  if dst.exists() {
-    log::info!("libstudy: app_data library already exists at {dst:?}");
-    return Ok(dst);
-  }
 
   let resource_dir = app
     .path()
@@ -52,7 +39,42 @@ fn ensure_libstudy_in_app_data(app: &tauri::AppHandle) -> Result<std::path::Path
   // Fallback: relative to current working directory.
   candidates.push(std::path::PathBuf::from("resources").join(lib_name));
 
-  for src in candidates {
+  for c in candidates {
+    if c.exists() {
+      return Ok(c);
+    }
+  }
+
+  Err(format!(
+    "libstudy was not found in bundled resources. resource_dir={resource_dir:?} expected={lib_name}"
+  ))
+}
+
+fn ensure_libstudy_in_app_data(app: &tauri::AppHandle) -> Result<std::path::PathBuf, String> {
+  let app_data_dir = app
+    .path()
+    .app_data_dir()
+    .map_err(|e| format!("failed to resolve app_data_dir: {e}"))?;
+
+  std::fs::create_dir_all(&app_data_dir)
+    .map_err(|e| format!("failed to create app_data_dir {app_data_dir:?}: {e}"))?;
+
+  let lib_name = libstudy::Libstudy::platform_lib_filename();
+  let dst = app_data_dir.join(lib_name);
+  if dst.exists() {
+    log::info!("libstudy: app_data library already exists at {dst:?}");
+    return Ok(dst);
+  }
+
+  let src = find_bundled_libstudy(app)?;
+  {
+    // Helpful diagnostics when we have a library but can't stage it.
+    log::info!(
+      "libstudy: preparing staged copy src={src:?} dst={dst:?}"
+    );
+  }
+
+  {
     if src.exists() {
       log::info!("libstudy: copying bundled library from {src:?} to {dst:?}");
 
@@ -75,9 +97,7 @@ fn ensure_libstudy_in_app_data(app: &tauri::AppHandle) -> Result<std::path::Path
     }
   }
 
-  Err(format!(
-    "libstudy was not found in resources. resource_dir={resource_dir:?} expected={lib_name}"
-  ))
+  Err(format!("libstudy source not found at {src:?}"))
 }
 
 fn set_default_libstudy_override(app: &tauri::AppHandle) {
@@ -87,8 +107,18 @@ fn set_default_libstudy_override(app: &tauri::AppHandle) {
       log::info!("libstudy: default override path set to {p:?} (updates will replace this file)");
     }
     Err(e) => {
-      // Do not hard-fail app startup; libstudy can still load from other candidates.
+      // Do not hard-fail app startup; fall back to loading from bundled resources directly.
       log::warn!("libstudy: unable to prepare app_data library: {e}");
+
+      match find_bundled_libstudy(app) {
+        Ok(p) => {
+          libstudy::set_override_path(Some(p.clone()));
+          log::info!("libstudy: falling back to bundled library path {p:?}");
+        }
+        Err(e2) => {
+          log::warn!("libstudy: bundled library was not found either: {e2}");
+        }
+      }
     }
   }
 }
@@ -548,6 +578,33 @@ async fn init_libstudy_auto(app: tauri::AppHandle) -> Result<String, String> {
     match result {
       Ok(resp) => {
         log::info!("init_libstudy_auto: init SUCCESS response={}", resp);
+
+        // Self-healing: If we loaded from a fallback path (e.g. bundled resources) instead of the 
+        // expected app_data path (which set_default_libstudy_override prioritizes), it implies 
+        // the app_data copy is broken/incompatible. We should overwrite it with the working one.
+        if let Ok((true, Some(loaded_path))) = libstudy::info() {
+          let lib_name = libstudy::Libstudy::platform_lib_filename();
+          let data_lib_path = app_data_dir2.join(lib_name);
+
+          // Check if we are using a different file than the one in data dir, AND the data dir file exists (is broken)
+          if loaded_path != data_lib_path && data_lib_path.exists() {
+             log::warn!("init_libstudy_auto: Self-healing triggered. Loaded from {:?} but expected {:?}. Overwriting broken library...", loaded_path, data_lib_path);
+             
+             match std::fs::copy(&loaded_path, &data_lib_path) {
+               Ok(_) => {
+                 log::info!("init_libstudy_auto: Self-healing successful. Broken library replaced.");
+                 #[cfg(target_os = "linux")]
+                 {
+                   use std::os::unix::fs::PermissionsExt;
+                   if let Ok(meta) = std::fs::metadata(&loaded_path) {
+                     let _ = std::fs::set_permissions(&data_lib_path, std::fs::Permissions::from_mode(meta.permissions().mode()));
+                   }
+                 }
+               },
+               Err(e) => log::error!("init_libstudy_auto: Self-healing failed to copy library: {}", e),
+             }
+          }
+        }
         
         // Auto-start proxy worker after successful init
         log::info!("init_libstudy_auto: auto-starting proxy worker...");

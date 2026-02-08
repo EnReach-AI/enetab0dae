@@ -202,7 +202,7 @@ build_for_platform() {
         linux)
             CGO_ENABLED=1 GOOS=$goos GOARCH=$goarch go build \
                 -buildmode=c-shared \
-                -ldflags "$ldflags" \
+                -ldflags "$ldflags -extldflags '-static-libgcc'" \
                 -o "$output_dir/$output_name.$output_ext" \
                 .
             ;;
