@@ -444,7 +444,6 @@ pub fn run() {
       // get_ws_client_status,
       get_current_version,
       get_last_version,
-      cleanup_libstudy,
       libstudy_info,
     ])
     .run(tauri::generate_context!())
@@ -760,11 +759,3 @@ async fn get_last_version() -> Result<String, String> {
 
 
 
-#[tauri::command]
-async fn cleanup_libstudy() -> Result<String, String> {
-  tauri::async_runtime::spawn_blocking(|| {
-    libstudy::with_lib(|lib, _path| lib.cleanup()).map_err(|e| e.to_string())
-  })
-  .await
-  .map_err(|e| format!("cleanup_libstudy task join error: {e}"))?
-}
