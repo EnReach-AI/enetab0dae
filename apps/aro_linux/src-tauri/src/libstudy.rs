@@ -21,7 +21,6 @@ pub struct Libstudy {
   // get_ws_client_status: Option<CStrReturnFn>,
   get_current_version: CStrReturnFn,
   get_last_version: CStrReturnFn,
-  cleanup: CStrReturnFn,
 }
 
 impl Libstudy {
@@ -90,12 +89,7 @@ impl Libstudy {
 
 
 
-      let cleanup = *lib
-        .get::<CStrReturnFn>(b"Cleanup\0")
-        .map_err(|e| {
-          log::error!("libstudy: missing symbol Cleanup path={:?} err={}", path, e);
-          anyhow::anyhow!("missing symbol Cleanup: {}", e)
-        })?;
+   
 
       Ok(Self {
         _lib: lib,
@@ -107,7 +101,6 @@ impl Libstudy {
         // get_ws_client_status,
         get_current_version,
         get_last_version,
-        cleanup,
       })
     }
   }
@@ -298,9 +291,6 @@ impl Libstudy {
   }
 
 
-  pub fn cleanup(&self) -> anyhow::Result<String> {
-    unsafe { call_c_string(self.cleanup) }
-  }
 }
 
 #[derive(Default)]

@@ -756,6 +756,3 @@ async fn get_last_version() -> Result<String, String> {
   .await
   .map_err(|e| format!("get_last_version task join error: {e}"))?
 }
-
-
-
