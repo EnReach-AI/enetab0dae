@@ -442,14 +442,8 @@ pub fn run() {
       get_node_stat,
       get_rewards,
       // get_ws_client_status,
-      start_ws_client,
       get_current_version,
       get_last_version,
-      start_proxy_worker,
-      stop_proxy_worker,
-      get_proxy_worker_status,
-      restart_proxy_worker,
-      is_proxy_worker_running,
       cleanup_libstudy,
       libstudy_info,
     ])
@@ -605,29 +599,7 @@ async fn init_libstudy_auto(app: tauri::AppHandle) -> Result<String, String> {
              }
           }
         }
-        
-        // Auto-start proxy worker after successful init
-        log::info!("init_libstudy_auto: auto-starting proxy worker...");
-        const HARDCODED_CONFIG: &str = r#"{
-          "sn": "OLKN4YY4XA9096W5",
-          "token": "1",
-          "tunnel_id": "4dd56d7f-df87-4f7b-9dd3-5f74465d8f74",
-          "proxy_server_ip": "150.109.69.196",
-          "proxy_server_port": 443,
-          "local_port": 22779,
-          "nat_type": 0,
-          "fixed_port": 22779
-        }"#;
-        
-        match libstudy::with_lib(|lib, _| lib.start_proxy_worker(HARDCODED_CONFIG)) {
-          Ok(proxy_resp) => {
-            
-            log::info!("init_libstudy_auto: proxy worker started, response={}", proxy_resp);
-          }
-          Err(e) => {
-            log::warn!("init_libstudy_auto: failed to auto-start proxy worker: {}", e);
-          }
-        }
+      
         
         // Check for libstudy updates (only on Linux)
         #[cfg(target_os = "linux")]
@@ -766,14 +738,7 @@ async fn get_rewards() -> Result<String, String> {
 //   .map_err(|e| format!("get_ws_client_status task join error: {e}"))?
 // }
 
-#[tauri::command]
-async fn start_ws_client() -> Result<String, String> {
-  tauri::async_runtime::spawn_blocking(|| {
-    libstudy::with_lib(|lib, _path| lib.start_ws_client()).map_err(|e| e.to_string())
-  })
-  .await
-  .map_err(|e| format!("start_ws_client task join error: {e}"))?
-}
+
 
 #[tauri::command]
 async fn get_current_version() -> Result<String, String> {
@@ -793,111 +758,7 @@ async fn get_last_version() -> Result<String, String> {
   .map_err(|e| format!("get_last_version task join error: {e}"))?
 }
 
-#[derive(serde::Deserialize)]
-struct StartProxyWorkerArgs {
-  // Frontends may send either `config_json` or `configJson`.
-  #[serde(alias = "configJson")]
-  _config_json: String,
-}
 
-#[tauri::command]
-async fn start_proxy_worker(
-  app: tauri::AppHandle,
-  _args: StartProxyWorkerArgs,
-) -> Result<String, String> {
-  // Ensure the per-user copy exists and prefer it for loading.
-  set_default_libstudy_override(&app);
-
-  // Hardcoded config - ignoring frontend input for now
-  const HARDCODED_CONFIG: &str = r#"{
-    "sn": "OLKN4YY4XA9096W5",
-    "token": "1",
-    "tunnel_id": "4dd56d7f-df87-4f7b-9dd3-5f74465d8f74",
-    "proxy_server_ip": "150.109.69.196",
-    "proxy_server_port": 443,
-    "local_port": 22779,
-    "nat_type": 0,
-    "fixed_port": 22779
-  }"#;
-
-  log::info!(
-    "start_proxy_worker using hardcoded config (ignoring frontend input): sn=OLKN4YY4XA9096W5 tunnel_id=4dd56d7f-df87-4f7b-9dd3-5f74465d8f74 proxy_server=150.109.69.196:443 local_port=22779 nat_type=0 fixed_port=22779 token=1"
-  );
-
-  // Align with init_libstudy_auto behavior: ensure we run from a writable directory.
-  let app_data_dir = app
-    .path()
-    .app_data_dir()
-    .map_err(|e| format!("start_proxy_worker failed to resolve app_data_dir: {e}"))?;
-
-  let final_config_json = HARDCODED_CONFIG.to_string();
-
-  let resp = tauri::async_runtime::spawn_blocking(move || {
-    std::fs::create_dir_all(&app_data_dir)
-      .map_err(|e| format!("start_proxy_worker failed to create app_data_dir {app_data_dir:?}: {e}"))?;
-    std::env::set_current_dir(&app_data_dir)
-      .map_err(|e| format!("start_proxy_worker failed to set current dir to {app_data_dir:?}: {e}"))?;
-
-    libstudy::with_lib(|lib, _path| lib.start_proxy_worker(&final_config_json))
-      .map_err(|e| e.to_string())
-  })
-  .await
-  .map_err(|e| format!("start_proxy_worker task join error: {e}"))??;
-
-  // Log the response and best-effort parse for status.
-  match serde_json::from_str::<serde_json::Value>(&resp) {
-    Ok(v) => {
-      let code = v.get("code").and_then(|c| c.as_i64());
-      let msg = v
-        .get("message")
-        .or_else(|| v.get("msg"))
-        .and_then(|m| m.as_str())
-        .unwrap_or("");
-      log::info!("start_proxy_worker response parsed code={code:?} message={msg}");
-    }
-    Err(_) => {
-      log::info!("start_proxy_worker response (non-JSON): {resp}");
-    }
-  }
-
-  Ok(resp)
-}
-
-#[tauri::command]
-async fn stop_proxy_worker() -> Result<String, String> {
-  tauri::async_runtime::spawn_blocking(|| {
-    libstudy::with_lib(|lib, _path| lib.stop_proxy_worker()).map_err(|e| e.to_string())
-  })
-  .await
-  .map_err(|e| format!("stop_proxy_worker task join error: {e}"))?
-}
-
-#[tauri::command]
-async fn get_proxy_worker_status() -> Result<String, String> {
-  tauri::async_runtime::spawn_blocking(|| {
-    libstudy::with_lib(|lib, _path| lib.get_proxy_worker_status()).map_err(|e| e.to_string())
-  })
-  .await
-  .map_err(|e| format!("get_proxy_worker_status task join error: {e}"))?
-}
-
-#[tauri::command]
-async fn restart_proxy_worker() -> Result<String, String> {
-  tauri::async_runtime::spawn_blocking(|| {
-    libstudy::with_lib(|lib, _path| lib.restart_proxy_worker()).map_err(|e| e.to_string())
-  })
-  .await
-  .map_err(|e| format!("restart_proxy_worker task join error: {e}"))?
-}
-
-#[tauri::command]
-async fn is_proxy_worker_running() -> Result<String, String> {
-  tauri::async_runtime::spawn_blocking(|| {
-    libstudy::with_lib(|lib, _path| lib.is_proxy_worker_running()).map_err(|e| e.to_string())
-  })
-  .await
-  .map_err(|e| format!("is_proxy_worker_running task join error: {e}"))?
-}
 
 #[tauri::command]
 async fn cleanup_libstudy() -> Result<String, String> {

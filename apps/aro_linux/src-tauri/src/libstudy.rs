@@ -19,14 +19,8 @@ pub struct Libstudy {
   get_rewards: CStrReturnFn,
   init_libstudy: CStrArgReturnFn,
   // get_ws_client_status: Option<CStrReturnFn>,
-  start_ws_client: Option<CStrReturnFn>,
   get_current_version: CStrReturnFn,
   get_last_version: CStrReturnFn,
-  start_proxy_worker: CStrArgReturnFn,
-  stop_proxy_worker: CStrReturnFn,
-  get_proxy_worker_status: CStrReturnFn,
-  restart_proxy_worker: CStrReturnFn,
-  is_proxy_worker_running: CStrReturnFn,
   cleanup: CStrReturnFn,
 }
 
@@ -80,10 +74,6 @@ impl Libstudy {
       //   .get::<CStrReturnFn>(b"GetWSClientStatus\0")
       //   .ok()
       //   .map(|s| *s);
-      let start_ws_client = lib
-        .get::<CStrReturnFn>(b"StartWSClient\0")
-        .ok()
-        .map(|s| *s);
 
       let get_current_version = *lib
         .get::<CStrReturnFn>(b"GetCurrentVersion\0")
@@ -98,36 +88,7 @@ impl Libstudy {
           anyhow::anyhow!("missing symbol GetLastVersion: {}", e)
         })?;
 
-      let start_proxy_worker = *lib
-        .get::<CStrArgReturnFn>(b"StartProxyWorker\0")
-        .map_err(|e| {
-          log::error!("libstudy: missing symbol StartProxyWorker path={:?} err={}", path, e);
-          anyhow::anyhow!("missing symbol StartProxyWorker: {}", e)
-        })?;
-      let stop_proxy_worker = *lib
-        .get::<CStrReturnFn>(b"StopProxyWorker\0")
-        .map_err(|e| {
-          log::error!("libstudy: missing symbol StopProxyWorker path={:?} err={}", path, e);
-          anyhow::anyhow!("missing symbol StopProxyWorker: {}", e)
-        })?;
-      let get_proxy_worker_status = *lib
-        .get::<CStrReturnFn>(b"GetProxyWorkerStatus\0")
-        .map_err(|e| {
-          log::error!("libstudy: missing symbol GetProxyWorkerStatus path={:?} err={}", path, e);
-          anyhow::anyhow!("missing symbol GetProxyWorkerStatus: {}", e)
-        })?;
-      let restart_proxy_worker = *lib
-        .get::<CStrReturnFn>(b"RestartProxyWorker\0")
-        .map_err(|e| {
-          log::error!("libstudy: missing symbol RestartProxyWorker path={:?} err={}", path, e);
-          anyhow::anyhow!("missing symbol RestartProxyWorker: {}", e)
-        })?;
-      let is_proxy_worker_running = *lib
-        .get::<CStrReturnFn>(b"IsProxyWorkerRunning\0")
-        .map_err(|e| {
-          log::error!("libstudy: missing symbol IsProxyWorkerRunning path={:?} err={}", path, e);
-          anyhow::anyhow!("missing symbol IsProxyWorkerRunning: {}", e)
-        })?;
+
 
       let cleanup = *lib
         .get::<CStrReturnFn>(b"Cleanup\0")
@@ -144,14 +105,8 @@ impl Libstudy {
         get_rewards,
         init_libstudy,
         // get_ws_client_status,
-        start_ws_client,
         get_current_version,
         get_last_version,
-        start_proxy_worker,
-        stop_proxy_worker,
-        get_proxy_worker_status,
-        restart_proxy_worker,
-        is_proxy_worker_running,
         cleanup,
       })
     }
@@ -333,12 +288,6 @@ impl Libstudy {
   //   unsafe { call_c_string(func) }
   // }
 
-  pub fn start_ws_client(&self) -> anyhow::Result<String> {
-    let func = self
-      .start_ws_client
-      .ok_or_else(|| anyhow::anyhow!("missing symbol StartWSClient (libstudy build may have it disabled)"))?;
-    unsafe { call_c_string(func) }
-  }
 
   pub fn get_current_version(&self) -> anyhow::Result<String> {
     unsafe { call_c_string(self.get_current_version) }
@@ -348,26 +297,6 @@ impl Libstudy {
     unsafe { call_c_string(self.get_last_version) }
   }
 
-  pub fn start_proxy_worker(&self, config_json: &str) -> anyhow::Result<String> {
-    let c = CString::new(config_json)?;
-    unsafe { call_c_string_with_arg(self.start_proxy_worker, c.as_ptr()) }
-  }
-
-  pub fn stop_proxy_worker(&self) -> anyhow::Result<String> {
-    unsafe { call_c_string(self.stop_proxy_worker) }
-  }
-
-  pub fn get_proxy_worker_status(&self) -> anyhow::Result<String> {
-    unsafe { call_c_string(self.get_proxy_worker_status) }
-  }
-
-  pub fn restart_proxy_worker(&self) -> anyhow::Result<String> {
-    unsafe { call_c_string(self.restart_proxy_worker) }
-  }
-
-  pub fn is_proxy_worker_running(&self) -> anyhow::Result<String> {
-    unsafe { call_c_string(self.is_proxy_worker_running) }
-  }
 
   pub fn cleanup(&self) -> anyhow::Result<String> {
     unsafe { call_c_string(self.cleanup) }
