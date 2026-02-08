@@ -694,11 +694,15 @@ fn init_libstudy_with_params(
 
 #[tauri::command]
 async fn node_sign_up() -> Result<String, String> {
-  tauri::async_runtime::spawn_blocking(|| {
+  let resp = tauri::async_runtime::spawn_blocking(|| {
     libstudy::with_lib(|lib, _path| lib.node_sign_up()).map_err(|e| e.to_string())
   })
   .await
-  .map_err(|e| format!("node_sign_up task join error: {e}"))?
+  .map_err(|e| format!("node_sign_up task join error: {e}"))??;
+
+  println!("[node_sign_up] response={resp}");
+  log::info!("node_sign_up response={resp}");
+  Ok(resp)
 }
 
 #[tauri::command]
