@@ -212,10 +212,28 @@ func NodeReportBaseInfo(sysInfoJSON *C.char) *C.char {
 func GetNodeStat() *C.char {
 	defer utils.RecoverAndLog("GetNodeStat")
 	log.Println("GetNodeStat called")
+	var status = "connected"
+	if agentConstant.GRPC_STATUS == 0 {
+		status = "disconnected"
+	}
+	if agentConstant.NODE_INFO.BanIP {
+		status = "Restricted ip"
+	}
+	NodeBindResponse := api_client.NodeBindResponse{
+		Bind:         agentConstant.NODE_INFO.Binded,
+		BindUser:     api_client.BindUserInfo{
+			UUID:       agentConstant.NODE_INFO.UUID,
+			Email:      agentConstant.NODE_INFO.Email,
+			InviteCode: "aaaaaaa",
+		},
+		Connect:      status,
+		Message:      nil,
+		SerialNumber: agentConstant.DEVICE_INFO.SerialNumber,
+	}
 	var apiResponse = api_client.APIResponse{
 		Code:    200,
 		Message: "success",
-		Data:    nil,
+		Data:    NodeBindResponse,
 	}
 	return toCStringJSON(apiResponse)
 }
@@ -233,19 +251,6 @@ func GetRewards() *C.char {
 		Data:    nil,
 	}
 	return toCStringJSON(apiResponse)
-}
-
-func GetAppStatus() *C.char {
-	defer utils.RecoverAndLog("GetAppStatus")
-	log.Println("GetAppStatus called")
-	var status = "connected"
-	if agentConstant.GRPC_STATUS == 0 {
-		status = "disconnected"
-	}
-	if agentConstant.NODE_INFO.BanIP {
-		status = "Restricted ip"
-	}
-	return reply(200, "success", status)
 }
 
 //

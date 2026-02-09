@@ -45,3 +45,24 @@ type LastVersionData struct {
 	Checksum     string `json:"checksum"`
 }
 
+// BindUserInfo User information from bind response
+type BindUserInfo struct {
+	UUID       string `json:"uuid"`
+	Email      string `json:"email"`
+	InviteCode string `json:"inviteCode"`
+}
+
+// MessageInfo Message information
+type NoteMessageInfo struct {
+	Content interface{} `json:"content"`
+	URL     interface{} `json:"url"`
+}
+
+// NodeBindResponse Node bind/sign up response
+type NodeBindResponse struct {
+	SerialNumber string       `json:"serialNumber"`
+	Bind         bool         `json:"bind"`
+	Connect      string       `json:"connect"`
+	Message      *NoteMessageInfo  `json:"message"`
+	BindUser     BindUserInfo `json:"bindUser"`
+}
