@@ -135,8 +135,7 @@ func reply(code int, message string, data interface{}) *C.char {
 
 // ServerConfig 结构体用于管理服务器配置参数
 type ServerConfig struct {
-	BaseAPIURL string
-	BaseWSURL  string
+	BaseAPIURL string 	`json:"BaseAPIURL"`
 }
 
 // InitParams 初始化参数结构体
@@ -152,7 +151,6 @@ var (
 	clientID     string
 	serverConfig = &ServerConfig{
 		BaseAPIURL: constant.HTTP_SERVER_ENDPOINT,
-		BaseWSURL:  constant.WS_SERVER_ENDPOINT,
 	}
 	storageApi *storage.Storage
 )
