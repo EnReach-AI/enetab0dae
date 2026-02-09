@@ -21,6 +21,7 @@ const (
 const (
 	KeyKeypairPath = "KEYPAIR_PATH"
 	KeyStoragePath = "STORAGE_PATH"
+	KeyAgentPath  = "AGENT_DIR_PATH"
 )
 
 // 网络相关配置 key

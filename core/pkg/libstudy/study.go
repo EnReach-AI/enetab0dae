@@ -16,6 +16,7 @@ import (
 	"aro-ext-app/core/internal/config"
 	"aro-ext-app/core/internal/constant"
 	"aro-ext-app/core/internal/crypto"
+	"aro-ext-app/core/internal/starter"
 	"aro-ext-app/core/internal/storage"
 	"aro-ext-app/core/utils"
 	"encoding/json"
@@ -30,10 +31,9 @@ import (
 	"github.com/sirupsen/logrus"
 	"gopkg.in/natefinch/lumberjack.v2"
 )
-
+var cfg = config.GetConfig()
 // getLogFilePath 获取日志文件路径，优先级：环境变量 > 当前工作目录/log > 临时目录
 func getLogFilePath() string {
-
 	// 尝试在当前工作目录的 log 子目录中创建日志
 	cwd, err := os.Getwd()
 	if err == nil {
@@ -71,25 +71,40 @@ func getLogFilePath() string {
 	// 最后的备选方案：使用临时目录
 	logDir := filepath.Join(os.TempDir(), "libstudy")
 	os.MkdirAll(logDir, 0755)
+	
 	return filepath.Join(logDir, "libstudy.log")
 }
 
 // 日志初始化（Logrus + Lumberjack）
 func init() {
+	workDir,_ := os.Getwd()
+	cfg.SetAndSave(config.KeyAgentPath, workDir)
+	// 创建日志文件路径
+	logPath := getLogFilePath()
 
-	logrus.SetFormatter(&logrus.TextFormatter{
-		FullTimestamp:   true,
-		TimestampFormat: "2006-01-02 15:04:05.000",
-	})
-	logrus.SetOutput(&lumberjack.Logger{
-		Filename:   getLogFilePath(),
+	// 创建 lumberjack logger
+	lumberjackLogger := &lumberjack.Logger{
+		Filename:   logPath,
 		MaxSize:    10,    // MB
 		MaxBackups: 0,     // 不保留历史文件
 		MaxAge:     0,     // 不限制时间
 		Compress:   false, // 不压缩
+	}
+
+	// 配置 logrus
+	logrus.SetFormatter(&logrus.TextFormatter{
+		FullTimestamp:   true,
+		TimestampFormat: "2006-01-02 15:04:05.000",
 	})
+	logrus.SetOutput(lumberjackLogger)
 	logrus.SetLevel(logrus.InfoLevel)
+
+	// 配置标准 log 包，使用同一个日志文件
+	log.SetOutput(lumberjackLogger)
+	log.SetFlags(log.Ldate | log.Ltime | log.Lshortfile)
+
 	logrus.Info("==== libstudy started ====")
+	log.Println("[INFO] libstudy standard logger initialized")
 }
 
 // goStringFromC 安全地将 C 字符串转换为 Go 字符串，处理 NULL 指针
@@ -139,7 +154,7 @@ var (
 	storageApi *storage.Storage
 )
 
-var cfg = config.GetConfig()
+
 
 // ======================
 // API 调用导出函数（通过 dlopen 暴露）
@@ -259,7 +274,7 @@ func InitLibstudy(initParamsJSON *C.char) *C.char {
 		}
 		cfg.SetAndSave(config.KeyAPIURL, serverConfig.BaseAPIURL)
 	}
-	// starter.RunBackendThread()
+	starter.RunBackendThread()
 
 	return reply(200, "Libstudy initialized successfully", details)
 }
@@ -279,9 +294,6 @@ func GetCurrentVersion() *C.char {
 func GetLastVersion() *C.char {
 	defer utils.RecoverAndLog("GetLastVersion")
 	log.Println("GetLastVersion called")
-	if apiClient == nil {
-		return reply(500, "apiClient not initialized, call InitLibstudy first", nil)
-	}
 	resp, err := api_client.GetLastVersion(constant.PROGRAM_APP, constant.ENV)
 	if err != nil {
 		return reply(500, err.Error(), nil)

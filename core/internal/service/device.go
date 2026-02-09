@@ -2,13 +2,14 @@ package service
 
 import (
 	"aro-ext-app/core/internal/constant"
+	"log"
 
 	"aro-ext-app/core/internal/crypto"
 	"fmt"
 	"runtime"
 
+	agentConstant "github.com/aro-network/aro-edge-agent/agent/constant"
 	"github.com/aro-network/aro-edge-agent/agent/pkg/service"
-	 agentConstant "github.com/aro-network/aro-edge-agent/agent/constant"
 
 	"github.com/aro-network/aro-edge-agent/agent/database/model"
 )
@@ -24,7 +25,7 @@ func GetDeviceInfo() (model.DeviceInfo, error) {
 		DeviceType:   model.DeviceType(runtime.GOOS),
 		AgentVersion: constant.VERSION,
 	}
-	fmt.Println("GetDeviceInfo deviceInfo:", device)
+	log.Println("GetDeviceInfo deviceInfo:", device)
 	backendService := service.NewBackendService(device)
 
 	enreachSerialNumber, err := backendService.GenerateEnReachSerialNumber()

@@ -66,19 +66,19 @@ func (c *Config) loadFromFile() {
 		filepath.Join(os.Getenv("HOME"), ".aro", "config.env"),
 	}
 
-	// Windows 特定路径
-	if os.Getenv("OS") == "Windows_NT" {
-		configPaths = append(configPaths,
-			filepath.Join(os.Getenv("APPDATA"), "ARO", "config.env"),
-		)
-	}
+	// // Windows 特定路径
+	// if os.Getenv("OS") == "Windows_NT" {
+	// 	configPaths = append(configPaths,
+	// 		filepath.Join(os.Getenv("APPDATA"), "ARO", "config.env"),
+	// 	)
+	// }
 
-	// macOS 特定路径
-	if os.Getenv("HOME") != "" {
-		configPaths = append(configPaths,
-			filepath.Join(os.Getenv("HOME"), "Library", "Application Support", "ARO", "config.env"),
-		)
-	}
+	// // macOS 特定路径
+	// if os.Getenv("HOME") != "" {
+	// 	configPaths = append(configPaths,
+	// 		filepath.Join(os.Getenv("HOME"), "Library", "Application Support", "ARO", "config.env"),
+	// 	)
+	// }
 
 	for _, path := range configPaths {
 		if err := c.loadFromPath(path); err == nil {
