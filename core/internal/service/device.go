@@ -1,6 +1,7 @@
 package service
 
 import (
+	"aro-ext-app/core/internal/config"
 	"aro-ext-app/core/internal/constant"
 	"log"
 
@@ -14,6 +15,7 @@ import (
 	"github.com/aro-network/aro-edge-agent/agent/database/model"
 )
 
+var cfg = config.GetConfig()
 func GetDeviceInfo() (model.DeviceInfo, error) {
 	if agentConstant.DEVICE_INFO.SerialNumber != "" {
 		return agentConstant.DEVICE_INFO, nil
@@ -27,7 +29,6 @@ func GetDeviceInfo() (model.DeviceInfo, error) {
 	}
 	log.Println("GetDeviceInfo deviceInfo:", device)
 	backendService := service.NewBackendService(device)
-
 	enreachSerialNumber, err := backendService.GenerateEnReachSerialNumber()
 	if err != nil {
 		return device, fmt.Errorf("failed to generate EnReach serial number: %v", err)
