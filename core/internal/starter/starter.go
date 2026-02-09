@@ -25,6 +25,8 @@ func RunBackendThread() {
 		errorRetryDelay   = 20 * time.Second
 		bindCheckInterval = 20 * time.Second
 	)
+
+	
 	
 	for {
 		// Get device information
