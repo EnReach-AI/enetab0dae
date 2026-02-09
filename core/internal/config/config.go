@@ -157,6 +157,11 @@ func (c *Config) Set(key, value string) {
 	c.data[key] = value
 }
 
+func (c *Config) SetPath(path string) string {
+	c.path = path
+	return c.path
+}
+
 // SetAndSave 设置配置值并写入文件
 func (c *Config) SetAndSave(key, value string) error {
 	c.Set(key, value)
@@ -166,7 +171,7 @@ func (c *Config) SetAndSave(key, value string) error {
 	// 确定配置文件路径
 	configPath := c.path
 	log.Printf("Current config path: %s,key:%s,value:%s", configPath, key, value)
-	if configPath == "" {
+	if configPath == "" {	
 		configPath = ".env"
 	}
 

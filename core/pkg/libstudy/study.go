@@ -23,6 +23,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"path"
 	"path/filepath"
 	"runtime"
 
@@ -39,24 +40,24 @@ func getLogFilePath() string {
 	// 尝试在当前工作目录的 log 子目录中创建日志
 	workDir := cfg.Get(config.KeyAgentPath)
 	logDir := filepath.Join(workDir, "log")
-		if err := os.MkdirAll(logDir, 0755); err == nil {
-			logPath := filepath.Join(logDir, "libstudy.log")
-			// 测试是否可写
-			if f, err := os.OpenFile(logPath, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0644); err == nil {
-				f.Close()
-				return logPath
-			}
+	if err := os.MkdirAll(logDir, 0755); err == nil {
+		logPath := filepath.Join(logDir, "libstudy.log")
+		// 测试是否可写
+		if f, err := os.OpenFile(logPath, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0644); err == nil {
+			f.Close()
+			return logPath
 		}
+	}
 	// 备选方案：根据平台选择合适的默认位置
 	switch runtime.GOOS {
 	case "darwin":
-		
+
 		homeDir, err := os.UserHomeDir()
 		if err != nil {
 			break
 		}
 		logDir := filepath.Join(homeDir, "Library", "Logs")
-		log.Printf("darwin log:%s",logDir)
+		log.Printf("darwin log:%s", logDir)
 		os.MkdirAll(logDir, 0755)
 		return filepath.Join(logDir, "libstudy.log")
 	case "windows":
@@ -66,7 +67,7 @@ func getLogFilePath() string {
 		}
 		logDir := filepath.Join(appDataDir, "libstudy", "log")
 		os.MkdirAll(logDir, 0755)
-		log.Printf("windows log:%s",logDir)
+		log.Printf("windows log:%s", logDir)
 		return filepath.Join(logDir, "libstudy.log")
 	}
 	return filepath.Join(logDir, "libstudy.log")
@@ -267,20 +268,21 @@ func InitLibstudy(initParamsJSON *C.char) *C.char {
 			details["params_error"] = err.Error()
 			return reply(400, fmt.Sprintf("Failed to parse init params: %v", err), details)
 		}
+		if initParams.AppDir != "" {
+			appDir := initParams.AppDir
+			cfg.SetPath(path.Join(appDir, ".env"))
+			cfg.SetAndSave(config.KeyAgentPath, appDir)
 
+		}
 		// 验证并更新服务器配置
 		if initParams.Config.BaseAPIURL != "" {
 			serverConfig.BaseAPIURL = initParams.Config.BaseAPIURL
 			cfg.SetAndSave(config.KeyAPIURL, serverConfig.BaseAPIURL)
 		}
-		if initParams.AppDir != "" {
-			appDir := initParams.AppDir
-			cfg.SetAndSave(config.KeyAgentPath, appDir)
-		}
+		initLog()
+		starter.RunBackendThread()
 
 	}
-	initLog()
-	starter.RunBackendThread()
 
 	return reply(200, "Libstudy initialized successfully", details)
 }
