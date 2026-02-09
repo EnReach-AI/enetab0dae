@@ -165,7 +165,7 @@ func (c *Config) SetAndSave(key, value string) error {
 
 	// 确定配置文件路径
 	configPath := c.path
-	log.Printf("Current config path: %s", configPath)
+	log.Printf("Current config path: %s,key:%s,value:%s", configPath, key, value)
 	if configPath == "" {
 		configPath = ".env"
 	}
