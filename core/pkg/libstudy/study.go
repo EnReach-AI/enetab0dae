@@ -79,7 +79,7 @@ func initLog() {
 
 	executeDir, _ := os.Executable()
 
-	cfg.SetAndSave(config.KeyAgentPath, workDir)
+	// cfg.SetAndSave(config.KeyAgentPath, workDir)
 	// 创建日志文件路径
 	logPath := getLogFilePath()
 
