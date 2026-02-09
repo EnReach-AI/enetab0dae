@@ -268,7 +268,9 @@ func InitLibstudy(initParamsJSON *C.char) *C.char {
 			details["params_error"] = err.Error()
 			return reply(400, fmt.Sprintf("Failed to parse init params: %v", err), details)
 		}
+		log.Printf("InitLibstudy params json: %+v", initParams)
 		if initParams.AppDir != "" {
+			
 			appDir := initParams.AppDir
 			cfg.SetPath(path.Join(appDir, ".env"))
 			cfg.SetAndSave(config.KeyAgentPath, appDir)
