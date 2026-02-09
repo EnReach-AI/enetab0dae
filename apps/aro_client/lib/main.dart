@@ -288,26 +288,29 @@ class _MyHomePageState extends State<MyHomePage>
         LoggerService().info('nodeInfo--- error $e ');
       }
     } else if (message == 'nodeSignUp') {
-      final status = service.nodeSignUp();
-      print('node status: $status');
-      sendMessageToWeb({
-        'type': 'nodeSignUp',
-        'payload': status,
-      });
-      print('Send nodeSignUp:  ------- ');
-
-      final stat = service.getNodeStat();
-      final statMap = jsonDecode(stat);
-
-      print('statMapStat $statMap');
-
-      if (statMap['code'] == 200) {
-        print('Send: signup sta  ------- $stat $statMap ');
+      try {
+        final status = service.nodeSignUp();
+        print('node status: $status');
         sendMessageToWeb({
-          'type': 'nodeInfo',
-          'payload': statMap,
+          'type': 'nodeSignUp',
+          'payload': status,
         });
-        connectWS();
+
+        final stat = service.getNodeStat();
+        final statMap = jsonDecode(stat);
+
+        print('statMapStat $statMap');
+
+        if (statMap['code'] == 200) {
+          print('Send: signup sta  ------- $stat $statMap ');
+          sendMessageToWeb({
+            'type': 'nodeInfo',
+            'payload': statMap,
+          });
+        }
+      } catch (e) {
+        print('nodeSignUp error $e');
+        LoggerService().info('nodeSignUp--- error $e ');
       }
     } else if (message == 'nodeRewards') {
       final rewards = service.getRewards();
