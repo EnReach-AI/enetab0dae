@@ -7,18 +7,19 @@ import (
 
 	"aro-ext-app/core/internal/config"
 	internalService "aro-ext-app/core/internal/service"
-
-	"github.com/aro-network/aro-edge-agent/agent/constant"
+	"aro-ext-app/core/internal/constant"
+	agentConstant "github.com/aro-network/aro-edge-agent/agent/constant"
 	"github.com/aro-network/aro-edge-agent/agent/database/model"
 	"github.com/aro-network/aro-edge-agent/agent/pkg/job"
-	"github.com/aro-network/aro-edge-agent/agent/pkg/proxy"
+	"github.com/aro-network/aro-edge-agent/agent/pkg/proxy"	
 	"github.com/aro-network/aro-edge-agent/agent/pkg/service"
 )
 var cfg = config.GetConfig()
 
 func RunBackendThread() {
 
-	constant.Init2(cfg.Get(config.KeyAgentPath))
+	agentConstant.Init2(cfg.Get(config.KeyAgentPath),constant.VERSION)
+	
 	const (
 		pollInterval      = 20 * time.Second
 		errorRetryDelay   = 20 * time.Second
@@ -56,7 +57,7 @@ func RunBackendThread() {
 		service.DetectEnvironment()
 		// Device is bound, start services
 		ctx, cancel := context.WithCancel(context.Background())
-		log.Printf("environment type:%s", constant.ENVIRONMENT_TYPE)
+		log.Printf("environment type:%s", agentConstant.ENVIRONMENT_TYPE)
 		// Start physical machine services
 		// if constant.ENVIRONMENT_TYPE == model.PhysicalMachine && !bindResult.BanIP {
 

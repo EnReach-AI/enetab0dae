@@ -20,6 +20,8 @@ github.com/aro-network/aro-edge-agent/agent v0.0.0-20260209082140-ab53079764a1 h
 github.com/aro-network/aro-edge-agent/agent v0.0.0-20260209082140-ab53079764a1/go.mod h1:V8ywMCP0pL9qdiEEhCsPyHhXfMLXokYcEovPKTkfApk=
 github.com/aro-network/aro-edge-agent/agent v0.0.0-20260209112502-e55d9663090c h1:L1HUKEiOUi8CpXh+RJNgNnkmB2LLNvP2GktJF3uftTM=
 github.com/aro-network/aro-edge-agent/agent v0.0.0-20260209112502-e55d9663090c/go.mod h1:V8ywMCP0pL9qdiEEhCsPyHhXfMLXokYcEovPKTkfApk=
+github.com/aro-network/aro-edge-agent/agent v0.0.0-20260209114142-9df013cac1ad h1:Kelp5Vlbf7ydjoK1il2kU6lUPnnkmYUtxSked85dbQY=
+github.com/aro-network/aro-edge-agent/agent v0.0.0-20260209114142-9df013cac1ad/go.mod h1:V8ywMCP0pL9qdiEEhCsPyHhXfMLXokYcEovPKTkfApk=
 github.com/aro-network/aro-edge-agent/devpage v0.0.0-20260205051827-0660ff8ce203 h1:XWRWityx9Fje4w7obHGm8gRwJ1NBFeYwXiPtZ6T2giw=
 github.com/aro-network/aro-edge-agent/devpage v0.0.0-20260205051827-0660ff8ce203/go.mod h1:KJi1RdMP2eJoYSRXUgfX6kghkm2hAtoNMndJUWiPZCk=
 github.com/aro-network/aro-proxy-worker/x v0.0.0-20260129021610-a2e00bd80c78 h1:O4K1YW7S0mAIfRBWq3ZtlqSb/sZ64eR8V53/nbsw+oQ=
