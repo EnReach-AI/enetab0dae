@@ -33,6 +33,7 @@ func GetDeviceInfo() (model.DeviceInfo, error) {
 	if err != nil {
 		return device, fmt.Errorf("failed to generate EnReach serial number: %v", err)
 	}
+	cfg.SetAndSave(config.KeySN,enreachSerialNumber)
 	device.SerialNumber = enreachSerialNumber
 	agentConstant.DEVICE_INFO = device
 	return device, nil

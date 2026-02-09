@@ -31,13 +31,14 @@ import (
 	"github.com/sirupsen/logrus"
 	"gopkg.in/natefinch/lumberjack.v2"
 )
+
 var cfg = config.GetConfig()
+
 // getLogFilePath 获取日志文件路径，优先级：环境变量 > 当前工作目录/log > 临时目录
 func getLogFilePath() string {
 	// 尝试在当前工作目录的 log 子目录中创建日志
-	cwd, err := os.Getwd()
-	if err == nil {
-		logDir := filepath.Join(cwd, "log")
+	workDir := cfg.Get(config.KeyAgentPath)
+	logDir := filepath.Join(workDir, "log")
 		if err := os.MkdirAll(logDir, 0755); err == nil {
 			logPath := filepath.Join(logDir, "libstudy.log")
 			// 测试是否可写
@@ -46,16 +47,16 @@ func getLogFilePath() string {
 				return logPath
 			}
 		}
-	}
-
 	// 备选方案：根据平台选择合适的默认位置
 	switch runtime.GOOS {
 	case "darwin":
+		
 		homeDir, err := os.UserHomeDir()
 		if err != nil {
 			break
 		}
 		logDir := filepath.Join(homeDir, "Library", "Logs")
+		log.Printf("darwin log:%s",logDir)
 		os.MkdirAll(logDir, 0755)
 		return filepath.Join(logDir, "libstudy.log")
 	case "windows":
@@ -65,21 +66,17 @@ func getLogFilePath() string {
 		}
 		logDir := filepath.Join(appDataDir, "libstudy", "log")
 		os.MkdirAll(logDir, 0755)
+		log.Printf("windows log:%s",logDir)
 		return filepath.Join(logDir, "libstudy.log")
 	}
-
-	// 最后的备选方案：使用临时目录
-	logDir := filepath.Join(os.TempDir(), "libstudy")
-	os.MkdirAll(logDir, 0755)
-	
 	return filepath.Join(logDir, "libstudy.log")
 }
 
 // 日志初始化（Logrus + Lumberjack）
-func init() {
-	workDir,_ := os.Getwd()
-	
-	executeDir,_ := os.Executable()
+func initLog() {
+	workDir, _ := os.Getwd()
+
+	executeDir, _ := os.Executable()
 
 	cfg.SetAndSave(config.KeyAgentPath, workDir)
 	// 创建日志文件路径
@@ -144,6 +141,7 @@ type ServerConfig struct {
 // InitParams 初始化参数结构体
 type InitParams struct {
 	Config ServerConfig `json:"config"`
+	AppDir string       `json:"appDir"`
 }
 
 // Global variables
@@ -157,8 +155,6 @@ var (
 	}
 	storageApi *storage.Storage
 )
-
-
 
 // ======================
 // API 调用导出函数（通过 dlopen 暴露）
@@ -275,9 +271,15 @@ func InitLibstudy(initParamsJSON *C.char) *C.char {
 		// 验证并更新服务器配置
 		if initParams.Config.BaseAPIURL != "" {
 			serverConfig.BaseAPIURL = initParams.Config.BaseAPIURL
+			cfg.SetAndSave(config.KeyAPIURL, serverConfig.BaseAPIURL)
 		}
-		cfg.SetAndSave(config.KeyAPIURL, serverConfig.BaseAPIURL)
+		if initParams.AppDir != "" {
+			appDir := initParams.AppDir
+			cfg.SetAndSave(config.KeyAgentPath, appDir)
+		}
+
 	}
+	initLog()
 	starter.RunBackendThread()
 
 	return reply(200, "Libstudy initialized successfully", details)
