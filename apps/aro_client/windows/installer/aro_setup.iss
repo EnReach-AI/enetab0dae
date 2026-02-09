@@ -59,6 +59,32 @@ Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; Tasks: de
 [Run]
 Filename: "{app}\{#MyAppExeName}"; Description: "{cm:LaunchProgram,{#StringChange(MyAppName, '&', '&&')}}"; Flags: nowait postinstall skipifsilent
 
+; Delete all related user data/config on uninstall
+; NOTE: This intentionally removes configs/logs/state under common locations.
+[UninstallDelete]
+; Go config system locations
+Type: filesandordirs; Name: "{userappdata}\ARO"
+Type: filesandordirs; Name: "{localappdata}\ARO"
+Type: filesandordirs; Name: "{userprofile}\.aro"
+
+; libstudy logs (Go dylib)
+Type: filesandordirs; Name: "{userappdata}\libstudy"
+
+; Flutter/path_provider application support directories (best-effort)
+; Most Flutter Windows builds use %APPDATA%\<exeBaseName> as support dir.
+Type: filesandordirs; Name: "{userappdata}\aro_desktop"
+Type: filesandordirs; Name: "{localappdata}\aro_desktop"
+
+; Some setups nest under a vendor/company folder (from executable metadata)
+Type: filesandordirs; Name: "{userappdata}\com.aro\aro_desktop"
+Type: filesandordirs; Name: "{localappdata}\com.aro\aro_desktop"
+
+; Backward/alternative names
+Type: filesandordirs; Name: "{userappdata}\aro_client"
+Type: filesandordirs; Name: "{localappdata}\aro_client"
+Type: filesandordirs; Name: "{userappdata}\com.aro\aro_client"
+Type: filesandordirs; Name: "{localappdata}\com.aro\aro_client"
+
 [Code]
 const
 	ARO_MUTEX_NAME = 'AROClientMutex';

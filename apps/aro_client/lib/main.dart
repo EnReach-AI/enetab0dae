@@ -269,17 +269,23 @@ class _MyHomePageState extends State<MyHomePage>
     }
 
     if (message == 'nodeInfo') {
-      final stat = service.getNodeStat();
-      final statMap = jsonDecode(stat);
-      print('statMap nodeInfo $statMap');
+      try {
+        final stat = service.getNodeStat();
+        final statMap = jsonDecode(stat);
+        print('statMap nodeInfo $statMap');
 
-      if (statMap['code'] == 200 && statMap['data']['bind'] == true) {
-        print('Send stat result:  ------- $stat $statMap ');
-        sendToWeb({
-          'type': 'nodeInfo',
-          'payload': statMap,
-        });
-        connectWS();
+        if (statMap['code'] == 200 &&
+            statMap['data'] &&
+            statMap['data']['bind'] == true) {
+          print('Send stat result:  ------- $stat $statMap ');
+          sendToWeb({
+            'type': 'nodeInfo',
+            'payload': statMap,
+          });
+        }
+      } catch (e) {
+        print('nodeInfo error $e');
+        LoggerService().info('nodeInfo--- error $e ');
       }
     } else if (message == 'nodeSignUp') {
       final status = service.nodeSignUp();
@@ -411,9 +417,13 @@ class _MyHomePageState extends State<MyHomePage>
       final appDir = await getAppSupportDir();
       print('Generate file directory 123: $appDir');
       // final service = StudyService.instance; // Remove local variable to avoid confusion
-      final initResult = service.nodeInit(appDir, {
-        "config": {"BaseAPIURL": AllConfig.apiBase, "BaseWSURL": AllConfig.ws}
+      final initResult = service.nodeInit({
+        "appDir": appDir
+      }, {
+        "config": {"BaseAPIURL": AllConfig.apiBase}
       });
+
+      print('initializing node: $initResult');
 
       LoggerService().info('Init result: $initResult ------- ');
     } catch (e) {
