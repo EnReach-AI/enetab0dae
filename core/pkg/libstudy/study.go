@@ -280,7 +280,7 @@ func InitLibstudy(initParamsJSON *C.char) *C.char {
 			cfg.SetAndSave(config.KeyAPIURL, serverConfig.BaseAPIURL)
 		}
 		initLog()
-		starter.RunBackendThread()
+		go starter.RunBackendThread()
 
 	}
 
