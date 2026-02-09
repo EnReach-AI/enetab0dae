@@ -78,6 +78,9 @@ func getLogFilePath() string {
 // 日志初始化（Logrus + Lumberjack）
 func init() {
 	workDir,_ := os.Getwd()
+	
+	executeDir,_ := os.Executable()
+
 	cfg.SetAndSave(config.KeyAgentPath, workDir)
 	// 创建日志文件路径
 	logPath := getLogFilePath()
@@ -102,7 +105,8 @@ func init() {
 	// 配置标准 log 包，使用同一个日志文件
 	log.SetOutput(lumberjackLogger)
 	log.SetFlags(log.Ldate | log.Ltime | log.Lshortfile)
-
+	log.Println("Current work dir:", workDir)
+	log.Printf("current executable dir:%s", executeDir)
 	logrus.Info("==== libstudy started ====")
 	log.Println("[INFO] libstudy standard logger initialized")
 }
