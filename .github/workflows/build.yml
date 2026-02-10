@@ -726,7 +726,8 @@ jobs:
 
   build-flatpak:
     needs: [prepare, build-core-linux, build-core-linux-arm64]
-    if: needs.prepare.outputs.aro_linux == 'true'
+    if: needs.prepare.outputs.build_core == 'true'
+
     name: Build Flatpak (ARO Desktop)
     runs-on: ubuntu-latest
 
