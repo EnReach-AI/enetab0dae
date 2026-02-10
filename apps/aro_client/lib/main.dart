@@ -274,9 +274,7 @@ class _MyHomePageState extends State<MyHomePage>
         final statMap = jsonDecode(stat);
         print('statMap nodeInfo $statMap');
 
-        if (statMap['code'] == 200 &&
-            statMap['data'] &&
-            statMap['data']['bind'] == true) {
+        if (statMap['code'] == 200 && statMap['data']['bind'] == true) {
           print('Send stat result:  ------- $stat $statMap ');
           sendToWeb({
             'type': 'nodeInfo',
