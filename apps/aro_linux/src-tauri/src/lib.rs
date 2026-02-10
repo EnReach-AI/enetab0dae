@@ -717,36 +717,49 @@ async fn node_report_base_info(sys_info_json: String) -> Result<String, String> 
 
 #[tauri::command]
 async fn get_node_stat() -> Result<String, String> {
-  tauri::async_runtime::spawn_blocking(|| {
+  let resp = tauri::async_runtime::spawn_blocking(|| {
     libstudy::with_lib(|lib, _path| lib.get_node_stat()).map_err(|e| e.to_string())
   })
   .await
-  .map_err(|e| format!("get_node_stat task join error: {e}"))?
+  .map_err(|e| format!("get_node_stat task join error: {e}"))?;
+  println!("[get_node_stat] response={resp}");
+  log::info!("get_node_stat response={resp}");
+  Ok(resp)
 }
 
 #[tauri::command]
 async fn get_rewards() -> Result<String, String> {
-  tauri::async_runtime::spawn_blocking(|| {
+  let resp = tauri::async_runtime::spawn_blocking(|| {
     libstudy::with_lib(|lib, _path| lib.get_rewards()).map_err(|e| e.to_string())
   })
   .await
-  .map_err(|e| format!("get_rewards task join error: {e}"))?
+  .map_err(|e| format!("get_rewards task join error: {e}"))??;
+
+  println!("[get_rewards] response={resp}");
+  log::info!("get_rewards response={resp}");
+  Ok(resp)
 }
 
 #[tauri::command]
 async fn get_current_version() -> Result<String, String> {
-  tauri::async_runtime::spawn_blocking(|| {
+  let resp = tauri::async_runtime::spawn_blocking(|| {
     libstudy::with_lib(|lib, _path| lib.get_current_version()).map_err(|e| e.to_string())
   })
   .await
-  .map_err(|e| format!("get_current_version task join error: {e}"))?
+  .map_err(|e| format!("get_current_version task join error: {e}"))?;
+    println!("[get_current_version] response={resp}");
+  log::info!("get_current_version response={resp}");
+  Ok(resp)
 }
 
 #[tauri::command]
 async fn get_last_version() -> Result<String, String> {
-  tauri::async_runtime::spawn_blocking(|| {
+  let resp = tauri::async_runtime::spawn_blocking(|| {
     libstudy::with_lib(|lib, _path| lib.get_last_version()).map_err(|e| e.to_string())
   })
   .await
-  .map_err(|e| format!("get_last_version task join error: {e}"))?
+  .map_err(|e| format!("get_last_version task join error: {e}"))?;
+    println!("[get_last_version] response={resp}");
+  log::info!("get_last_version response={resp}");
+  Ok(resp)
 }

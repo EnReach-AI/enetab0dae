@@ -85,6 +85,10 @@ Type: filesandordirs; Name: "{localappdata}\aro_client"
 Type: filesandordirs; Name: "{userappdata}\com.aro\aro_client"
 Type: filesandordirs; Name: "{localappdata}\com.aro\aro_client"
 
+; Remove vendor folder only if empty (avoid deleting other apps' data)
+Type: dirifempty; Name: "{userappdata}\com.aro"
+Type: dirifempty; Name: "{localappdata}\com.aro"
+
 [Code]
 const
 	ARO_MUTEX_NAME = 'AROClientMutex';

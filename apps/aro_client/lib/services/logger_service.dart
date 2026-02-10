@@ -14,7 +14,10 @@ class LoggerService {
     return _instance;
   }
 
-  Future<void> initialize() async {
+  Future<void> initialize({
+    int maxFileSizeBytes = 10 * 1024 * 1024,
+    int maxLogFiles = 20,
+  }) async {
     try {
       final appDir = await getApplicationSupportDirectory();
       final logDir = Directory('${appDir.path}/logs');
@@ -39,7 +42,12 @@ class LoggerService {
           colors: false,
           printEmojis: false,
         ),
-        output: _FileOutput(_logFile!),
+        output: _FileOutput(
+          initialFile: _logFile!,
+          directoryPath: logDir.path,
+          maxFileSizeBytes: maxFileSizeBytes,
+          maxLogFiles: maxLogFiles,
+        ),
       );
 
       print('Logger initialized on ${_getPlatformName()}');
@@ -138,14 +146,84 @@ class LoggerService {
 }
 
 class _FileOutput extends LogOutput {
-  final File file;
+  File _file;
+  final String directoryPath;
+  final int maxFileSizeBytes;
+  final int maxLogFiles;
 
-  _FileOutput(this.file);
+  _FileOutput({
+    required File initialFile,
+    required this.directoryPath,
+    required this.maxFileSizeBytes,
+    required this.maxLogFiles,
+  }) : _file = initialFile;
+
+  static String _newLogFileName() {
+    final timestamp = DateTime.now().toIso8601String().replaceAll(':', '-');
+    return 'app_$timestamp.log';
+  }
+
+  void _maybeRotate(int additionalBytes) {
+    if (maxFileSizeBytes <= 0) return;
+
+    try {
+      if (!_file.existsSync()) {
+        _file.createSync(recursive: true);
+      }
+
+      final currentBytes = _file.lengthSync();
+      if (currentBytes + additionalBytes <= maxFileSizeBytes) return;
+
+      final dir = Directory(directoryPath);
+      if (!dir.existsSync()) {
+        dir.createSync(recursive: true);
+      }
+
+      final nextPath = '${dir.path}/${_newLogFileName()}';
+      _file = File(nextPath)..createSync(recursive: true);
+
+      _cleanupOldLogsSync(dir);
+    } catch (_) {
+      // If rotation fails for any reason, continue writing to the current file.
+    }
+  }
+
+  void _cleanupOldLogsSync(Directory dir) {
+    if (maxLogFiles <= 0) return;
+
+    try {
+      final files = dir
+          .listSync()
+          .whereType<File>()
+          .where((f) => f.path.endsWith('.log'))
+          .toList();
+
+      files.sort((a, b) {
+        final am = a.statSync().modified;
+        final bm = b.statSync().modified;
+        return bm.compareTo(am);
+      });
+
+      if (files.length <= maxLogFiles) return;
+
+      for (final f in files.skip(maxLogFiles)) {
+        try {
+          f.deleteSync();
+        } catch (_) {
+          // Ignore individual delete failures.
+        }
+      }
+    } catch (_) {
+      // Ignore cleanup failures.
+    }
+  }
 
   @override
   void output(OutputEvent event) {
     for (var line in event.lines) {
-      file.writeAsStringSync('$line\n', mode: FileMode.append);
+      final data = '$line\n';
+      _maybeRotate(data.length);
+      _file.writeAsStringSync(data, mode: FileMode.append);
     }
   }
 }
