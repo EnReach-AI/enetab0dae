@@ -5,29 +5,33 @@ import (
 	"log"
 	"time"
 
+	"aro-ext-app/core/internal/agentservice"
+	internalService "aro-ext-app/core/internal/agentservice"
+	"aro-ext-app/core/internal/api_client"
 	"aro-ext-app/core/internal/config"
-	internalService "aro-ext-app/core/internal/service"
 	"aro-ext-app/core/internal/constant"
+
 	agentConstant "github.com/aro-network/aro-edge-agent/agent/constant"
 	"github.com/aro-network/aro-edge-agent/agent/database/model"
 	"github.com/aro-network/aro-edge-agent/agent/pkg/job"
-	"github.com/aro-network/aro-edge-agent/agent/pkg/proxy"	
+	"github.com/aro-network/aro-edge-agent/agent/pkg/proxy"
 	"github.com/aro-network/aro-edge-agent/agent/pkg/service"
 )
+
 var cfg = config.GetConfig()
 
-func RunBackendThread() {
+var AppBackendService *api_client.APIClient
 
-	agentConstant.Init2(cfg.Get(config.KeyAgentPath),constant.VERSION)
-	
+func RunBackendThread(isExcuteBackendThreading chan bool) {
+
+	agentConstant.Init2(cfg.Get(config.KeyAgentPath), constant.VERSION)
+
 	const (
 		pollInterval      = 20 * time.Second
 		errorRetryDelay   = 20 * time.Second
 		bindCheckInterval = 20 * time.Second
 	)
 
-
-	
 	for {
 		// Get device information
 		deviceInfo, err := internalService.GetDeviceInfo()
@@ -48,15 +52,27 @@ func RunBackendThread() {
 			time.Sleep(errorRetryDelay)
 			continue
 		}
+
 		log.Printf("Bind result:%+v", bindResult)
 		log.Printf("Device bind status: %t, NodeID: %s", bindResult.Binded, bindResult.UUID)
+		agentservice.DetectEnvironment()
 
 		if !bindResult.Binded {
 			log.Println("Device not bound, waiting for binding...")
 			time.Sleep(pollInterval)
 			continue
 		}
-		// service.DetectEnvironment()
+		AppBackendService = api_client.NewAPIClient(cfg.Get(config.KeyAPIURL), cfg.Get(config.KeyClientId), cfg.Get(config.KeySN), bindResult.UUID)
+
+		// 发送初始化完成信号
+		if isExcuteBackendThreading != nil {
+			select {
+			case isExcuteBackendThreading <- true:
+				log.Println("Backend initialization completed, signal sent")
+			default:
+				log.Println("Backend initialization completed, but signal already sent")
+			}
+		}
 		agentConstant.ENVIRONMENT_TYPE = model.PhysicalMachine
 		// Device is bound, start services
 		ctx, cancel := context.WithCancel(context.Background())

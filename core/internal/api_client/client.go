@@ -1,18 +1,15 @@
 package api_client
 
 import (
-	"aro-ext-app/core/internal/constant"
-	"aro-ext-app/core/internal/crypto"
 	"bytes"
-	"crypto/rsa"
 	"encoding/json"
 	"fmt"
 	"io"
 	"log"
 	"net/http"
 	"time"
+	agentUtil "github.com/aro-network/aro-edge-agent/agent/util"
 
-	"aro-ext-app/core/internal/auth"
 )
 
 // APIClient API client with authentication information
@@ -20,19 +17,13 @@ type APIClient struct {
 	BaseURL    string
 	HttpClient *http.Client
 	ClientID   string
-	PrivateKey *rsa.PrivateKey
-	PublicKey  *rsa.PublicKey
+	NodeId     string
+	SerialNumber string
+	
 }
 
 // String implements Stringer interface for safe logging
-func (c *APIClient) String() string {
-	keyBitSize := 0
-	if c.PrivateKey != nil && c.PrivateKey.N != nil {
-		keyBitSize = c.PrivateKey.N.BitLen()
-	}
-	return fmt.Sprintf("APIClient{BaseURL: %s, ClientID: %s, KeySize: %d bits}",
-		c.BaseURL, c.ClientID, keyBitSize)
-}
+
 
 // NewAPIClient creates an API client instance
 // Parameters:
@@ -42,15 +33,12 @@ func (c *APIClient) String() string {
 //
 // Note: This client will be dynamically loaded via dlopen by libstudy
 // All requests automatically add RSA signature authentication headers
-func NewAPIClient(baseURL string, clientID string, keyPair *crypto.KeyPair) *APIClient {
-	if baseURL == "" {
-		baseURL = constant.HTTP_SERVER_ENDPOINT
-	}
+func NewAPIClient(baseURL string, clientID string, serialNumber string,nodeId string) *APIClient {
 	return &APIClient{
 		BaseURL:    baseURL,
 		ClientID:   clientID,
-		PrivateKey: keyPair.PrivateKey,
-		PublicKey:  keyPair.PublicKey,
+		NodeId:     nodeId,
+		SerialNumber: serialNumber,
 		HttpClient: &http.Client{
 			Timeout: 30 * time.Second,
 		},
@@ -64,8 +52,6 @@ func NewAPIClient(baseURL string, clientID string, keyPair *crypto.KeyPair) *API
 // 3. Generate Bearer Token: Bearer base64("aro:clientID:timestamp:signature")
 func (c *APIClient) Request(method, path string, body interface{}) ([]byte, int, error) {
 	log.Printf("APIClient: %v", c)
-	log.Printf("APIClient pointers - HttpClient: %p, PrivateKey: %p, PublicKey: %p",
-		c.HttpClient, c.PrivateKey, c.PublicKey)
 	url := fmt.Sprintf("%s%s", c.BaseURL, path)
 
 	var reqBody io.Reader
@@ -80,9 +66,9 @@ func (c *APIClient) Request(method, path string, body interface{}) ([]byte, int,
 	}
 
 	// Generate authentication credentials
-	credentials := auth.NewAuthCredentials(c.ClientID, c.PrivateKey)
+	token, err := agentUtil.GenerateBearerToken(c.NodeId)
 	// Add authentication header and content type
-	req.Header.Set("Authorization", credentials.GetAuthHeader())
+	req.Header.Set("Authorization", "Bearer "+token)
 	req.Header.Set("Content-Type", "application/json")
 
 	// Send request

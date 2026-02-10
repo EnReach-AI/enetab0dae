@@ -1,13 +1,10 @@
 package api_client
 
 import (
-	"aro-ext-app/core/internal/auth"
 	"aro-ext-app/core/internal/config"
-	"aro-ext-app/core/internal/crypto"
 	"aro-ext-app/core/internal/storage"
 	"encoding/json"
 	"runtime"
-	"time"
 )
 
 // ======================
@@ -30,49 +27,6 @@ import (
 
 var storageApi = storage.GetStorage()
 var cfg = config.GetConfig()
-
-func (c *APIClient) NodeSignUp() (*APIResponse, error) {
-	sn := cfg.Get(config.KeySN)
-	if sn != "" {
-		var apiResponse = APIResponse{
-			Code:    200,
-			Message: "success",
-			Data: map[string]interface{}{
-				"serialNumber": sn,
-			},
-		}
-		return &apiResponse, nil
-	}
-	timestamp := time.Now().UTC().Unix()
-	signature := auth.GenerateRSASignature(c.ClientID, timestamp, c.PrivateKey)
-	//storageApi.GetString(storage.PUBLIC_KEY)
-	publicKey, err := crypto.ExportPublicKeyToPEM(c.PublicKey)
-	if err != nil {
-		return nil, err
-	}
-
-	req := NodeSignUpRequest{
-		ClientID:  c.ClientID,
-		PublicKey: publicKey,
-		Signature: signature,
-		Timestamp: time.Now().UTC().Unix(),
-	}
-
-	apiResponse, err := c.Post("/api/liteNode/signUp", req)
-	if err != nil {
-		return nil, err
-	}
-
-	sn = apiResponse.Data.(map[string]interface{})["serialNumber"].(string)
-	NewBackendService(runtime.GOOS, sn)
-	cfg.SetAndSave(config.KeySN, sn)
-
-	return &APIResponse{
-		Code:    apiResponse.Code,
-		Message: apiResponse.Message,
-		Data:    apiResponse.Data,
-	}, nil
-}
 
 // NodeReportBaseInfo Report node basic information
 // Endpoint: POST /api/liteNode/node/reportBaseInfo
@@ -151,5 +105,5 @@ func (c *APIClient) GetNodeStat() (*APIResponse, error) {
 //   - weeklyRewards: 7-day reward breakdown
 //   - rewardInfo: Detailed reward information
 func (c *APIClient) GetRewards() (*APIResponse, error) {
-	return c.Get("/api/liteNode/rewards")
+	return c.Get("/api/keeper/rewards")
 }

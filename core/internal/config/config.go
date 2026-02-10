@@ -155,25 +155,35 @@ func (c *Config) Set(key, value string) {
 	c.data[key] = value
 }
 
-func (c *Config) SetPath(path string) string {
+// SetPath 设置配置文件路径并重新加载配置
+func (c *Config) SetPath(path string) error {
+	c.mu.Lock()
 	c.path = path
-	return c.path
+	c.mu.Unlock()
+
+	// 从新路径加载配置
+	if err := c.loadFromPath(path); err != nil {
+		return fmt.Errorf("failed to load config from path %s: %w", path, err)
+	}
+
+	// 重新加载环境变量（覆盖文件配置）
+	c.loadFromEnv()
+
+	log.Printf("Config reloaded from: %s", path)
+	return nil
 }
 
 // SetAndSave 设置配置值并写入文件
 func (c *Config) SetAndSave(key, value string) error {
 	c.Set(key, value)
 
-
-
 	// 确定配置文件路径
 	configPath := c.path
 	log.Printf("Current config path: %s,key:%s,value:%s", configPath, key, value)
-	if configPath == "" {	
+	if configPath == "" {
 		configPath = ".env"
 	}
 
-	
 	// 确保目录存在
 	dir := filepath.Dir(configPath)
 	if err := os.MkdirAll(dir, 0755); err != nil {

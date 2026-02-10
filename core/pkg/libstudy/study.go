@@ -26,14 +26,68 @@ import (
 	"path"
 	"path/filepath"
 	"runtime"
+	"time"
 
 	agentConstant "github.com/aro-network/aro-edge-agent/agent/constant"
-
 	"github.com/sirupsen/logrus"
 	"gopkg.in/natefinch/lumberjack.v2"
 )
 
 var cfg = config.GetConfig()
+
+//
+//export InitLibstudy
+func InitLibstudy(initParamsJSON *C.char) *C.char {
+	defer utils.RecoverAndLog("InitLibstudy")
+
+	log.Println("InitLibstudy called")
+
+	details := map[string]interface{}{}
+
+	// 解析初始化参数
+	var initParams InitParams
+	paramsStr := goStringFromC(initParamsJSON)
+	if paramsStr != "" {
+		if err := json.Unmarshal([]byte(paramsStr), &initParams); err != nil {
+			details["params_error"] = err.Error()
+			return reply(400, fmt.Sprintf("Failed to parse init params: %v", err), details)
+		}
+		if initParams.AppDir != "" {
+			appDir := initParams.AppDir
+			cfg.SetPath(path.Join(appDir, ".env"))
+			cfg.SetAndSave(config.KeyAgentPath, appDir)
+
+		} else {
+			reply(400, "Libstudy initialized failed: AppDir is empty", details)
+		}
+		// 验证并更新服务器配置
+		if initParams.Config.BaseAPIURL != "" {
+			serverConfig.BaseAPIURL = initParams.Config.BaseAPIURL
+			cfg.SetAndSave(config.KeyAPIURL, serverConfig.BaseAPIURL)
+		}
+		allConfig := cfg.GetAll()
+		initLog()
+		log.Printf("All config: %+v", allConfig)
+
+		// 创建 channel 用于等待后台线程初始化完成
+		initDone := make(chan bool, 1)
+		go starter.RunBackendThread(initDone)
+
+		// 等待初始化完成，最多等待 30 秒
+		select {
+		case <-initDone:
+			log.Println("Backend thread initialization completed")
+			details["backend_status"] = "initialized"
+		case <-time.After(30 * time.Second):
+			log.Println("Backend thread initialization timeout, but continuing...")
+			details["backend_status"] = "timeout"
+			return reply(400, "Libstudy initialized failed timeout", details)
+		}
+
+	}
+	return reply(200, "Libstudy initialized successfully", details)
+
+}
 
 // getLogFilePath 获取日志文件路径，优先级：环境变量 > 当前工作目录/log > 临时目录
 func getLogFilePath() string {
@@ -135,7 +189,7 @@ func reply(code int, message string, data interface{}) *C.char {
 
 // ServerConfig 结构体用于管理服务器配置参数
 type ServerConfig struct {
-	BaseAPIURL string 	`json:"BaseAPIURL"`
+	BaseAPIURL string `json:"BaseAPIURL"`
 }
 
 // InitParams 初始化参数结构体
@@ -189,22 +243,6 @@ func NodeSignUp() *C.char {
 	return toCStringJSON(apiResponse)
 }
 
-// NodeReportBaseInfo 上报节点基础信息（/api/liteNode/node/reportBaseInfo）
-// 参数：sysInfoJSON - JSON formatted系统信息
-// 返回：JSON formatted响应
-//
-//export NodeReportBaseInfo
-func NodeReportBaseInfo(sysInfoJSON *C.char) *C.char {
-	defer utils.RecoverAndLog("NodeReportBaseInfo")
-	log.Println("NodeReportBaseInfo called")
-	var apiResponse = api_client.APIResponse{
-		Code:    200,
-		Message: "success",
-		Data:    nil,
-	}
-	return toCStringJSON(apiResponse)
-}
-
 // GetNodeStat 获取节点统计信息（/api/liteNode/stat）
 // 返回：JSON formatted响应（包含用户信息、节点状态、积分等）
 //
@@ -220,11 +258,12 @@ func GetNodeStat() *C.char {
 		status = "Restricted ip"
 	}
 	NodeBindResponse := api_client.NodeBindResponse{
-		Bind:         agentConstant.NODE_INFO.Binded,
-		BindUser:     api_client.BindUserInfo{
+		Bind: agentConstant.NODE_INFO.Binded,
+		BindUser: api_client.BindUserInfo{
 			UUID:       agentConstant.NODE_INFO.UUID,
 			Email:      agentConstant.NODE_INFO.Email,
-			InviteCode: "aaaaaaa",
+			InviteCode: agentConstant.NODE_INFO.InviteCode,
+			PublicIP:   agentConstant.NODE_INFO.PublicIp,
 		},
 		Connect:      status,
 		Message:      nil,
@@ -245,51 +284,13 @@ func GetNodeStat() *C.char {
 func GetRewards() *C.char {
 	defer utils.RecoverAndLog("GetRewards")
 	log.Println("GetRewards called")
-	var apiResponse = api_client.APIResponse{
-		Code:    200,
-		Message: "success",
-		Data:    nil,
+	resp, err := starter.AppBackendService.GetRewards()
+	if err != nil {
+		return reply(500, err.Error(), nil)
 	}
-	return toCStringJSON(apiResponse)
-}
-
-//
-//export InitLibstudy
-func InitLibstudy(initParamsJSON *C.char) *C.char {
-	defer utils.RecoverAndLog("InitLibstudy")
-
-	log.Println("InitLibstudy called")
-
-	details := map[string]interface{}{}
-
-	// 解析初始化参数
-	var initParams InitParams
-	paramsStr := goStringFromC(initParamsJSON)
-	log.Printf("InitLibstudy params: %s", paramsStr)
-	if paramsStr != "" {
-		if err := json.Unmarshal([]byte(paramsStr), &initParams); err != nil {
-			details["params_error"] = err.Error()
-			return reply(400, fmt.Sprintf("Failed to parse init params: %v", err), details)
-		}
-		log.Printf("InitLibstudy params json: %+v", initParams)
-		if initParams.AppDir != "" {
-			
-			appDir := initParams.AppDir
-			cfg.SetPath(path.Join(appDir, ".env"))
-			cfg.SetAndSave(config.KeyAgentPath, appDir)
-
-		}
-		// 验证并更新服务器配置
-		if initParams.Config.BaseAPIURL != "" {
-			serverConfig.BaseAPIURL = initParams.Config.BaseAPIURL
-			cfg.SetAndSave(config.KeyAPIURL, serverConfig.BaseAPIURL)
-		}
-		initLog()
-		go starter.RunBackendThread()
-
-	}
-
-	return reply(200, "Libstudy initialized successfully", details)
+	data, _ := json.Marshal(resp)
+	log.Println("GetRewards response: ", string(data))
+	return toCStringJSON(resp)
 }
 
 // 返回：版本号字符串（C 字符串，调用方需要 free）

@@ -50,6 +50,7 @@ type BindUserInfo struct {
 	UUID       string `json:"uuid"`
 	Email      string `json:"email"`
 	InviteCode string `json:"inviteCode"`
+	PublicIP  string `json:"publicIp"`
 }
 
 // MessageInfo Message information
