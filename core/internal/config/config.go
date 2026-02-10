@@ -61,9 +61,7 @@ func (c *Config) loadDefaults() {
 // loadFromFile 从配置文件加载配置
 func (c *Config) loadFromFile() {
 	configPaths := []string{
-		".env",
-		"config.env",
-		filepath.Join(os.Getenv("HOME"), ".aro", "config.env"),
+		filepath.Join(c.Get(KeyAgentPath), ".env"),
 	}
 
 	// // Windows 特定路径

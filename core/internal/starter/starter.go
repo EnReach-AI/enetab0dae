@@ -26,7 +26,7 @@ func RunBackendThread() {
 		bindCheckInterval = 20 * time.Second
 	)
 
-	
+
 	
 	for {
 		// Get device information
@@ -56,7 +56,8 @@ func RunBackendThread() {
 			time.Sleep(pollInterval)
 			continue
 		}
-		service.DetectEnvironment()
+		// service.DetectEnvironment()
+		agentConstant.ENVIRONMENT_TYPE = model.PhysicalMachine
 		// Device is bound, start services
 		ctx, cancel := context.WithCancel(context.Background())
 		log.Printf("environment type:%s", agentConstant.ENVIRONMENT_TYPE)

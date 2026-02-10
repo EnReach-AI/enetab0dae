@@ -161,7 +161,7 @@ ANDROID_NDK_ROOT=/path/to/ndk ./scripts/build_go_libs.sh build-android
 #### 手动编译单个平台
 
 ```bash
-cd core/pkg/libstudy
+cd pkg/libstudy
 
 # Linux
 CGO_ENABLED=1 GOOS=linux GOARCH=amd64 go build \
