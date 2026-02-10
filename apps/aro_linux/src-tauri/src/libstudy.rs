@@ -14,7 +14,6 @@ type CStrArgReturnFn = unsafe extern "C" fn(*const c_char) -> *mut c_char;
 pub struct Libstudy {
   _lib: Library,
   node_sign_up: CStrReturnFn,
-  node_report_base_info: CStrArgReturnFn,
   get_node_stat: CStrReturnFn,
   get_rewards: CStrReturnFn,
   init_libstudy: CStrArgReturnFn,
@@ -43,12 +42,7 @@ impl Libstudy {
           log::error!("libstudy: missing symbol NodeSignUp path={:?} err={}", path, e);
           anyhow::anyhow!("missing symbol NodeSignUp: {}", e)
         })?;
-      let node_report_base_info = *lib
-        .get::<CStrArgReturnFn>(b"NodeReportBaseInfo\0")
-        .map_err(|e| {
-          log::error!("libstudy: missing symbol NodeReportBaseInfo path={:?} err={}", path, e);
-          anyhow::anyhow!("missing symbol NodeReportBaseInfo: {}", e)
-        })?;
+
       let get_node_stat = *lib
         .get::<CStrReturnFn>(b"GetNodeStat\0")
         .map_err(|e| {
@@ -94,7 +88,6 @@ impl Libstudy {
       Ok(Self {
         _lib: lib,
         node_sign_up,
-        node_report_base_info,
         get_node_stat,
         get_rewards,
         init_libstudy,
@@ -261,10 +254,6 @@ impl Libstudy {
     unsafe { call_c_string(self.node_sign_up) }
   }
 
-  pub fn node_report_base_info(&self, sys_info_json: &str) -> anyhow::Result<String> {
-    let c = CString::new(sys_info_json)?;
-    unsafe { call_c_string_with_arg(self.node_report_base_info, c.as_ptr()) }
-  }
 
   pub fn get_node_stat(&self) -> anyhow::Result<String> {
     unsafe { call_c_string(self.get_node_stat) }

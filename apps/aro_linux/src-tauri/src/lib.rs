@@ -438,7 +438,6 @@ pub fn run() {
       init_libstudy_auto,
       open_external,
       node_sign_up,
-      node_report_base_info,
       get_node_stat,
       get_rewards,
       // get_ws_client_status,
@@ -706,14 +705,7 @@ async fn node_sign_up() -> Result<String, String> {
   Ok(resp)
 }
 
-#[tauri::command]
-async fn node_report_base_info(sys_info_json: String) -> Result<String, String> {
-  tauri::async_runtime::spawn_blocking(move || {
-    libstudy::with_lib(|lib, _path| lib.node_report_base_info(&sys_info_json)).map_err(|e| e.to_string())
-  })
-  .await
-  .map_err(|e| format!("node_report_base_info task join error: {e}"))?
-}
+
 
 #[tauri::command]
 async fn get_node_stat() -> Result<String, String> {
@@ -721,7 +713,7 @@ async fn get_node_stat() -> Result<String, String> {
     libstudy::with_lib(|lib, _path| lib.get_node_stat()).map_err(|e| e.to_string())
   })
   .await
-  .map_err(|e| format!("get_node_stat task join error: {e}"))?;
+  .map_err(|e| format!("get_node_stat task join error: {e}"))??;
   println!("[get_node_stat] response={resp}");
   log::info!("get_node_stat response={resp}");
   Ok(resp)
@@ -746,7 +738,7 @@ async fn get_current_version() -> Result<String, String> {
     libstudy::with_lib(|lib, _path| lib.get_current_version()).map_err(|e| e.to_string())
   })
   .await
-  .map_err(|e| format!("get_current_version task join error: {e}"))?;
+  .map_err(|e| format!("get_current_version task join error: {e}"))??;
     println!("[get_current_version] response={resp}");
   log::info!("get_current_version response={resp}");
   Ok(resp)
@@ -758,8 +750,9 @@ async fn get_last_version() -> Result<String, String> {
     libstudy::with_lib(|lib, _path| lib.get_last_version()).map_err(|e| e.to_string())
   })
   .await
-  .map_err(|e| format!("get_last_version task join error: {e}"))?;
-    println!("[get_last_version] response={resp}");
+  .map_err(|e| format!("get_last_version task join error: {e}"))??;
+
+  println!("[get_last_version] response={resp}");
   log::info!("get_last_version response={resp}");
   Ok(resp)
 }
