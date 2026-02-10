@@ -504,6 +504,14 @@ jobs:
           Root: "HKCU"; Subkey: "Software\Classes\*\shell\Open with {#MyAppName}\command"; ValueType: string; ValueData: """{app}\{#MyAppExeName}"" ""%1"""; Tasks: contextmenu
 
           [UninstallDelete]
+           ; Remove app data stored under vendor folder (best-effort)
+           Type: filesandordirs; Name: "{userappdata}\com.aro\aro_desktop"
+           Type: filesandordirs; Name: "{localappdata}\com.aro\aro_desktop"
+           Type: filesandordirs; Name: "{userappdata}\com.aro\aro_client"
+           Type: filesandordirs; Name: "{localappdata}\com.aro\aro_client"
+           ; Remove vendor folder only if empty (avoid deleting other apps' data)
+           Type: dirifempty; Name: "{userappdata}\com.aro"
+           Type: dirifempty; Name: "{localappdata}\com.aro"
           Type: dirifempty; Name: "{app}"
           "@
 
