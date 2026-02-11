@@ -70,6 +70,9 @@ Type: filesandordirs; Name: "{userprofile}\.aro"
 ; libstudy logs (Go dylib)
 Type: filesandordirs; Name: "{userappdata}\libstudy"
 
+; ARO Desktop folder in user's Documents
+Type: filesandordirs; Name: "{userdocs}\ARO Desktop"
+
 ; Flutter/path_provider application support directories (best-effort)
 ; Most Flutter Windows builds use %APPDATA%\<exeBaseName> as support dir.
 Type: filesandordirs; Name: "{userappdata}\aro_desktop"

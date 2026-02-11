@@ -511,9 +511,9 @@ class _MyHomePageState extends State<MyHomePage>
       final menu = Menu(
         items: [
           MenuItem(key: 'show', label: 'Show'),
-          MenuItem(key: 'hide', label: 'Hidden'),
+          MenuItem(key: 'hide', label: 'Hide'),
           MenuItem.separator(),
-          MenuItem(key: 'exit', label: 'Exit'),
+          MenuItem(key: 'exit', label: 'Quit'),
         ],
       );
       await trayManager.setContextMenu(menu);
