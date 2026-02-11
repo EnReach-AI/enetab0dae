@@ -439,7 +439,6 @@ class _MyHomePageState extends State<MyHomePage>
       });
 
       print('initializing node: $initResult');
-
       LoggerService().info('Init result: $initResult ------- ');
     } catch (e) {
       print('Error initializing node: $e');
@@ -469,7 +468,6 @@ class _MyHomePageState extends State<MyHomePage>
       unawaited(windowManager.setPreventClose(true));
     }
 
-    // Initialize node in background, don't block UI
     initNode().catchError((e) {
       print('initNode error caught: $e');
     });
