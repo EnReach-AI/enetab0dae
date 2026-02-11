@@ -56,12 +56,6 @@ func RunBackendThread(isExcuteBackendThreading chan bool) {
 		log.Printf("Bind result:%+v", bindResult)
 		log.Printf("Device bind status: %t, NodeID: %s", bindResult.Binded, bindResult.UUID)
 		agentservice.DetectEnvironment()
-
-		if !bindResult.Binded {
-			log.Println("Device not bound, waiting for binding...")
-			time.Sleep(pollInterval)
-			continue
-		}
 		AppBackendService = api_client.NewAPIClient(cfg.Get(config.KeyAPIURL), cfg.Get(config.KeyClientId), cfg.Get(config.KeySN), bindResult.UUID)
 
 		// 发送初始化完成信号
@@ -72,6 +66,12 @@ func RunBackendThread(isExcuteBackendThreading chan bool) {
 			default:
 				log.Println("Backend initialization completed, but signal already sent")
 			}
+			if !bindResult.Binded {
+				log.Println("Device not bound, waiting for binding...")
+				time.Sleep(pollInterval)
+				continue
+			}
+
 		}
 		agentConstant.ENVIRONMENT_TYPE = model.PhysicalMachine
 		// Device is bound, start services
