@@ -166,6 +166,24 @@ const FLUTTER_COMPAT_BRIDGE_JS: &str = r#"
       sendToWeb({ type: 'error', message });
     };
 
+    // Tauri WebView: window.open() for external links is often blocked or opens inside the webview.
+    // Intercept common patterns (window.open(url, '_blank', ...)) and route to the system browser.
+    if (!window.__ARO_EXTERNAL_OPEN_PATCHED__ && typeof window.open === 'function') {
+      window.__ARO_EXTERNAL_OPEN_PATCHED__ = true;
+      const _open = window.open.bind(window);
+      window.open = function (url, target, features) {
+        try {
+          const u = String(url || '');
+          if (target === '_blank' && (u.startsWith('http://') || u.startsWith('https://'))) {
+            try { invoke('bridge_log', { message: '[bridge] window.open intercepted -> open_external ' + u }); } catch {}
+            invoke('open_external', { url: u });
+            return null;
+          }
+        } catch (e) {}
+        return _open(url, target, features);
+      };
+    }
+
     window.Flutter = window.Flutter || {};
 
     // Keep Flutter protocol: Flutter.postMessage(stringOrJsonString)

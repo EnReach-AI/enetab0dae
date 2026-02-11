@@ -17,6 +17,7 @@ import 'package:path/path.dart' as p;
 import 'dart:convert';
 import 'package:aro_client/utils/config.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart' as inapp;
+import 'package:url_launcher/url_launcher.dart';
 
 void main(List<String> args) async {
   runZonedGuarded(() async {
@@ -399,6 +400,20 @@ class _MyHomePageState extends State<MyHomePage>
       final uriStr = (url.startsWith('http://') || url.startsWith('https://'))
           ? url
           : 'https://$url';
+      final uri = Uri.parse(uriStr);
+
+      // Prefer url_launcher (Android/iOS/desktop). It also avoids relying on Process on mobile.
+      try {
+        final launched = await launchUrl(
+          uri,
+          mode: LaunchMode.externalApplication,
+        );
+        if (launched) return;
+      } catch (e) {
+        // Fall back to platform command below for desktop.
+        print('launchUrl failed, falling back to platform command: $e');
+      }
+
       if (Platform.isMacOS) {
         await Process.run('open', [uriStr]);
       } else if (Platform.isLinux) {

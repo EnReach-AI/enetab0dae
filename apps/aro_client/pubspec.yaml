@@ -25,6 +25,7 @@ dependencies:
   path: ^1.9.1
   archive: ^3.6.1
   crypto: ^3.0.3
+  url_launcher: ^6.3.1
 
 dev_dependencies:
   flutter_test:
@@ -37,10 +38,6 @@ dependency_overrides:
 flutter:
   uses-material-design: true
   generate: true
-
-  assets:
-    # - lib/assets/app_icon.png
-    # - lib/assets/app_icon_1024.png
 
 flutter_launcher_icons:
   android: true
