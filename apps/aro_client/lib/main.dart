@@ -434,9 +434,8 @@ class _MyHomePageState extends State<MyHomePage>
       print('Generate file directory 123: $appDir');
       // final service = StudyService.instance; // Remove local variable to avoid confusion
       final initResult = service.nodeInit({
-        "appDir": appDir
-      }, {
-        "config": {"BaseAPIURL": AllConfig.apiBase}
+        "appDir": appDir,
+        "config": {"BaseAPIURL": AllConfig.apiBase},
       });
 
       print('initializing node: $initResult');

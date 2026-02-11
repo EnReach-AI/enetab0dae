@@ -32,20 +32,18 @@ class StudyService {
   }
 
   // Modified to match usage in main.dart
-  String nodeInit(Map<String, dynamic> dirPath, Map<String, dynamic> config) {
-    print('Directorypath $dirPath');
+  String nodeInit(
+    Map<String, dynamic> config,
+  ) {
+    print('Directorypath $config');
 
     final configJson = jsonEncode(config);
     final configPtr = configJson.toNativeUtf8();
-    final dirJson = jsonEncode(dirPath);
-    final dirPtr = dirJson.toNativeUtf8();
-    print('adada $dirPath ------- $config');
-    LoggerService()
-        .info('StudyService.nodeInit - dirPath: $dirPath, config: $config');
-    final ptr = StudyBindings.initLibstudy(dirPtr, configPtr);
+
+    LoggerService().info('StudyService.nodeInit -  config: $config');
+    final ptr = StudyBindings.initLibstudy(configPtr);
 
     malloc.free(configPtr);
-    malloc.free(dirPtr);
 
     return _handleResult(ptr);
   }

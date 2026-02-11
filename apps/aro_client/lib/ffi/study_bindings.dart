@@ -15,8 +15,8 @@ typedef GetNodeStatDart = Pointer<Utf8> Function();
 typedef GetRewardsC = Pointer<Utf8> Function();
 typedef GetRewardsDart = Pointer<Utf8> Function();
 
-typedef InitLibstudyC = Pointer<Utf8> Function(Pointer<Utf8>, Pointer<Utf8>);
-typedef InitLibstudyDart = Pointer<Utf8> Function(Pointer<Utf8>, Pointer<Utf8>);
+typedef InitLibstudyC = Pointer<Utf8> Function(Pointer<Utf8>);
+typedef InitLibstudyDart = Pointer<Utf8> Function(Pointer<Utf8>);
 
 typedef GetCurrentVersionC = Pointer<Utf8> Function();
 typedef GetCurrentVersionDart = Pointer<Utf8> Function();
