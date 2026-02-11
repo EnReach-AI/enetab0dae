@@ -1,6 +1,7 @@
 import 'dart:ffi';
 import 'dart:io';
 import 'dart:convert';
+import 'package:aro_client/services/logger_service.dart';
 import 'package:ffi/ffi.dart';
 import 'study_bindings.dart';
 
@@ -39,6 +40,8 @@ class StudyService {
     final dirJson = jsonEncode(dirPath);
     final dirPtr = dirJson.toNativeUtf8();
     print('adada $dirPath ------- $config');
+    LoggerService()
+        .info('StudyService.nodeInit - dirPath: $dirPath, config: $config');
     final ptr = StudyBindings.initLibstudy(dirPtr, configPtr);
 
     malloc.free(configPtr);
