@@ -16,7 +16,7 @@ require (
 	gopkg.in/natefinch/lumberjack.v2 v2.2.1
 )
 
-require github.com/aro-network/aro-edge-agent/agent v0.0.0-20260210143324-5ad442b6adb0
+require github.com/aro-network/aro-edge-agent/agent v0.0.0-20260211091458-6320830c8738
 
 require (
 	github.com/BGrewell/go-conversions v0.0.0-20201203155646-5e189e4ca087 // indirect

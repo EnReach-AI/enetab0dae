@@ -55,7 +55,7 @@ func RunBackendThread(isExcuteBackendThreading chan bool) {
 
 		log.Printf("Bind result:%+v", bindResult)
 		log.Printf("Device bind status: %t, NodeID: %s", bindResult.Binded, bindResult.UUID)
-		
+
 		AppBackendService = api_client.NewAPIClient(cfg.Get(config.KeyAPIURL), cfg.Get(config.KeyClientId), cfg.Get(config.KeySN), bindResult.UUID)
 
 		// 发送初始化完成信号
@@ -82,12 +82,14 @@ func RunBackendThread(isExcuteBackendThreading chan bool) {
 		// if constant.ENVIRONMENT_TYPE == model.PhysicalMachine && !bindResult.BanIP {
 
 		// }
-		go job.ConnectGrpcServer(ctx, backendService, bindResult.UUID)
-		go service.LoopDetectX86SleepConfig(ctx)
-		proxyManager := proxy.NewProxyManager(ctx, cancel)
-		go proxyManager.KeepAliveStartProxy()
-		// Start heartbeat
-		go job.StartHeartBeat(ctx, bindResult.UUID, backendService)
+		if bindResult.Binded {
+			go job.ConnectGrpcServer(ctx, backendService, bindResult.UUID)
+			go service.LoopDetectX86SleepConfig(ctx)
+			proxyManager := proxy.NewProxyManager(ctx, cancel)
+			go proxyManager.KeepAliveStartProxy()
+			// Start heartbeat
+			go job.StartHeartBeat(ctx, bindResult.UUID, backendService)
+		}
 
 		// Monitor bind status
 		go monitorBindStatus(ctx, cancel, backendService, bindCheckInterval)
