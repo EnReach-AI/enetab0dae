@@ -649,13 +649,23 @@ async fn init_libstudy_auto(app: tauri::AppHandle) -> Result<String, String> {
                             update_result.message
                           );
                           // Non-blocking. Ignore errors if dialog backend is unavailable.
-                          let app_for_exit = app_for_update_prompt2.clone();
                           let _ = app_for_update_prompt2
                             .dialog()
                             .message(msg)
                             .show(move |_| {
                               // Close the app after user confirms the update
-                              let _ = app_for_exit.exit(0);
+                              // Use std::process::exit for stronger termination on Linux
+                              #[cfg(target_os = "linux")]
+                              {
+                                log::info!("Closing app after libstudy update on Linux");
+                                std::thread::sleep(std::time::Duration::from_millis(100));
+                                std::process::exit(0);
+                              }
+                              
+                              #[cfg(not(target_os = "linux"))]
+                              {
+                                let _ = app_for_update_prompt2.clone().exit(0);
+                              }
                             });
                         }
                       }
