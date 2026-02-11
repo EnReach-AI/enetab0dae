@@ -496,9 +496,7 @@ class _MyHomePageState extends State<MyHomePage>
         if (Platform.isWindows) {
           setState(() {
             _desktopWebViewError =
-                'WebView failed to initialize on Windows.\n\n'
-                'Common cause: Microsoft Edge WebView2 Runtime is not installed.\n'
-                'Please install WebView2 Runtime, then restart the app.';
+                'Server Error. Click the Retry button to try again.';
           });
         }
       });
@@ -512,10 +510,10 @@ class _MyHomePageState extends State<MyHomePage>
     try {
       final menu = Menu(
         items: [
-          MenuItem(key: 'show', label: 'Show'),
-          MenuItem(key: 'hide', label: 'Hide'),
+          MenuItem(key: 'Show', label: 'Show'),
+          MenuItem(key: 'Hide', label: 'Hide'),
           MenuItem.separator(),
-          MenuItem(key: 'exit', label: 'Quit'),
+          MenuItem(key: 'Quit', label: 'Quit'),
         ],
       );
       await trayManager.setContextMenu(menu);
