@@ -235,12 +235,6 @@ class _MyHomePageState extends State<MyHomePage>
                 'Update completed. Please restart the app to take effect.'),
             actions: [
               TextButton(
-                onPressed: () {
-                  Navigator.of(context).pop();
-                },
-                child: const Text('OK'),
-              ),
-              TextButton(
                 onPressed: () async {
                   Navigator.of(context).pop();
                   await _restartApp();

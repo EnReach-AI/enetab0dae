@@ -649,11 +649,14 @@ async fn init_libstudy_auto(app: tauri::AppHandle) -> Result<String, String> {
                             update_result.message
                           );
                           // Non-blocking. Ignore errors if dialog backend is unavailable.
+                          let app_for_exit = app_for_update_prompt2.clone();
                           let _ = app_for_update_prompt2
                             .dialog()
                             .message(msg)
-                            .title("ARO Desktop")
-                            .show(|_| {});
+                            .show(move |_| {
+                              // Close the app after user confirms the update
+                              let _ = app_for_exit.exit(0);
+                            });
                         }
                       }
                       Err(e) => {
