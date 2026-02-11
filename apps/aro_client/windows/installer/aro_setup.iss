@@ -74,6 +74,10 @@ Type: filesandordirs; Name: "{userappdata}\libstudy"
 Type: filesandordirs; Name: "{userdocs}\ARO Desktop\*"
 Type: filesandordirs; Name: "{userdocs}\ARO Desktop"
 
+; ARO Desktop application data folder (including WebView2 cache and logs)
+Type: filesandordirs; Name: "{localappdata}\Programs\ARO Desktop\*"
+Type: filesandordirs; Name: "{localappdata}\Programs\ARO Desktop"
+
 ; Flutter/path_provider application support directories (best-effort)
 ; Most Flutter Windows builds use %APPDATA%\<exeBaseName> as support dir.
 Type: filesandordirs; Name: "{userappdata}\aro_desktop"

@@ -8,6 +8,7 @@ import 'package:aro_client/ffi/study_service.dart';
 import 'package:aro_client/services/AppServiceStarter.dart';
 import 'package:aro_client/services/logger_service.dart';
 import 'package:aro_client/services/lib_update_service.dart';
+import 'package:aro_client/services/connectivity_service.dart';
 import 'package:aro_client/utils/native_dialog.dart';
 import 'package:window_manager/window_manager.dart';
 import 'dart:io';
@@ -25,6 +26,9 @@ void main(List<String> args) async {
 
     await LoggerService().initialize();
     LoggerService().info('App starting...');
+
+    // Initialize connectivity service
+    await ConnectivityService().initialize();
 
     try {
       if (Platform.isMacOS ||
@@ -157,6 +161,7 @@ class _MyHomePageState extends State<MyHomePage>
   // String? _errorMessage;
   bool _isDesktopWebViewReady = false;
   String? _desktopWebViewError;
+  bool _isConnected = true;
 
   bool _trayMenuOpening = false;
 
@@ -460,6 +465,9 @@ class _MyHomePageState extends State<MyHomePage>
   void initState() {
     super.initState();
 
+    // Setup connectivity listener
+    _setupConnectivityListener();
+
     if (Platform.isWindows) {
       trayManager.addListener(this);
       unawaited(_setupWindowsTrayMenu());
@@ -591,13 +599,13 @@ class _MyHomePageState extends State<MyHomePage>
   @override
   void onTrayMenuItemClick(MenuItem menuItem) {
     switch (menuItem.key) {
-      case 'show':
+      case 'Show':
         unawaited(_trayShow());
         break;
-      case 'hide':
+      case 'Hide':
         unawaited(_trayHide());
         break;
-      case 'exit':
+      case 'Quit':
         unawaited(_trayExit());
         break;
     }
@@ -609,12 +617,26 @@ class _MyHomePageState extends State<MyHomePage>
     await _trayHide();
   }
 
+  void _setupConnectivityListener() {
+    final connectivityService = ConnectivityService();
+    _isConnected = connectivityService.isConnected;
+
+    connectivityService.addListener((isConnected) {
+      if (mounted) {
+        setState(() {
+          _isConnected = isConnected;
+        });
+      }
+    });
+  }
+
   @override
   void dispose() {
     if (Platform.isWindows) {
       trayManager.removeListener(this);
       windowManager.removeListener(this);
     }
+    ConnectivityService().dispose();
     super.dispose();
   }
 
@@ -636,6 +658,23 @@ class _MyHomePageState extends State<MyHomePage>
         NavigationDelegate(
           onPageFinished: (_) {
             print('[FLUTTER] page finished');
+            // Disable context menu and right-click on mobile
+            _controller?.runJavaScript('''
+              document.addEventListener('contextmenu', function(e) {
+                e.preventDefault();
+                return false;
+              }, false);
+              
+              // Disable drag and drop
+              document.addEventListener('dragover', function(e) {
+                e.preventDefault();
+                return false;
+              }, false);
+              document.addEventListener('drop', function(e) {
+                e.preventDefault();
+                return false;
+              }, false);
+            ''');
           },
         ),
       );
@@ -692,13 +731,18 @@ class _MyHomePageState extends State<MyHomePage>
       }
 
       return Scaffold(
-        body: HeroControllerScope.none(
-          child: HeroMode(
-            enabled: false,
-            child: Builder(
-              builder: (context) => _buildDesktopWebView(),
+        body: Stack(
+          children: [
+            HeroControllerScope.none(
+              child: HeroMode(
+                enabled: false,
+                child: Builder(
+                  builder: (context) => _buildDesktopWebView(),
+                ),
+              ),
             ),
-          ),
+            if (!_isConnected) _buildNetworkOfflineOverlay(),
+          ],
         ),
       );
     }
@@ -709,7 +753,58 @@ class _MyHomePageState extends State<MyHomePage>
       );
     }
     return Scaffold(
-      body: WebViewWidget(controller: _controller!),
+      body: Stack(
+        children: [
+          WebViewWidget(controller: _controller!),
+          if (!_isConnected) _buildNetworkOfflineOverlay(),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildNetworkOfflineOverlay() {
+    return Container(
+      color: Colors.black.withOpacity(0.7),
+      child: Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const Icon(
+              Icons.wifi_off,
+              size: 64,
+              color: Colors.white,
+            ),
+            const SizedBox(height: 24),
+            const Text(
+              'Network Unavailable',
+              style: TextStyle(
+                fontSize: 20,
+                fontWeight: FontWeight.bold,
+                color: Colors.white,
+              ),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 12),
+            const Text(
+              'Please check your internet connection',
+              style: TextStyle(
+                fontSize: 14,
+                color: Colors.white70,
+              ),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 24),
+            ElevatedButton.icon(
+              onPressed: () {
+                // User can tap to dismiss the message
+                // Connection will be restored automatically once network is available
+              },
+              icon: const Icon(Icons.check),
+              label: const Text('OK'),
+            ),
+          ],
+        ),
+      ),
     );
   }
 
@@ -721,6 +816,9 @@ class _MyHomePageState extends State<MyHomePage>
         javaScriptCanOpenWindowsAutomatically: false,
         supportMultipleWindows: false,
         useShouldOverrideUrlLoading: true,
+        // Disable zoom controls
+        builtInZoomControls: false,
+        displayZoomControls: false,
       );
 
       return inapp.InAppWebView(
@@ -759,7 +857,23 @@ class _MyHomePageState extends State<MyHomePage>
         },
         onLoadStop: (controller, url) async {
           try {
+            // Disable context menu and right-click
             await controller.evaluateJavascript(source: '''
+              document.addEventListener('contextmenu', function(e) {
+                e.preventDefault();
+                return false;
+              }, false);
+              
+              // Disable drag and drop
+              document.addEventListener('dragover', function(e) {
+                e.preventDefault();
+                return false;
+              }, false);
+              document.addEventListener('drop', function(e) {
+                e.preventDefault();
+                return false;
+              }, false);
+              
               if (!window.Flutter) {
                 window.Flutter = {
                   postMessage: function(msg) {
@@ -798,21 +912,6 @@ class _MyHomePageState extends State<MyHomePage>
 
       // Provide helpful error message for Linux
       String errorMessage = 'Failed to load webview: ${e.toString()}';
-      if (Platform.isLinux) {
-        errorMessage = '''
-Failed to create WebView on Linux.
-
-This usually means missing system dependencies. Please install:
-
-sudo apt-get update
-sudo apt-get install -y libwebkit2gtk-4.0-dev libgtk-3-dev
-
-For Debian/Ubuntu, you may also need:
-sudo apt-get install -y libjavascriptcoregtk-4.0-dev
-
-Error details: ${e.toString()}
-        ''';
-      }
 
       return Scaffold(
         body: Center(
