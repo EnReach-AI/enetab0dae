@@ -104,6 +104,15 @@ func GetLastVersion(program constant.OtaProgram, env string) (*APIResponse, erro
 	return apiResponse, nil
 }
 
+func GetRewards() (*APIResponse, error) {
+	backendService := NewBackendService(runtime.GOOS, cfg.Get(config.KeySN))
+	apiResponse, err := backendService.get("/api/keeper/rewards")
+	if err != nil {
+		return nil, err
+	}
+	return apiResponse, nil
+}
+
 // 辅助函数：从指定 URL 获取版本信息
 // 内部实现细节
 func (b *BackendService) get(path string) (*APIResponse, error) {

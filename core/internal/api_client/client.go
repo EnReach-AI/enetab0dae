@@ -51,7 +51,7 @@ func NewAPIClient(baseURL string, clientID string, serialNumber string,nodeId st
 // 2. Sign with private key: SHA256(clientID:timestamp)
 // 3. Generate Bearer Token: Bearer base64("aro:clientID:timestamp:signature")
 func (c *APIClient) Request(method, path string, body interface{}) ([]byte, int, error) {
-	log.Printf("APIClient: %v", c)
+	log.Printf("APIClient: %+v", c)
 	url := fmt.Sprintf("%s%s", c.BaseURL, path)
 
 	var reqBody io.Reader
@@ -67,6 +67,7 @@ func (c *APIClient) Request(method, path string, body interface{}) ([]byte, int,
 
 	// Generate authentication credentials
 	token, err := agentUtil.GenerateBearerToken(c.NodeId)
+	log.Printf("Generated token: %s", token)
 	// Add authentication header and content type
 	req.Header.Set("Authorization", "Bearer "+token)
 	req.Header.Set("Content-Type", "application/json")

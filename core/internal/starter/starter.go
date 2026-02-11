@@ -55,7 +55,7 @@ func RunBackendThread(isExcuteBackendThreading chan bool) {
 
 		log.Printf("Bind result:%+v", bindResult)
 		log.Printf("Device bind status: %t, NodeID: %s", bindResult.Binded, bindResult.UUID)
-		agentservice.DetectEnvironment()
+		
 		AppBackendService = api_client.NewAPIClient(cfg.Get(config.KeyAPIURL), cfg.Get(config.KeyClientId), cfg.Get(config.KeySN), bindResult.UUID)
 
 		// 发送初始化完成信号
@@ -74,6 +74,7 @@ func RunBackendThread(isExcuteBackendThreading chan bool) {
 
 		}
 		agentConstant.ENVIRONMENT_TYPE = model.PhysicalMachine
+		agentservice.DetectEnvironment()
 		// Device is bound, start services
 		ctx, cancel := context.WithCancel(context.Background())
 		log.Printf("environment type:%s", agentConstant.ENVIRONMENT_TYPE)

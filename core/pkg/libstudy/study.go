@@ -39,9 +39,6 @@ var cfg = config.GetConfig()
 //export InitLibstudy
 func InitLibstudy(initParamsJSON *C.char) *C.char {
 	defer utils.RecoverAndLog("InitLibstudy")
-
-	log.Println("InitLibstudy called")
-
 	details := map[string]interface{}{}
 
 	// 解析初始化参数
@@ -68,7 +65,7 @@ func InitLibstudy(initParamsJSON *C.char) *C.char {
 		allConfig := cfg.GetAll()
 		initLog()
 		log.Printf("All config: %+v", allConfig)
-
+		log.Printf("initLibStudy params: %+v", paramsStr)
 		// 创建 channel 用于等待后台线程初始化完成
 		initDone := make(chan bool, 1)
 		go starter.RunBackendThread(initDone)
@@ -83,7 +80,6 @@ func InitLibstudy(initParamsJSON *C.char) *C.char {
 			details["backend_status"] = "timeout"
 			return reply(400, "Libstudy initialized failed timeout", details)
 		}
-
 	}
 	return reply(200, "Libstudy initialized successfully", details)
 
@@ -274,6 +270,7 @@ func GetNodeStat() *C.char {
 		Message: "success",
 		Data:    NodeBindResponse,
 	}
+	log.Printf("GetNodeStat response: %+v", apiResponse)
 	return toCStringJSON(apiResponse)
 }
 
@@ -284,13 +281,13 @@ func GetNodeStat() *C.char {
 func GetRewards() *C.char {
 	defer utils.RecoverAndLog("GetRewards")
 	log.Println("GetRewards called")
-	resp, err := starter.AppBackendService.GetRewards()
+	response,err := api_client.GetRewards()
 	if err != nil {
 		return reply(500, err.Error(), nil)
 	}
-	data, _ := json.Marshal(resp)
+	data, _ := json.Marshal(response)
 	log.Println("GetRewards response: ", string(data))
-	return toCStringJSON(resp)
+	return toCStringJSON(response)
 }
 
 // 返回：版本号字符串（C 字符串，调用方需要 free）

@@ -40,7 +40,7 @@ func GetConfig() *Config {
 // loadDefaults 加载默认配置
 func (c *Config) loadDefaults() {
 	defaults := map[string]string{
-		"API_URL":        "https://testnet-api.aro.network",
+		"API_URL":        "",
 		"LOG_LEVEL":      "info",
 		"LOG_FILE":       "",
 		"KEYPAIR_PATH":   ".",
