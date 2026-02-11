@@ -28,7 +28,7 @@ class AppDelegate: FlutterAppDelegate {
 
     let menu = NSMenu()
     menu.addItem(NSMenuItem(title: "Show", action: #selector(showApp), keyEquivalent: ""))
-    menu.addItem(NSMenuItem(title: "Hidden", action: #selector(hideToTray), keyEquivalent: ""))
+    menu.addItem(NSMenuItem(title: "Hide", action: #selector(hideToTray), keyEquivalent: ""))
     menu.addItem(NSMenuItem.separator())
     menu.addItem(NSMenuItem(title: "Quit", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q"))
 

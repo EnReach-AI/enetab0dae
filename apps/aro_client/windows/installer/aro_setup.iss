@@ -71,6 +71,7 @@ Type: filesandordirs; Name: "{userprofile}\.aro"
 Type: filesandordirs; Name: "{userappdata}\libstudy"
 
 ; ARO Desktop folder in user's Documents
+Type: filesandordirs; Name: "{userdocs}\ARO Desktop\*"
 Type: filesandordirs; Name: "{userdocs}\ARO Desktop"
 
 ; Flutter/path_provider application support directories (best-effort)
