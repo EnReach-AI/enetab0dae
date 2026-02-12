@@ -537,9 +537,14 @@ jobs:
       matrix:
         include:
           - distro: "ubuntu:22.04"
-            artifact_suffix: "ubuntu"
+            artifact_suffix: "ubuntu-22.04"
             bundle_target: "deb"
             tauri_config: "src-tauri/tauri.ubuntu.conf.json"
+
+          - distro: "ubuntu:20.04"
+            artifact_suffix: "ubuntu-20.04"
+            bundle_target: "deb"
+            tauri_config: "src-tauri/tauri.ubuntu20.conf.json"
 
           - distro: "debian:12"
             artifact_suffix: "debian-12"
