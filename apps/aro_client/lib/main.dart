@@ -81,6 +81,8 @@ void main(List<String> args) async {
           await windowManager.setTitle('ARO Desktop');
         } catch (_) {}
         if (Platform.isWindows) {
+          await windowManager.setMinimizable(false);
+          await windowManager.setMaximizable(false);
           try {
             final exeDir = p.dirname(Platform.resolvedExecutable);
             final iconPath = p.join(exeDir, 'resources', 'app_icon.ico');
@@ -89,13 +91,16 @@ void main(List<String> args) async {
           } catch (e) {
             LoggerService().error('Failed to setup Windows tray icon', e);
           }
-        } else if (Platform.isLinux) {
+        } else if (Platform.isMacOS) {
           try {
-            final exeDir = p.dirname(Platform.resolvedExecutable);
-            final iconPath = p.join(exeDir, 'resources', 'app_icon.png');
+            // For macOS, use Resources directory within the app bundle
+            final exePath = Platform.resolvedExecutable;
+            final exeDir = p.dirname(exePath);
+            final resourcesPath = p.join(exeDir, '..', 'Resources');
+            final iconPath = p.join(resourcesPath, 'app_icon.png');
             await trayManager.setIcon(iconPath);
           } catch (e) {
-            LoggerService().error('Failed to setup Linux tray icon', e);
+            LoggerService().error('Failed to setup macOS tray icon', e);
           }
         }
       });
@@ -885,8 +890,7 @@ class _MyHomePageState extends State<MyHomePage>
           );
           if (!mounted) return;
           setState(() {
-            _desktopWebViewError =
-                'Failed to load page.\n\nURL: ${request.url}\n\nError: ${error.description}';
+            _desktopWebViewError = 'Failed to load page.';
           });
         },
         onCreateWindow: (controller, action) async {
@@ -903,7 +907,7 @@ class _MyHomePageState extends State<MyHomePage>
       LoggerService().error('Failed to create desktop webview', e, s);
 
       // Provide helpful error message for Linux
-      String errorMessage = 'Failed to load webview: ${e.toString()}';
+      String errorMessage = 'Failed to load page';
 
       return Scaffold(
         body: Center(
