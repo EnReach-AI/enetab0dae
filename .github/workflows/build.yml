@@ -536,10 +536,10 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - distro: "ubuntu:24.04"
-            artifact_suffix: "ubuntu-24-04"
+          - distro: "ubuntu:22.04"
+            artifact_suffix: "ubuntu-22-04"
             bundle_target: "deb"
-            tauri_config: "src-tauri/tauri.ubuntu24.conf.json"
+            tauri_config: "src-tauri/tauri.ubuntu22.conf.json"
 
           - distro: "debian:12"
             artifact_suffix: "debian-12"
