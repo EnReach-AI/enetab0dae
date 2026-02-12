@@ -537,14 +537,9 @@ jobs:
       matrix:
         include:
           - distro: "ubuntu:22.04"
-            artifact_suffix: "ubuntu-22.04"
+            artifact_suffix: "ubuntu"
             bundle_target: "deb"
             tauri_config: "src-tauri/tauri.ubuntu.conf.json"
-
-          - distro: "ubuntu:20.04"
-            artifact_suffix: "ubuntu-20.04"
-            bundle_target: "deb"
-            tauri_config: "src-tauri/tauri.ubuntu20.conf.json"
 
           - distro: "debian:12"
             artifact_suffix: "debian-12"
@@ -610,15 +605,6 @@ jobs:
 
           if [ -f /etc/debian_version ]; then
             retry 5 3 apt-get -o Acquire::Retries=5 -o Acquire::http::Timeout=60 -o Acquire::https::Timeout=60 update
-
-            # For Ubuntu 20.04: enable backports to get GLib >= 2.70
-            if grep -q "focal" /etc/os-release 2>/dev/null; then
-              echo "Detected Ubuntu 20.04 (focal), enabling backports for GLib >= 2.70"
-              retry 5 3 env DEBIAN_FRONTEND=noninteractive apt-get -o Acquire::Retries=5 -o Acquire::http::Timeout=60 -o Acquire::https::Timeout=60 install -y --no-install-recommends --fix-missing software-properties-common
-              add-apt-repository -y -n "deb http://archive.ubuntu.com/ubuntu focal-backports main universe"
-              retry 5 3 apt-get -o Acquire::Retries=5 -o Acquire::http::Timeout=60 -o Acquire::https::Timeout=60 update
-            fi
-
             retry 5 3 env DEBIAN_FRONTEND=noninteractive apt-get -o Acquire::Retries=5 -o Acquire::http::Timeout=60 -o Acquire::https::Timeout=60 install -y --no-install-recommends --fix-missing \
               git curl jq ca-certificates \
               clang build-essential pkg-config \
