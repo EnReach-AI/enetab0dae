@@ -8,8 +8,8 @@
     "linux": {
       "deb": {
         "depends": [
-          "libwebkit2gtk-4.0-37",
-          "libayatana-appindicator3-1"
+          "libwebkit2gtk-4.1-0 | libwebkit2gtk-4.0-37",
+          "libayatana-appindicator3-1 | libappindicator3-1"
         ]
       }
     }
