@@ -57,14 +57,11 @@ jobs:
             exit 0
           fi
 
-          # 检查 core 目录是否有变化，决定是否构建核心库
-          # 说明:GitHub Actions 默认是浅克隆，直接使用 HEAD~1 可能不存在。
           CHANGED_FILES=""
           if [[ "${EVENT_NAME}" == "pull_request" && -n "${PR_BASE_SHA}" && -n "${PR_HEAD_SHA}" ]]; then
             git fetch --no-tags --prune --depth=1 origin "${PR_BASE_SHA}" "${PR_HEAD_SHA}" || true
             CHANGED_FILES="$(git diff --name-only "${PR_BASE_SHA}" "${PR_HEAD_SHA}" || true)"
           elif [[ "${EVENT_NAME}" == "push" && -n "${PUSH_BEFORE}" ]]; then
-            # 第一次 push 或强推时 before 可能是全 0
             if [[ "${PUSH_BEFORE}" != "0000000000000000000000000000000000000000" ]]; then
               git fetch --no-tags --prune --depth=1 origin "${PUSH_BEFORE}" "${CURRENT_SHA}" || true
               CHANGED_FILES="$(git diff --name-only "${PUSH_BEFORE}" "${CURRENT_SHA}" || true)"
@@ -72,7 +69,6 @@ jobs:
               CHANGED_FILES="$(git show --name-only --pretty='' "${CURRENT_SHA}" || true)"
             fi
           else
-            # workflow_dispatch 等场景：退化为当前提交的变更
             CHANGED_FILES="$(git show --name-only --pretty='' "${CURRENT_SHA}" || true)"
           fi
 
@@ -80,17 +76,14 @@ jobs:
             echo "build_core=true" >> $GITHUB_OUTPUT
           fi
 
-          # 如果 Flutter 客户端有变更，默认只构建 Linux 客户端（暂时关闭 Win/mac/iOS/Android）
           if printf '%s\n' "${CHANGED_FILES}" | grep -q '^apps/aro_client/'; then
             echo "linux=true" >> $GITHUB_OUTPUT
           fi
 
-          # 如果 Tauri aro_linux 有变更，则构建 Linux 桌面安装包（deb/rpm）
           if printf '%s\n' "${CHANGED_FILES}" | grep -q '^apps/aro_linux/'; then
             echo "aro_linux=true" >> $GITHUB_OUTPUT
           fi
 
-          # 标签仍保留解析，但对应平台构建目前被禁用
           [[ "$MSG" == *"[win]"* ]] && echo "win=true" >> $GITHUB_OUTPUT
           [[ "$MSG" == *"[mac]"* ]] && echo "mac=true" >> $GITHUB_OUTPUT
           [[ "$MSG" == *"[linux]"* ]] && echo "linux=true" >> $GITHUB_OUTPUT
@@ -552,6 +545,10 @@ jobs:
             artifact_suffix: "centos-stream-10"
             bundle_target: "rpm"
             tauri_config: "src-tauri/tauri.centos-stream10.conf.json"
+          - distro: "debian:11"
+            artifact_suffix: "debian-11"
+            bundle_target: "deb"
+            tauri_config: "src-tauri/tauri.debian11.conf.json"
     runs-on: ubuntu-latest
     container:
       image: ${{ matrix.distro }}
