@@ -716,8 +716,9 @@ jobs:
 
           # 针对 debian11-oldgtk，使用旧 manifest
           if [[ "${{ matrix.artifact_suffix }}" == "debian-11-oldgtk" ]]; then
-            cargo build --manifest-path apps/aro_linux/src-tauri/Cargo.debian11.toml --release
-            cargo tauri build --ci --config src-tauri/tauri.merged.conf.json --manifest-path apps/aro_linux/src-tauri/Cargo.debian11.toml
+            cp src-tauri/Cargo.debian11.toml src-tauri/Cargo.toml
+            cargo build --manifest-path src-tauri/Cargo.toml --release
+            cargo tauri build --ci --config src-tauri/tauri.merged.conf.json --manifest-path src-tauri/Cargo.toml
           else
             cargo tauri build --ci --config src-tauri/tauri.merged.conf.json
           fi
