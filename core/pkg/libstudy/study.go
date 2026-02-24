@@ -83,6 +83,7 @@ func InitLibstudy(initParamsJSON *C.char) *C.char {
 
 }
 
+
 // getLogFilePath 获取日志文件路径，优先级：环境变量 > 当前工作目录/log > 临时目录
 
 
