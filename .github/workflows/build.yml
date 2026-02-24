@@ -544,7 +544,7 @@ jobs:
           - distro: "debian:12"
             artifact_suffix: "debian-12"
             bundle_target: "deb"
-            tauri_config: "src-tauri/tauri.debian12.conf.json"
+            tauri_config: "src-tauri/tauri.debian.conf.json"
           # NOTE: Tauri (gtk-rs/glib-sys 0.18.x) requires GLib >= 2.70.
           # Rocky Linux 8/9 ship GLib < 2.70, so compiling inside those containers fails.
           # `rockylinux:10` is not (currently) published on Docker Hub, so use an EL10-compatible base.
