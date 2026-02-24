@@ -141,7 +141,6 @@ jobs:
         with:
           name: libstudy-linux
           path: plugins/linux/
-          retention-days: 3
 
   build-core-linux-arm64:
     needs: prepare
@@ -189,7 +188,6 @@ jobs:
         with:
           name: libstudy-linux-arm64
           path: plugins/linux-arm64/
-          retention-days: 3
 
   build-core-windows:
     needs: prepare
@@ -237,7 +235,6 @@ jobs:
         with:
           name: libstudy-windows
           path: plugins/windows/
-          retention-days: 3
 
   build-core-macos:
     needs: prepare
@@ -282,7 +279,6 @@ jobs:
         with:
           name: libstudy-macos
           path: plugins/macos/
-          retention-days: 3
 
   build-core-android:
     needs: prepare
@@ -333,7 +329,6 @@ jobs:
         with:
           name: libstudy-android
           path: plugins/android/
-          retention-days: 3
 
   build-core-ios:
     needs: prepare
@@ -381,7 +376,6 @@ jobs:
         with:
           name: libstudy-ios
           path: plugins/ios/
-          retention-days: 3
   # ============================================================
   # Client App Build Jobs
   # ============================================================
@@ -519,7 +513,6 @@ jobs:
           name: windows-installer
           path: ${{ env.FLUTTER_DIR }}/AROClient-Setup.exe
           if-no-files-found: warn
-          retention-days: 3
 
   build-linux2:
     needs: [prepare, build-core-linux, build-core-linux-arm64]
@@ -534,10 +527,18 @@ jobs:
             bundle_target: "deb"
             tauri_config: "src-tauri/tauri.ubuntu.conf.json"
 
+          - distro: "debian:11"
+            artifact_suffix: "debian-11"
+            bundle_target: "deb"
+            tauri_config: "src-tauri/tauri.debian11.conf.json"
           - distro: "debian:12"
             artifact_suffix: "debian-12"
             bundle_target: "deb"
-            tauri_config: "src-tauri/tauri.debian.conf.json"
+            tauri_config: "src-tauri/tauri.debian12.conf.json"
+          - distro: "debian:13"
+            artifact_suffix: "debian-13"
+            bundle_target: "deb"
+            tauri_config: "src-tauri/tauri.debian13.conf.json"
           # NOTE: Tauri (gtk-rs/glib-sys 0.18.x) requires GLib >= 2.70.
           # Rocky Linux 8/9 ship GLib < 2.70, so compiling inside those containers fails.
           # `rockylinux:10` is not (currently) published on Docker Hub, so use an EL10-compatible base.
@@ -724,7 +725,6 @@ jobs:
           name: aro-desktop-${{ matrix.bundle_target }}-${{ matrix.artifact_suffix }}
           path: apps/aro_linux/src-tauri/target/release/bundle/${{ matrix.bundle_target }}/*.${{ matrix.bundle_target }}
           if-no-files-found: error
-          retention-days: 3
 
   build-flatpak:
     needs: [prepare, build-core-linux, build-core-linux-arm64]
@@ -816,4 +816,3 @@ jobs:
           name: aro-desktop-flatpak
           path: aro-desktop.flatpak
           if-no-files-found: error
-          retention-days: 3
