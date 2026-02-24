@@ -528,9 +528,11 @@ jobs:
             tauri_config: "src-tauri/tauri.ubuntu.conf.json"
 
           - distro: "debian:11"
-            artifact_suffix: "debian-11"
+            artifact_suffix: "debian-11-oldgtk"
             bundle_target: "deb"
-            tauri_config: "src-tauri/tauri.debian11.conf.json"
+            tauri_config: "src-tauri/tauri.debian11.conf.oldgtk.json"
+            cargo_manifest: "src-tauri/Cargo.debian11.toml"
+
           - distro: "debian:12"
             artifact_suffix: "debian-12"
             bundle_target: "deb"
@@ -712,7 +714,13 @@ jobs:
             "${{ matrix.tauri_config }}" \
             > src-tauri/tauri.merged.conf.json
 
-          cargo tauri build --ci --config src-tauri/tauri.merged.conf.json
+          # 针对 debian11-oldgtk，使用旧 manifest
+          if [[ "${{ matrix.artifact_suffix }}" == "debian-11-oldgtk" ]]; then
+            cargo build --manifest-path src-tauri/Cargo.debian11.toml --release
+            cargo tauri build --ci --config src-tauri/tauri.merged.conf.json --manifest-path src-tauri/Cargo.debian11.toml
+          else
+            cargo tauri build --ci --config src-tauri/tauri.merged.conf.json
+          fi
           ls -lah "src-tauri/target/release/bundle/${BUNDLE_TARGET}" || true
 
       - name: Upload Package
