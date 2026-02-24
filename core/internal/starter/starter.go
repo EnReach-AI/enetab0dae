@@ -31,10 +31,11 @@ func RunBackendThread(isExcuteBackendThreading chan bool) {
 		errorRetryDelay   = 20 * time.Second
 		bindCheckInterval = 20 * time.Second
 	)
-
+	deviceInfo, err := internalService.GetDeviceInfo()
+	agentservice.DetectEnvironment()
 	for {
 		// Get device information
-		deviceInfo, err := internalService.GetDeviceInfo()
+
 		if err != nil {
 			log.Printf("Failed to get device info: %v, retrying in %v", err, errorRetryDelay)
 			time.Sleep(errorRetryDelay)
@@ -73,8 +74,8 @@ func RunBackendThread(isExcuteBackendThreading chan bool) {
 			}
 
 		}
-		agentConstant.ENVIRONMENT_TYPE = model.PhysicalMachine
-		agentservice.DetectEnvironment()
+		// agentConstant.ENVIRONMENT_TYPE = model.PhysicalMachine
+
 		// Device is bound, start services
 		ctx, cancel := context.WithCancel(context.Background())
 		log.Printf("environment type:%s", agentConstant.ENVIRONMENT_TYPE)

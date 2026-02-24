@@ -16,6 +16,7 @@ import (
 	"aro-ext-app/core/internal/config"
 	"aro-ext-app/core/internal/constant"
 	"aro-ext-app/core/internal/crypto"
+	logconfig "aro-ext-app/core/internal/log_config"
 	"aro-ext-app/core/internal/starter"
 	"aro-ext-app/core/internal/storage"
 	"aro-ext-app/core/utils"
@@ -24,13 +25,10 @@ import (
 	"log"
 	"os"
 	"path"
-	"path/filepath"
-	"runtime"
 	"time"
 
 	agentConstant "github.com/aro-network/aro-edge-agent/agent/constant"
 	"github.com/sirupsen/logrus"
-	"gopkg.in/natefinch/lumberjack.v2"
 )
 
 var cfg = config.GetConfig()
@@ -86,60 +84,19 @@ func InitLibstudy(initParamsJSON *C.char) *C.char {
 }
 
 // getLogFilePath 获取日志文件路径，优先级：环境变量 > 当前工作目录/log > 临时目录
-func getLogFilePath() string {
-	// 尝试在当前工作目录的 log 子目录中创建日志
-	workDir := cfg.Get(config.KeyAgentPath)
-	logDir := filepath.Join(workDir, "log")
-	if err := os.MkdirAll(logDir, 0755); err == nil {
-		logPath := filepath.Join(logDir, "libstudy.log")
-		// 测试是否可写
-		if f, err := os.OpenFile(logPath, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0644); err == nil {
-			f.Close()
-			return logPath
-		}
-	}
-	// 备选方案：根据平台选择合适的默认位置
-	switch runtime.GOOS {
-	case "darwin":
 
-		homeDir, err := os.UserHomeDir()
-		if err != nil {
-			break
-		}
-		logDir := filepath.Join(homeDir, "Library", "Logs")
-		log.Printf("darwin log:%s", logDir)
-		os.MkdirAll(logDir, 0755)
-		return filepath.Join(logDir, "libstudy.log")
-	case "windows":
-		appDataDir := os.Getenv("APPDATA")
-		if appDataDir == "" {
-			break
-		}
-		logDir := filepath.Join(appDataDir, "libstudy", "log")
-		os.MkdirAll(logDir, 0755)
-		log.Printf("windows log:%s", logDir)
-		return filepath.Join(logDir, "libstudy.log")
-	}
-	return filepath.Join(logDir, "libstudy.log")
-}
 
 // 日志初始化（Logrus + Lumberjack）
 func initLog() {
-	workDir, _ := os.Getwd()
-
-	executeDir, _ := os.Executable()
-
 	// cfg.SetAndSave(config.KeyAgentPath, workDir)
 	// 创建日志文件路径
-	logPath := getLogFilePath()
+	logPath :=logconfig.GetLogFilePath()
 
-	// 创建 lumberjack logger
-	lumberjackLogger := &lumberjack.Logger{
-		Filename:   logPath,
-		MaxSize:    10,    // MB
-		MaxBackups: 0,     // 不保留历史文件
-		MaxAge:     0,     // 不限制时间
-		Compress:   false, // 不压缩
+	// 以追加模式打开日志文件
+	logFile, err := os.OpenFile(logPath, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0644)
+	if err != nil {
+		log.Printf("failed to open log file, fallback to stdout: %v", err)
+		logFile = os.Stdout
 	}
 
 	// 配置 logrus
@@ -147,14 +104,12 @@ func initLog() {
 		FullTimestamp:   true,
 		TimestampFormat: "2006-01-02 15:04:05.000",
 	})
-	logrus.SetOutput(lumberjackLogger)
+	logrus.SetOutput(logFile)
 	logrus.SetLevel(logrus.InfoLevel)
 
 	// 配置标准 log 包，使用同一个日志文件
-	log.SetOutput(lumberjackLogger)
+	log.SetOutput(logFile)
 	log.SetFlags(log.Ldate | log.Ltime | log.Lshortfile)
-	log.Println("Current work dir:", workDir)
-	log.Printf("current executable dir:%s", executeDir)
 	logrus.Info("==== libstudy started ====")
 	log.Println("[INFO] libstudy standard logger initialized")
 }

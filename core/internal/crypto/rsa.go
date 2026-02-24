@@ -227,13 +227,13 @@ func GenerateClientID() string {
 		return clientId
 	}
 
-	// 生成基础 UUID (去除连字符，转大写，32个字符)
-	baseUUID := strings.ToUpper(strings.ReplaceAll(uuid.New().String(), "-", ""))
+	// 生成基础 UUID (去除连字符，转大写，取前16个字符)
+	baseUUID := strings.ToUpper(strings.ReplaceAll(uuid.New().String(), "-", ""))[:16]
 
 	// 获取平台代码（1位数字）
 	platformCode := GetPlatformCode()
 
-	// 将平台代码替换 UUID 的第一个字符，看起来像正常的 UUID
+	// 将平台代码作为前缀，总长度17个字符
 	clientID := platformCode + baseUUID
 
 	cfg.SetAndSave(config.KeyClientId, clientID)
