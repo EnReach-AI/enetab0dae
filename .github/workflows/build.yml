@@ -545,10 +545,7 @@ jobs:
             artifact_suffix: "centos-stream-10"
             bundle_target: "rpm"
             tauri_config: "src-tauri/tauri.centos-stream10.conf.json"
-          - distro: "debian:11"
-            artifact_suffix: "debian-11"
-            bundle_target: "deb"
-            tauri_config: "src-tauri/tauri.debian11.conf.json"
+
     runs-on: ubuntu-latest
     container:
       image: ${{ matrix.distro }}
