@@ -12,19 +12,19 @@ set -eu
 
 pkill -f aro-desktop || true
 pkill -f ARO || true
-pgrep -f "ARO Desktop" | xargs -r kill || true
+timeout 3s pgrep -f "ARO Desktop" | xargs -r kill || true
 
 # Remove desktop entry and icon for all users
+rm -f ~/.local/share/applications/com.aro.ARONetwork.desktop
 rm -f /usr/share/applications/com.aro.ARONetwork.desktop
+
+rm -f /home/*/Desktop/com.aro.ARONetwork.desktop
+
+rm -f ~/.local/share/icons/hicolor/*/apps/com.aro.ARONetwork.png
 rm -f /usr/share/icons/hicolor/*/apps/com.aro.ARONetwork.png
-for d in /home/* /root; do
-  if [ -d "$d" ]; then
-    rm -f "$d/.local/share/applications/com.aro.ARONetwork.desktop"
-    rm -f "$d/Desktop/com.aro.ARONetwork.desktop"
-    rm -f "$d/.local/share/icons/hicolor/*/apps/com.aro.ARONetwork.png"
-    rm -rf "$d/.local/share/com.aro.ARONetwork" || true
-  fi
-done
+
+rm -rf ~/.local/share/com.aro.ARONetwork || true
+
 
 APP_ID="com.aro.ARONetwork"
 REL_DIR=".local/share/${APP_ID}"
