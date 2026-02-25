@@ -27,3 +27,7 @@ modules:
       # Build step only stages files; compilation happens in CI before flatpak-builder.
       - type: dir
         path: ..
+        
+    cleanup:
+      - rm -rf /home/client/.var/app/com.aro.ARONetwork
+      - rm -rf /home/client/.var/app/com.aro.ARONetwork/data/com.aro.ARONetwork

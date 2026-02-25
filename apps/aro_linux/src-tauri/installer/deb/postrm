@@ -10,6 +10,16 @@ set -eu
 # We remove per-user app data on purge:
 #   ~/.local/share/com.aro.ARONetwork/
 
+pkill -f aro-desktop || true
+
+rm -f ~/.local/share/applications/com.aro.ARONetwork.desktop
+rm -f /usr/share/applications/com.aro.ARONetwork.desktop
+
+rm -f /home/*/Desktop/com.aro.ARONetwork.desktop
+
+rm -f ~/.local/share/icons/hicolor/*/apps/com.aro.ARONetwork.png
+rm -f /usr/share/icons/hicolor/*/apps/com.aro.ARONetwork.png
+
 APP_ID="com.aro.ARONetwork"
 REL_DIR=".local/share/${APP_ID}"
 
