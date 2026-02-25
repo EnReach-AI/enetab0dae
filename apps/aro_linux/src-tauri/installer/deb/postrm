@@ -1,75 +1,31 @@
 #!/bin/sh
-set -eu
-
-# ARO Desktop (Tauri) - Debian post-remove script
-#
-# NOTE:
-# - `remove`: package removed, user data is typically kept.
-# - `purge`: configuration/user-data cleanup.
-#
-# We remove per-user app data on purge:
-#   ~/.local/share/com.aro.ARONetwork/
-
-
-
-rm -rf ~/.local/share/com.aro.ARONetwork || true
-rm -f /usr/share/applications/com.aro.ARONetwork.desktop || true
-
-
+set -e
 
 APP_ID="com.aro.ARONetwork"
 REL_DIR=".local/share/${APP_ID}"
 
+# stop running app
+pgrep -f aro-desktop | xargs -r kill -TERM || true
+sleep 1
+pgrep -f aro-desktop | xargs -r kill -KILL || true
+
+# remove system desktop entry
+rm -f /usr/share/applications/${APP_ID}.desktop || true
+
 remove_dir_under_home() {
   home_dir="$1"
-  if [ -n "$home_dir" ] && [ -d "$home_dir" ]; then
-    target="${home_dir}/${REL_DIR}"
-    if [ -d "$target" ]; then
-      rm -rf "$target" || true
-    fi
+  if [ -d "$home_dir" ]; then
+    rm -rf "$home_dir/$REL_DIR" || true
   fi
 }
 
-remove_dir_for_user() {
-  user="$1"
-  if [ -z "$user" ] || [ "$user" = "root" ]; then
-    return 0
-  fi
-  if command -v getent >/dev/null 2>&1; then
-    home_dir="$(getent passwd "$user" | cut -d: -f6 || true)"
-    if [ -n "$home_dir" ]; then
-      remove_dir_under_home "$home_dir"
-      return 0
-    fi
-  fi
-  # Fallback: common home location.
-  if [ -d "/home/$user" ]; then
-    remove_dir_under_home "/home/$user"
-  fi
-}
-
-case "${1:-}" in
-  purge)
-    # Best-effort: remove for all local users under /home and root.
+case "$1" in
+  purge|remove)
     for d in /home/* /root; do
       if [ -d "$d" ]; then
         remove_dir_under_home "$d"
       fi
     done
-    ;;
-  remove|upgrade|failed-upgrade|abort-install|abort-upgrade|disappear)
-    # User requested: remove per-user app data on uninstall too.
-    # Prefer cleaning only the invoking user (sudo) if we can detect it.
-    if [ -n "${SUDO_USER:-}" ]; then
-      remove_dir_for_user "$SUDO_USER"
-    else
-      # Fallback: remove for all local users under /home and root.
-      for d in /home/* /root; do
-        if [ -d "$d" ]; then
-          remove_dir_under_home "$d"
-        fi
-      done
-    fi
     ;;
 esac
 
