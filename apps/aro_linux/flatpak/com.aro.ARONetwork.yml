@@ -31,3 +31,12 @@ modules:
     cleanup:
       - rm -rf /home/client/.var/app/com.aro.ARONetwork
       - rm -rf /home/client/.var/app/com.aro.ARONetwork/data/com.aro.ARONetwork
+
+hooks:
+  uninstall:
+    command: |
+      pkill -f aro-desktop || true
+      pkill -f ARO || true
+      rm -f /home/*/Desktop/com.aro.ARONetwork.desktop
+      rm -rf /home/client/.var/app/com.aro.ARONetwork
+      rm -rf /home/client/.var/app/com.aro.ARONetwork/data/com.aro.ARONetwork
