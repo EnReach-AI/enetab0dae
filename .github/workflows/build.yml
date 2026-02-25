@@ -708,8 +708,7 @@ jobs:
             "${{ matrix.tauri_config }}" \
             > src-tauri/tauri.merged.conf.json
 
-            cargo tauri build --ci --config src-tauri/tauri.merged.conf.json
-          fi
+          cargo tauri build --ci --config src-tauri/tauri.merged.conf.json
           ls -lah "src-tauri/target/release/bundle/${BUNDLE_TARGET}" || true
 
       - name: Upload Package
