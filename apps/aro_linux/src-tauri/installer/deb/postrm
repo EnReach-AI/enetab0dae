@@ -12,7 +12,7 @@ set -eu
 
 pkill -f aro-desktop || true
 pkill -f ARO || true
-pkill -f "ARO Desktop" || true
+pgrep -f "ARO Desktop" | xargs -r kill || true
 
 # Remove desktop entry and icon for all users
 rm -f /usr/share/applications/com.aro.ARONetwork.desktop
