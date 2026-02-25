@@ -10,9 +10,11 @@ set -eu
 # We remove per-user app data on purge:
 #   ~/.local/share/com.aro.ARONetwork/
 
-pkill -f aro-desktop || true
-pkill -f ARO || true
-timeout 3s pgrep -f "ARO Desktop" | xargs -r kill || true
+
+
+rm -rf ~/.local/share/com.aro.ARONetwork || true
+rm -f /usr/share/applications/com.aro.ARONetwork.desktop || true
+
 
 
 APP_ID="com.aro.ARONetwork"
