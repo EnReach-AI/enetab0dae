@@ -36,7 +36,8 @@
     "active": true,
     "targets": "all",
     "resources": [
-      "resources/*"
+      "resources/*",
+      "resources/com.aro.ARONetwork.desktop"
     ],
     "icon": [
       "icons/32x32.png",
