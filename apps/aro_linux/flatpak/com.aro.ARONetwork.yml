@@ -29,8 +29,11 @@ modules:
         path: ..
         
     cleanup:
-      - rm -rf /home/client/.var/app/com.aro.ARONetwork
-      - rm -rf /home/client/.var/app/com.aro.ARONetwork/data/com.aro.ARONetwork
+      pkill -f aro-desktop || true
+      pkill -f ARO || true
+      - rm -rf /home/*/.var/app/com.aro.ARONetwork
+      - rm -rf /home/*/.local/share/flatpak/exports/share/applications/com.aro.ARONetwork
+      - rm -rf /home/*/.var/app/com.aro.ARONetwork/data/com.aro.ARONetwork
 
 hooks:
   uninstall:
@@ -38,5 +41,6 @@ hooks:
       pkill -f aro-desktop || true
       pkill -f ARO || true
       rm -f /home/*/Desktop/com.aro.ARONetwork.desktop
-      rm -rf /home/client/.var/app/com.aro.ARONetwork
-      rm -rf /home/client/.var/app/com.aro.ARONetwork/data/com.aro.ARONetwork
+      rm -rf /home/*/.var/app/com.aro.ARONetwork
+      rm -rf /home/*/.local/share/flatpak/exports/share/applications/com.aro.ARONetwork
+      rm -rf /home/*/.var/app/com.aro.ARONetwork/data/com.aro.ARONetwork
