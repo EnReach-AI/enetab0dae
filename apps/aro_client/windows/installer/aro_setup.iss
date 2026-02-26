@@ -98,6 +98,21 @@ Type: dirifempty; Name: "{userappdata}\com.aro"
 Type: dirifempty; Name: "{localappdata}\com.aro"
 
 [Code]
+procedure KillProcess(ProcessName: string);
+var
+	WMIService, ProcessList, ProcessItem: Variant;
+begin
+	WMIService := CreateOleObject('WbemScripting.SWbemLocator').ConnectServer('.', 'root\CIMV2');
+	ProcessList := WMIService.ExecQuery('SELECT * FROM Win32_Process WHERE Name="' + ProcessName + '"');
+	for ProcessItem in ProcessList do
+		ProcessItem.Terminate();
+end;
+
+procedure CurUninstallStepChanged(CurUninstallStep: TUninstallStep);
+begin
+	if CurUninstallStep = usUninstall then
+		KillProcess('aro_desktop.exe'); 
+end;
 const
 	ARO_MUTEX_NAME = 'AROClientMutex';
 	ARO_PROCESS_NAME = '{#MyAppExeName}';
