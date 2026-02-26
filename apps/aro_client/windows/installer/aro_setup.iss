@@ -36,27 +36,22 @@ UninstallDisplayIcon={app}\{#MyAppExeName}
 
 AppMutex=AROClientMutex
 
-
 [Languages]
 
 Name: "english"; MessagesFile: "compiler:Default.isl"
-
 
 [Tasks]
 
 Name: "desktopicon"; Description: "Create a desktop icon"; Flags: unchecked
 
-
 [Files]
 
 Source: "..\..\build\windows\x64\runner\Release\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
-
 
 [Icons]
 
 Name: "{autoprograms}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"
 Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; Tasks: desktopicon
-
 
 [Run]
 
@@ -64,10 +59,8 @@ Filename: "{app}\{#MyAppExeName}";
 Description: "Launch {#MyAppName}";
 Flags: nowait postinstall skipifsilent
 
-
 [UninstallDelete]
 
-; WebView2
 Type: filesandordirs; Name: "{app}\aro_desktop.exe.WebView2"
 
 ; AppData
@@ -88,12 +81,9 @@ Type: filesandordirs; Name: "{userappdata}\libstudy"
 ; Documents
 Type: filesandordirs; Name: "{userdocs}\ARO Desktop"
 
-; 安装目录
 Type: filesandordirs; Name: "{app}"
 
-
 [Code]
-
 
 procedure KillProcess(ProcessName: string);
 var
@@ -109,32 +99,21 @@ begin
       ewWaitUntilTerminated,
       ResultCode
     );
-
     Sleep(800);
   end;
 end;
 
-
 procedure KillAllProcesses();
 begin
-
-  ; 主程序
   KillProcess('aro_desktop.exe');
 
-  ; Flutter
   KillProcess('flutter_window.exe');
 
-  ; WebView2
   KillProcess('msedgewebview2.exe');
-
-  ; WebView2备用
   KillProcess('edgewebview2.exe');
 
-  ; Edge残留
   KillProcess('msedge.exe');
-
 end;
-
 
 function IsProcessRunning(ProcessName: string): Boolean;
 var
@@ -146,34 +125,27 @@ begin
   OutFile := ExpandConstant('{tmp}\aro_tasklist.txt');
   DeleteFile(OutFile);
 
-  Cmd :=
-    'tasklist /FI "IMAGENAME eq ' + ProcessName +
-    '" /NH > "' + OutFile + '"';
+  Cmd := 'tasklist /FI "IMAGENAME eq ' + ProcessName + '" /NH > "' + OutFile + '"';
 
-  if Exec(
-     'cmd.exe',
-     '/c ' + Cmd,
-     '',
-     SW_HIDE,
-     ewWaitUntilTerminated,
-     ResultCode
-  ) then
+  if Exec('cmd.exe', '/c ' + Cmd, '', SW_HIDE, ewWaitUntilTerminated, ResultCode) then
   begin
     if LoadStringFromFile(OutFile, Content) then
       Result := Pos(LowerCase(ProcessName), LowerCase(Content)) > 0;
   end;
 end;
 
-
-procedure WaitProcessExit(ProcessName: string; TimeoutMS: Integer);
+procedure WaitAllProcessesExit(TimeoutMS: Integer);
 var
   Elapsed: Integer;
 begin
   Elapsed := 0;
-
   while Elapsed < TimeoutMS do
   begin
-    if not IsProcessRunning(ProcessName) then
+    if not (IsProcessRunning('aro_desktop.exe') or
+            IsProcessRunning('flutter_window.exe') or
+            IsProcessRunning('msedgewebview2.exe') or
+            IsProcessRunning('edgewebview2.exe') or
+            IsProcessRunning('msedge.exe')) then
       Exit;
 
     Sleep(500);
@@ -181,17 +153,31 @@ begin
   end;
 end;
 
+procedure DeleteIfExists(DirName: string);
+begin
+  if DirExists(DirName) then
+    DelTree(DirName, True, True, True);
+end;
 
 procedure CurUninstallStepChanged(CurUninstallStep: TUninstallStep);
 begin
-
   if CurUninstallStep = usUninstall then
   begin
-
     KillAllProcesses();
 
-    WaitProcessExit('aro_desktop.exe', 10000);
+    WaitAllProcessesExit(15000);
 
+    DeleteIfExists(ExpandConstant('{app}\aro_desktop.exe.WebView2'));
+
+    DeleteIfExists(ExpandConstant('{app}'));
+
+    DeleteIfExists(ExpandConstant('{userappdata}\ARO'));
+    DeleteIfExists(ExpandConstant('{localappdata}\ARO'));
+    DeleteIfExists(ExpandConstant('{userappdata}\aro_desktop'));
+    DeleteIfExists(ExpandConstant('{localappdata}\aro_desktop'));
+    DeleteIfExists(ExpandConstant('{userappdata}\com.aro'));
+    DeleteIfExists(ExpandConstant('{localappdata}\com.aro'));
+    DeleteIfExists(ExpandConstant('{userappdata}\libstudy'));
+    DeleteIfExists(ExpandConstant('{userdocs}\ARO Desktop'));
   end;
-
 end;
