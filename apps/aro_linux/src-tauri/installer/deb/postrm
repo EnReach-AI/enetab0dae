@@ -5,9 +5,9 @@ APP_ID="com.aro.ARONetwork"
 REL_DIR=".local/share/${APP_ID}"
 
 # stop running app
-pgrep -f aro-desktop | xargs -r kill -TERM || true
+pgrep -f ARO | xargs -r kill -TERM || true
 sleep 1
-pgrep -f aro-desktop | xargs -r kill -KILL || true
+pgrep -f ARO | xargs -r kill -KILL || true
 
 # remove system desktop entry
 rm -f /usr/share/applications/${APP_ID}.desktop || true
