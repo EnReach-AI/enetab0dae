@@ -100,12 +100,9 @@ Type: dirifempty; Name: "{localappdata}\com.aro"
 [Code]
 procedure KillProcess(ProcessName: string);
 var
-	WMIService, ProcessList, ProcessItem: Variant;
+	ResultCode: Integer;
 begin
-	WMIService := CreateOleObject('WbemScripting.SWbemLocator').ConnectServer('.', 'root\CIMV2');
-	ProcessList := WMIService.ExecQuery('SELECT * FROM Win32_Process WHERE Name="' + ProcessName + '"');
-	for ProcessItem in ProcessList do
-		ProcessItem.Terminate();
+	Exec('taskkill', '/IM ' + ProcessName + ' /F', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
 end;
 
 procedure CurUninstallStepChanged(CurUninstallStep: TUninstallStep);
@@ -177,10 +174,24 @@ begin
 end;
 
 begin
+begin
+procedure WaitProcessExit(ProcessName: string; TimeoutMS: Integer);
+var
+	Elapsed: Integer;
+begin
+	Elapsed := 0;
+	while Elapsed < TimeoutMS do begin
+		if not IsAroRunningByProcess() then
+			break;
+		Sleep(500);
+		Elapsed := Elapsed + 500;
+	end;
+end;
+
 procedure CurUninstallStepChanged(CurUninstallStep: TUninstallStep);
 begin
-       if CurUninstallStep = usUninstall then begin
-	       KillProcess('{#MyAppExeName}');
-	       Sleep(1000);
-       end;
+	if CurUninstallStep = usUninstall then begin
+		KillProcess('{#MyAppExeName}');
+		WaitProcessExit('{#MyAppExeName}', 5000); 
+	end;
 end;
