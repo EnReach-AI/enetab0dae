@@ -47,7 +47,10 @@ func RunBackendThread(isExcuteBackendThreading chan bool) {
 
 		// Check bind status
 		backendService := service.NewBackendService(deviceInfo)
+		log.Printf("start request GetNodeBindStatus start time:%s", time.Now().Format(time.RFC3339))
 		bindResult, err := backendService.GetNodeBindStatus()
+		log.Printf("start request GetNodeBindStatus end time:%s", time.Now().Format(time.RFC3339))
+
 		if err != nil {
 			log.Printf("Failed to get bind status: %v, retrying in %v", err, errorRetryDelay)
 			time.Sleep(errorRetryDelay)

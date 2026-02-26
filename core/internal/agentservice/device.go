@@ -179,6 +179,10 @@ func detectWindowsVirtualMachine() {
 	// 简单的检查方法：运行命令
 	// 检查 Hyper-V
 	cmd := exec.Command("powershell", "-WindowStyle", "Hidden", "-Command", "Get-WmiObject Win32_ComputerSystem | Select-Object Manufacturer,Model")
+
+	// 隐藏命令行窗口
+	hideCommandWindow(cmd)
+
 	output, err := cmd.Output()
 	if err == nil {
 		outputStr := strings.ToLower(string(output))
@@ -199,6 +203,7 @@ func detectDarwinVirtualMachine() {
 
 	// 1. 检查 hw.model
 	cmd := exec.Command("sysctl", "-n", "hw.model")
+	hideCommandWindow(cmd)
 	output, err := cmd.Output()
 	if err == nil {
 		model := strings.ToLower(strings.TrimSpace(string(output)))
@@ -214,6 +219,7 @@ func detectDarwinVirtualMachine() {
 
 	// 2. 检查 machdep.cpu.brand_string (CPU 品牌信息)
 	cmd = exec.Command("sysctl", "-n", "machdep.cpu.brand_string")
+	hideCommandWindow(cmd)
 	output, err = cmd.Output()
 	if err == nil {
 		cpuBrand := strings.ToLower(strings.TrimSpace(string(output)))
@@ -225,8 +231,9 @@ func detectDarwinVirtualMachine() {
 		}
 	}
 
-	// 3. 检查 kern.hostname (某些虚拟机会有特定的主机名模式)
+	// 3. 检查 kern.hv_support
 	cmd = exec.Command("sysctl", "-n", "kern.hv_support")
+	hideCommandWindow(cmd)
 	output, err = cmd.Output()
 	if err == nil {
 		hvSupport := strings.TrimSpace(string(output))
@@ -240,6 +247,7 @@ func detectDarwinVirtualMachine() {
 
 	// 4. 检查 ioreg 命令 (不会触发弹窗，轻量级)
 	cmd = exec.Command("ioreg", "-l")
+	hideCommandWindow(cmd)
 	output, err = cmd.Output()
 	if err == nil {
 		ioregOutput := strings.ToLower(string(output))
@@ -269,6 +277,10 @@ func detectAndroidVirtualMachine() {
 
 	for _, prop := range vmProperties {
 		cmd := exec.Command("getprop", prop)
+
+		// 隐藏命令行窗口
+		hideCommandWindow(cmd)
+
 		output, err := cmd.Output()
 		if err == nil {
 			propValue := strings.ToLower(strings.TrimSpace(string(output)))
@@ -313,7 +325,12 @@ func isVirtualMachineGuest() bool {
 }
 
 func checkBySystemdDetectVirt() (bool, string) {
-	out, err := exec.Command("systemd-detect-virt", "-c").Output()
+	cmd := exec.Command("systemd-detect-virt", "-c")
+
+	// 隐藏命令行窗口
+	hideCommandWindow(cmd)
+
+	out, err := cmd.Output()
 	if err != nil {
 		return false, "systemd-detect-virt not available"
 	}
