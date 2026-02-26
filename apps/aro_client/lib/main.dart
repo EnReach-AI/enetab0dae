@@ -493,7 +493,7 @@ class _MyHomePageState extends State<MyHomePage>
       // If the platform webview fails to initialize (e.g. missing WebView2 on
       // Windows), the screen can stay blank. Add a small timeout to surface a
       // helpful message.
-      Timer(const Duration(seconds: 10), () {
+      Timer(const Duration(seconds: 60), () {
         if (!mounted) return;
         if (_desktopController != null) return;
         if (_desktopWebViewError != null) return;
