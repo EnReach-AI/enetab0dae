@@ -62,22 +62,24 @@ func RunBackendThread(isExcuteBackendThreading chan bool) {
 
 		AppBackendService = api_client.NewAPIClient(cfg.Get(config.KeyAPIURL), cfg.Get(config.KeyClientId), cfg.Get(config.KeySN), bindResult.UUID)
 
-		// 发送初始化完成信号
+		// 发送初始化完成信号（只发送一次）
 		if isExcuteBackendThreading != nil {
 			select {
 			case isExcuteBackendThreading <- true:
 				log.Println("Backend initialization completed, signal sent")
 			default:
-				log.Println("Backend initialization completed, but signal already sent")
+				log.Println("Backend initialization signal channel full")
 			}
-			if !bindResult.Binded {
-				log.Println("Device not bound, waiting for binding...")
-				time.Sleep(pollInterval)
-				continue
-			}
-
+			// 设置为 nil 防止后续循环重复发送
+			isExcuteBackendThreading = nil
 		}
-		// agentConstant.ENVIRONMENT_TYPE = model.PhysicalMachine
+
+		// 检查设备是否已绑定
+		if !bindResult.Binded {
+			log.Println("Device not bound, waiting for binding...")
+			time.Sleep(pollInterval)
+			continue
+		}
 
 		// Device is bound, start services
 		ctx, cancel := context.WithCancel(context.Background())
