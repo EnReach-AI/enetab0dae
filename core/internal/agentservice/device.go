@@ -30,14 +30,26 @@ func GetDeviceInfo() (model.DeviceInfo, error) {
 	if agentConstant.DEVICE_INFO.SerialNumber != "" {
 		return agentConstant.DEVICE_INFO, nil
 	}
-	clientId := crypto.GenerateClientID()
+	keySn := cfg.Get(config.KeySN)
+	clientId := cfg.Get(config.KeyClientId)
+	if keySn != "" && clientId != "" {
+		
+		deviceInfo := model.DeviceInfo{
+		HSerialNumber: clientId,
+		SerialNumber:  keySn,
+		DeviceType:    model.DeviceType(runtime.GOOS),
+		AgentVersion:  constant.VERSION,
+	}
+	agentConstant.DEVICE_INFO = deviceInfo
+	return deviceInfo, nil
+	}
+	clientId = crypto.GenerateClientID()
 	device := model.DeviceInfo{
 		HSerialNumber: clientId,
 		SerialNumber:  clientId,
 		DeviceType:    model.DeviceType(runtime.GOOS),
 		AgentVersion:  constant.VERSION,
 	}
-	log.Println("GetDeviceInfo deviceInfo:", device)
 	backendService := service.NewBackendService(device)
 	enreachSerialNumber, err := backendService.GenerateEnReachSerialNumber()
 	if err != nil {

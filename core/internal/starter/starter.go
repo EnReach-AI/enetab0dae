@@ -26,11 +26,13 @@ func RunBackendThread(isExcuteBackendThreading chan bool) {
 	agentConstant.Init2(cfg.Get(config.KeyAgentPath), constant.VERSION)
 
 	const (
-		pollInterval      = 20 * time.Second
-		errorRetryDelay   = 20 * time.Second
-		bindCheckInterval = 20 * time.Second
+		pollInterval      = 30 * time.Second
+		errorRetryDelay   = 30 * time.Second
+		bindCheckInterval = 30 * time.Second
 	)
 	deviceInfo, err := internalService.GetDeviceInfo()
+	log.Printf("deviceInfo: %+v", deviceInfo)
+	log.Printf("agentConstant.deviceInfo: %+v", agentConstant.DEVICE_INFO)
 	// agentservice.DetectEnvironment()
 	for {
 		// Get device information
@@ -46,9 +48,10 @@ func RunBackendThread(isExcuteBackendThreading chan bool) {
 
 		// Check bind status
 		backendService := service.NewBackendService(deviceInfo)
-		log.Printf("start request GetNodeBindStatus start time:%s", time.Now().Format(time.RFC3339))
-		bindResult, err := backendService.GetNodeBindStatus()
-		log.Printf("start request GetNodeBindStatus end time:%s", time.Now().Format(time.RFC3339))
+		apiBackendService := api_client.NewBackendService(deviceInfo)
+		log.Printf("start request GetNodeBindStatus start time:%s", time.Now().Format(time.RFC3339Nano))
+		bindResult, err := apiBackendService.GetNodeBindStatus()
+		log.Printf("start request GetNodeBindStatus end time:%s", time.Now().Format(time.RFC3339Nano))
 
 		if err != nil {
 			log.Printf("Failed to get bind status: %v, retrying in %v", err, errorRetryDelay)
@@ -57,7 +60,6 @@ func RunBackendThread(isExcuteBackendThreading chan bool) {
 		}
 
 		log.Printf("Bind result:%+v", bindResult)
-		log.Printf("Device bind status: %t, NodeID: %s", bindResult.Binded, bindResult.UUID)
 
 		AppBackendService = api_client.NewAPIClient(cfg.Get(config.KeyAPIURL), cfg.Get(config.KeyClientId), cfg.Get(config.KeySN), bindResult.UUID)
 
@@ -82,7 +84,6 @@ func RunBackendThread(isExcuteBackendThreading chan bool) {
 
 		// Device is bound, start services
 		ctx, cancel := context.WithCancel(context.Background())
-		log.Printf("environment type:%s", agentConstant.ENVIRONMENT_TYPE)
 		// Start physical machine services
 		// if constant.ENVIRONMENT_TYPE == model.PhysicalMachine && !bindResult.BanIP {
 

@@ -33,6 +33,35 @@ import (
 
 var cfg = config.GetConfig()
 
+
+
+// NodeSignUp 节点注册（/api/liteNode/signUp）
+// 参数：publicKeyPem - RSA 公钥（PEM 格式）
+// 返回：JSON formatted响应（包含用户和节点信息）
+//
+//export NodeSignUp
+func NodeSignUp() *C.char {
+	defer utils.RecoverAndLog("NodeSignUp")
+	log.Println("NodeSignUp called")
+	if agentConstant.DEVICE_INFO.SerialNumber != "" {
+		sn := agentConstant.DEVICE_INFO.SerialNumber
+		var apiResponse = api_client.APIResponse{
+			Code:    200,
+			Message: "success",
+			Data: map[string]interface{}{
+				"serialNumber": sn,
+			},
+		}
+		return toCStringJSON(apiResponse)
+	}
+	var apiResponse = api_client.APIResponse{
+		Code:    400,
+		Message: "failed",
+		Data:    nil,
+	}
+
+	return toCStringJSON(apiResponse)
+}
 //
 //export InitLibstudy
 func InitLibstudy(initParamsJSON *C.char) *C.char {
@@ -59,6 +88,7 @@ func InitLibstudy(initParamsJSON *C.char) *C.char {
 		if initParams.Config.BaseAPIURL != "" {
 			serverConfig.BaseAPIURL = initParams.Config.BaseAPIURL
 			cfg.SetAndSave(config.KeyAPIURL, serverConfig.BaseAPIURL)
+			agentConstant.HTTP_SERVER_ENDPOINT = initParams.Config.BaseAPIURL
 		}
 		allConfig := cfg.GetAll()
 		initLog()
@@ -68,12 +98,12 @@ func InitLibstudy(initParamsJSON *C.char) *C.char {
 		initDone := make(chan bool, 1)
 		go starter.RunBackendThread(initDone)
 
-		// 等待初始化完成，最多等待 30 秒
+		// 等待初始化完成，最多等待 40 秒
 		select {
 		case <-initDone:
 			log.Println("Backend thread initialization completed")
 			details["backend_status"] = "initialized"
-		case <-time.After(30 * time.Second):
+		case <-time.After(40 * time.Second):
 			log.Println("Backend thread initialization timeout, but continuing...")
 			details["backend_status"] = "timeout"
 			return reply(400, "Libstudy initialized failed timeout", details)
@@ -83,15 +113,13 @@ func InitLibstudy(initParamsJSON *C.char) *C.char {
 
 }
 
-
 // getLogFilePath 获取日志文件路径，优先级：环境变量 > 当前工作目录/log > 临时目录
-
 
 // 日志初始化（Logrus + Lumberjack）
 func initLog() {
 	// cfg.SetAndSave(config.KeyAgentPath, workDir)
 	// 创建日志文件路径
-	logPath :=logconfig.GetLogFilePath()
+	logPath := logconfig.GetLogFilePath()
 
 	// 以追加模式打开日志文件
 	logFile, err := os.OpenFile(logPath, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0644)
@@ -127,7 +155,7 @@ func goStringFromC(s *C.char) string {
 
 func toCStringJSON(v interface{}) *C.char {
 	data, _ := json.Marshal(v)
-	logrus.WithField("json", string(data)).Info("response json")
+	log.Printf("response json: %+v", v)
 	return C.CString(string(data))
 }
 
@@ -167,34 +195,6 @@ var (
 // 这些函数对应 client.go 中定义的各种 API 端点
 // 供动态加载该库的应用（如 Flutter）通过 FFI 调用
 
-// NodeSignUp 节点注册（/api/liteNode/signUp）
-// 参数：publicKeyPem - RSA 公钥（PEM 格式）
-// 返回：JSON formatted响应（包含用户和节点信息）
-//
-//export NodeSignUp
-func NodeSignUp() *C.char {
-	defer utils.RecoverAndLog("NodeSignUp")
-	log.Println("NodeSignUp called")
-	if agentConstant.DEVICE_INFO.SerialNumber != "" {
-		sn := agentConstant.DEVICE_INFO.SerialNumber
-		var apiResponse = api_client.APIResponse{
-			Code:    200,
-			Message: "success",
-			Data: map[string]interface{}{
-				"serialNumber": sn,
-			},
-		}
-		return toCStringJSON(apiResponse)
-	}
-	var apiResponse = api_client.APIResponse{
-		Code:    400,
-		Message: "failed",
-		Data:    nil,
-	}
-
-	return toCStringJSON(apiResponse)
-}
-
 // GetNodeStat 获取节点统计信息（/api/liteNode/stat）
 // 返回：JSON formatted响应（包含用户信息、节点状态、积分等）
 //
@@ -226,7 +226,6 @@ func GetNodeStat() *C.char {
 		Message: "success",
 		Data:    NodeBindResponse,
 	}
-	log.Printf("GetNodeStat response: %+v", apiResponse)
 	return toCStringJSON(apiResponse)
 }
 
@@ -237,12 +236,10 @@ func GetNodeStat() *C.char {
 func GetRewards() *C.char {
 	defer utils.RecoverAndLog("GetRewards")
 	log.Println("GetRewards called")
-	response,err := api_client.GetRewards()
+	response, err := api_client.GetRewards()
 	if err != nil {
 		return reply(500, err.Error(), nil)
 	}
-	data, _ := json.Marshal(response)
-	log.Println("GetRewards response: ", string(data))
 	return toCStringJSON(response)
 }
 
@@ -251,23 +248,18 @@ func GetRewards() *C.char {
 //export GetCurrentVersion
 func GetCurrentVersion() *C.char {
 	defer utils.RecoverAndLog("GetCurrentVersion")
-	log.Println("GetCurrentVersion called")
 	// 从 core/version 包读取注入的版本信息
-	os.Stderr.Sync()
 	return reply(200, "success", constant.VERSION)
 }
 
 //export GetLastVersion
 func GetLastVersion() *C.char {
 	defer utils.RecoverAndLog("GetLastVersion")
-	log.Println("GetLastVersion called")
 	resp, err := api_client.GetLastVersion(constant.PROGRAM_APP, constant.ENV)
 	if err != nil {
 		return reply(500, err.Error(), nil)
 	}
 
-	data, _ := json.Marshal(resp)
-	log.Println("GetLastVersion 14124 response: ", string(data))
 	return toCStringJSON(resp)
 }
 
