@@ -11,6 +11,7 @@ import (
 	"github.com/shirou/gopsutil/v4/cpu"
 	"github.com/shirou/gopsutil/v4/mem"
 )
+
 func GetDeviceBaseInfo() util.DeviceInfoRequest {
 	// --- CPU Info (cross-platform) ---
 	cpuCores := 0
@@ -33,15 +34,16 @@ func GetDeviceBaseInfo() util.DeviceInfoRequest {
 	} else {
 		log.Println("Error retrieving memory info:", err)
 	}
-
+	ipStats := util.GetLocalIPStat()
 	// --- Network, Disk Info ---
 	return util.DeviceInfoRequest{
-		util.DeviceBaseInfo{
+		DeviceInfo: util.DeviceBaseInfo{
 			Date:              fmt.Sprintf("%d", time.Now().Unix()),
 			CPUCores:          cpuCores,
 			MemTotal:          memTotal,
 			MemAvailable:      memAvailable,
 			MemUse:            memUse,
+			NetworkInterfaces: ipStats,
 			Version:           constant.VERSION,
 		},
 	}
