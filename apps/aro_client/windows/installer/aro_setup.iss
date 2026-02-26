@@ -100,9 +100,12 @@ Type: dirifempty; Name: "{localappdata}\com.aro"
 [Code]
 procedure KillProcess(ProcessName: string);
 var
-	ResultCode: Integer;
+	ResultCode, i: Integer;
 begin
-	Exec('taskkill', '/IM ' + ProcessName + ' /F', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+	for i := 1 to 3 do begin
+		Exec('taskkill', '/IM ' + ProcessName + ' /F /T', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+		Sleep(500);
+	end;
 end;
 
 procedure CurUninstallStepChanged(CurUninstallStep: TUninstallStep);
@@ -177,10 +180,11 @@ begin
 	end;
 end;
 
+begin
 procedure CurUninstallStepChanged(CurUninstallStep: TUninstallStep);
 begin
 	if CurUninstallStep = usUninstall then begin
 		KillProcess('{#MyAppExeName}');
-		WaitProcessExit('{#MyAppExeName}', 5000); 
+		WaitProcessExit('{#MyAppExeName}', 5000);
 	end;
 end;
