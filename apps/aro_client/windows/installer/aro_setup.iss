@@ -176,16 +176,11 @@ begin
 	end;
 end;
 
+begin
 procedure CurUninstallStepChanged(CurUninstallStep: TUninstallStep);
 begin
-	// Extra safety: abort right before uninstall starts deleting files.
-	if CurUninstallStep = usUninstall then begin
-		if IsAroRunningByMutex() or IsAroRunningByWindow() or IsAroRunningByProcess() then begin
-			MsgBox(
-				'ARO is currently running.'#13#10#13#10 +
-				'Please exit the app first (tray menu -> Exit), then run uninstall again.',
-				mbError, MB_OK);
-			Abort;
-		end;
-	end;
+       if CurUninstallStep = usUninstall then begin
+	       KillProcess('{#MyAppExeName}');
+	       Sleep(1000);
+       end;
 end;
