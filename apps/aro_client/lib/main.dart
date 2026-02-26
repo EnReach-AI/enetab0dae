@@ -165,6 +165,7 @@ class _MyHomePageState extends State<MyHomePage>
   // bool _isWindowsInit = false;
   // String? _errorMessage;
   bool _isDesktopWebViewReady = false;
+  bool _isWebViewLoading = true;
   String? _desktopWebViewError;
   bool _isConnected = true;
 
@@ -278,6 +279,7 @@ class _MyHomePageState extends State<MyHomePage>
         final stat = service.getNodeStat();
         final statMap = jsonDecode(stat);
         print('statMap nodeInfo $statMap');
+        LoggerService().info('statMap nodeInfo : $statMap');
 
         if (statMap['code'] == 200 && statMap['data']['bind'] == true) {
           print('Send stat result:  ------- $stat $statMap ');
@@ -384,6 +386,31 @@ class _MyHomePageState extends State<MyHomePage>
       } catch (e) {
         print('getVersion error $e');
       }
+    } else if (message == 'nodeInit') {
+      final aa = initNode().catchError((e) {
+        print('initNode error caught: $e');
+      });
+      print('initNode: $aa');
+      LoggerService().info('initNode--- error $aa ');
+
+      await Future.delayed(Duration(seconds: 5));
+      try {
+        final stat = service.getNodeStat();
+        final statMap = jsonDecode(stat);
+        print('statMap nodeInfo $statMap');
+        LoggerService().info('statMap nodeInfo : $statMap');
+
+        if (statMap['code'] == 200) {
+          print('Send stat result:  ------- $stat $statMap ');
+          sendToWeb({
+            'type': 'nodeInfo',
+            'payload': statMap,
+          });
+        }
+      } catch (e) {
+        print('nodeInfo error $e');
+        LoggerService().info('nodeInfo--- error $e ');
+      }
     }
     // else if (message == 'getWSClientStatus') {
     //   final status = service.getWSClientStatus();
@@ -474,10 +501,6 @@ class _MyHomePageState extends State<MyHomePage>
       windowManager.addListener(this);
       unawaited(windowManager.setPreventClose(true));
     }
-
-    initNode().catchError((e) {
-      print('initNode error caught: $e');
-    });
 
     if (Platform.isWindows || Platform.isLinux) {
       // On Windows/Linux, delay webview creation to ensure Hero system is fully disabled
@@ -655,6 +678,9 @@ class _MyHomePageState extends State<MyHomePage>
         NavigationDelegate(
           onPageFinished: (_) {
             print('[FLUTTER] page finished');
+            setState(() {
+              _isWebViewLoading = false;
+            });
             // Disable context menu and right-click on mobile
             _controller?.runJavaScript('''
               document.addEventListener('contextmenu', function(e) {
@@ -672,6 +698,11 @@ class _MyHomePageState extends State<MyHomePage>
                 return false;
               }, false);
             ''');
+          },
+          onPageStarted: (_) {
+            setState(() {
+              _isWebViewLoading = true;
+            });
           },
         ),
       );
@@ -753,6 +784,13 @@ class _MyHomePageState extends State<MyHomePage>
       body: Stack(
         children: [
           WebViewWidget(controller: _controller!),
+          if (_isWebViewLoading)
+            Container(
+              color: Colors.white,
+              child: const Center(
+                child: CircularProgressIndicator(),
+              ),
+            ),
           if (!_isConnected) _buildNetworkOfflineOverlay(),
         ],
       ),
