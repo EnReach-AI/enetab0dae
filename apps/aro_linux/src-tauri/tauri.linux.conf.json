@@ -23,3 +23,5 @@
         "postRemoveScript": "installer/rpm/postrm"
       }
     }
+  }
+}
