@@ -97,7 +97,7 @@ func initLog() {
 	logFile, err := os.OpenFile(logPath, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0644)
 	if err != nil {
 		log.Printf("failed to open log file, fallback to stdout: %v", err)
-		logFile = os.Stdout
+		// logFile = os.Stdout
 	}
 
 	// 配置 logrus

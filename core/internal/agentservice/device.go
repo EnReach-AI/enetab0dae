@@ -70,7 +70,6 @@ func DetectEnvironment() {
 	}
 }
 
-
 func DetectEnvironmentReliable() {
 	// 1. 首先尝试 gopsutil (跨平台)
 	info, err := host.Info()
@@ -105,7 +104,7 @@ func DetectEnvironmentReliable() {
 		agentConstant.ENVIRONMENT_TYPE = "container"
 		return
 	}
-	
+
 	if err == nil {
 		// 关键修改：检查 virtualizationRole
 		if info.VirtualizationSystem != "" && info.VirtualizationRole == "guest" {
@@ -179,7 +178,7 @@ func detectWindowsVirtualMachine() {
 
 	// 简单的检查方法：运行命令
 	// 检查 Hyper-V
-	cmd := exec.Command("powershell", "-Command", "Get-WmiObject Win32_ComputerSystem | Select-Object Manufacturer,Model")
+	cmd := exec.Command("powershell", "-WindowStyle", "Hidden", "-Command", "Get-WmiObject Win32_ComputerSystem | Select-Object Manufacturer,Model")
 	output, err := cmd.Output()
 	if err == nil {
 		outputStr := strings.ToLower(string(output))
@@ -196,29 +195,61 @@ func detectWindowsVirtualMachine() {
 
 // macOS: 检查系统信息判断虚拟机
 func detectDarwinVirtualMachine() {
-	// macOS 下可以通过 system_profiler 或 sysctl 来判断虚拟化
-	cmd := exec.Command("system_profiler", "SPHardwareDataType")
+	// 优先使用轻量级的 sysctl 命令，避免 system_profiler 可能触发的弹窗
+
+	// 1. 检查 hw.model
+	cmd := exec.Command("sysctl", "-n", "hw.model")
 	output, err := cmd.Output()
 	if err == nil {
-		outputStr := strings.ToLower(string(output))
-		vmIndicators := []string{"vmware", "virtualbox", "parallels", "kvm", "hyperv"}
+		model := strings.ToLower(strings.TrimSpace(string(output)))
+		vmIndicators := []string{"vm", "virtual", "vmware", "parallels"}
 		for _, indicator := range vmIndicators {
-			if strings.Contains(outputStr, indicator) {
+			if strings.Contains(model, indicator) {
 				agentConstant.ENVIRONMENT_TYPE = "virtual_machine"
-				log.Printf("Detected macOS VM: %s", indicator)
+				log.Printf("Detected macOS VM via hw.model: %s", model)
 				return
 			}
 		}
 	}
 
-	// 备用方法：检查 sysctl 值
-	cmd = exec.Command("sysctl", "-n", "hw.model")
+	// 2. 检查 machdep.cpu.brand_string (CPU 品牌信息)
+	cmd = exec.Command("sysctl", "-n", "machdep.cpu.brand_string")
 	output, err = cmd.Output()
 	if err == nil {
-		model := strings.ToLower(strings.TrimSpace(string(output)))
-		if strings.Contains(model, "vm") {
+		cpuBrand := strings.ToLower(strings.TrimSpace(string(output)))
+		// 虚拟机通常会在 CPU 品牌中包含虚拟化标识
+		if strings.Contains(cpuBrand, "qemu") || strings.Contains(cpuBrand, "kvm") {
 			agentConstant.ENVIRONMENT_TYPE = "virtual_machine"
+			log.Printf("Detected macOS VM via CPU brand: %s", cpuBrand)
 			return
+		}
+	}
+
+	// 3. 检查 kern.hostname (某些虚拟机会有特定的主机名模式)
+	cmd = exec.Command("sysctl", "-n", "kern.hv_support")
+	output, err = cmd.Output()
+	if err == nil {
+		hvSupport := strings.TrimSpace(string(output))
+		// 如果是 "1"，说明支持虚拟化，但这不一定意味着是虚拟机
+		// 需要结合其他信息判断
+		if hvSupport == "0" {
+			// 不支持虚拟化可能意味着是虚拟机
+			log.Printf("macOS hypervisor support: %s", hvSupport)
+		}
+	}
+
+	// 4. 检查 ioreg 命令 (不会触发弹窗，轻量级)
+	cmd = exec.Command("ioreg", "-l")
+	output, err = cmd.Output()
+	if err == nil {
+		ioregOutput := strings.ToLower(string(output))
+		vmIndicators := []string{"vmware", "virtualbox", "parallels", "qemu", "virtual"}
+		for _, indicator := range vmIndicators {
+			if strings.Contains(ioregOutput, indicator) {
+				agentConstant.ENVIRONMENT_TYPE = "virtual_machine"
+				log.Printf("Detected macOS VM via ioreg: %s", indicator)
+				return
+			}
 		}
 	}
 }
