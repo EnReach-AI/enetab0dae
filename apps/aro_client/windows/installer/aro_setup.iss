@@ -34,7 +34,6 @@ WizardStyle=modern
 
 UninstallDisplayIcon={app}\{#MyAppExeName}
 
-; 防止程序运行时安装
 AppMutex=AROClientMutex
 
 
@@ -61,18 +60,21 @@ Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; Tasks: de
 
 [Run]
 
-Filename: "{app}\{#MyAppExeName}"; \
-Description: "Launch {#MyAppName}"; \
+Filename: "{app}\{#MyAppExeName}";
+Description: "Launch {#MyAppName}";
 Flags: nowait postinstall skipifsilent
 
 
 [UninstallDelete]
 
+; WebView2
+Type: filesandordirs; Name: "{app}\aro_desktop.exe.WebView2"
+
 ; AppData
 Type: filesandordirs; Name: "{userappdata}\ARO"
 Type: filesandordirs; Name: "{localappdata}\ARO"
 
-; Flutter 默认
+; Flutter
 Type: filesandordirs; Name: "{userappdata}\aro_desktop"
 Type: filesandordirs; Name: "{localappdata}\aro_desktop"
 
@@ -97,11 +99,40 @@ procedure KillProcess(ProcessName: string);
 var
   ResultCode, i: Integer;
 begin
-  for i := 1 to 5 do
+  for i := 1 to 6 do
   begin
-    Exec('taskkill', '/IM ' + ProcessName + ' /F /T', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+    Exec(
+      'taskkill',
+      '/IM "' + ProcessName + '" /F /T',
+      '',
+      SW_HIDE,
+      ewWaitUntilTerminated,
+      ResultCode
+    );
+
     Sleep(800);
   end;
+end;
+
+
+procedure KillAllProcesses();
+begin
+
+  ; 主程序
+  KillProcess('aro_desktop.exe');
+
+  ; Flutter
+  KillProcess('flutter_window.exe');
+
+  ; WebView2
+  KillProcess('msedgewebview2.exe');
+
+  ; WebView2备用
+  KillProcess('edgewebview2.exe');
+
+  ; Edge残留
+  KillProcess('msedge.exe');
+
 end;
 
 
@@ -115,9 +146,18 @@ begin
   OutFile := ExpandConstant('{tmp}\aro_tasklist.txt');
   DeleteFile(OutFile);
 
-  Cmd := 'tasklist /FI "IMAGENAME eq ' + ProcessName + '" /NH > "' + OutFile + '"';
+  Cmd :=
+    'tasklist /FI "IMAGENAME eq ' + ProcessName +
+    '" /NH > "' + OutFile + '"';
 
-  if Exec('cmd.exe', '/c ' + Cmd, '', SW_HIDE, ewWaitUntilTerminated, ResultCode) then
+  if Exec(
+     'cmd.exe',
+     '/c ' + Cmd,
+     '',
+     SW_HIDE,
+     ewWaitUntilTerminated,
+     ResultCode
+  ) then
   begin
     if LoadStringFromFile(OutFile, Content) then
       Result := Pos(LowerCase(ProcessName), LowerCase(Content)) > 0;
@@ -144,17 +184,14 @@ end;
 
 procedure CurUninstallStepChanged(CurUninstallStep: TUninstallStep);
 begin
+
   if CurUninstallStep = usUninstall then
   begin
 
-    KillProcess('aro_desktop.exe');
-
-    KillProcess('flutter_window.exe');
-
-    ; WebView2
-    KillProcess('msedgewebview2.exe');
+    KillAllProcesses();
 
     WaitProcessExit('aro_desktop.exe', 10000);
 
   end;
+
 end;
