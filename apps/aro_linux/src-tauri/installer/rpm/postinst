@@ -27,8 +27,8 @@ add_missing() {
 }
 
 # WebKitGTK runtime: prefer 4.1, fall back to older naming when applicable.
-if ! have_pkg "webkit2gtk4.1" && ! have_pkg "webkit2gtk3" && ! have_pkg "webkit2gtk4.0"; then
-  add_missing "webkit2gtk4.1"
+if ! have_pkg "webkit2gtk3" && ! have_pkg "webkit2gtk4.1" && ! have_pkg "webkit2gtk4.0"; then
+  add_missing "webkit2gtk3"
 fi
 
 # AppIndicator runtime: prefer Ayatana, fall back to legacy.

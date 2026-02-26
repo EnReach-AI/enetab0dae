@@ -15,7 +15,7 @@
       },
       "rpm": {
         "depends": [
-          "webkit2gtk4.1",
+          "webkit2gtk3",
           "libayatana-appindicator-gtk3"
         ],
         "postInstallScript": "installer/rpm/postinst",
@@ -23,5 +23,3 @@
         "postRemoveScript": "installer/rpm/postrm"
       }
     }
-  }
-}
