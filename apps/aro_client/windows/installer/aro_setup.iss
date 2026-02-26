@@ -160,18 +160,7 @@ begin
 	end;
 end;
 
-function InitializeUninstall(): Boolean;
-begin
-	if IsAroRunningByMutex() or IsAroRunningByWindow() or IsAroRunningByProcess() then begin
-		MsgBox(
-			'ARO is currently running.'#13#10#13#10 +
-			'Please exit the app first (tray menu -> Exit), then run uninstall again.',
-			mbError, MB_OK);
-		Result := False;
-	end else begin
-		Result := True;
-	end;
-end;
+
 
 begin
 begin
