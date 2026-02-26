@@ -5,7 +5,6 @@ import (
 	"log"
 	"time"
 
-	"aro-ext-app/core/internal/agentservice"
 	internalService "aro-ext-app/core/internal/agentservice"
 	"aro-ext-app/core/internal/api_client"
 	"aro-ext-app/core/internal/config"
