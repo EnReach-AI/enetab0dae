@@ -9,7 +9,6 @@
       "rpm": {
         "depends": [
           "webkit2gtk3",
-          "webkit2gtk",
           "libayatana-appindicator-gtk3"
         ]
       }
