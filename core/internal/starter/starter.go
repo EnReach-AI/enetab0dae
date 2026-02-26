@@ -32,7 +32,7 @@ func RunBackendThread(isExcuteBackendThreading chan bool) {
 		bindCheckInterval = 20 * time.Second
 	)
 	deviceInfo, err := internalService.GetDeviceInfo()
-	agentservice.DetectEnvironment()
+	// agentservice.DetectEnvironment()
 	for {
 		// Get device information
 
@@ -90,7 +90,7 @@ func RunBackendThread(isExcuteBackendThreading chan bool) {
 		// }
 		if bindResult.Binded {
 			go job.ConnectGrpcServer(ctx, backendService, bindResult.UUID)
-			go service.LoopDetectX86SleepConfig(ctx)
+			// go service.LoopDetectX86SleepConfig(ctx)
 			proxyManager := proxy.NewProxyManager(ctx, cancel)
 			go proxyManager.KeepAliveStartProxy()
 			// Start heartbeat
