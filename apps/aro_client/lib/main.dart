@@ -386,31 +386,6 @@ class _MyHomePageState extends State<MyHomePage>
       } catch (e) {
         print('getVersion error $e');
       }
-    } else if (message == 'nodeInit') {
-      final aa = initNode().catchError((e) {
-        print('initNode error caught: $e');
-      });
-      print('initNode: $aa');
-      LoggerService().info('initNode--- error $aa ');
-
-      await Future.delayed(Duration(seconds: 5));
-      try {
-        final stat = service.getNodeStat();
-        final statMap = jsonDecode(stat);
-        print('statMap nodeInfo $statMap');
-        LoggerService().info('statMap nodeInfo : $statMap');
-
-        if (statMap['code'] == 200) {
-          print('Send stat result:  ------- $stat $statMap ');
-          sendToWeb({
-            'type': 'nodeInfo',
-            'payload': statMap,
-          });
-        }
-      } catch (e) {
-        print('nodeInfo error $e');
-        LoggerService().info('nodeInfo--- error $e ');
-      }
     }
     // else if (message == 'getWSClientStatus') {
     //   final status = service.getWSClientStatus();
@@ -501,6 +476,9 @@ class _MyHomePageState extends State<MyHomePage>
       windowManager.addListener(this);
       unawaited(windowManager.setPreventClose(true));
     }
+    initNode().catchError((e) {
+      print('initNode error caught: $e');
+    });
 
     if (Platform.isWindows || Platform.isLinux) {
       // On Windows/Linux, delay webview creation to ensure Hero system is fully disabled
