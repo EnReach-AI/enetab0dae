@@ -429,11 +429,6 @@ pub fn run() {
             }
             _ => {}
           })
-          .on_tray_icon_event(|app, _event| {
-            if let Some(tray) = app.tray_by_id("main") {
-                let _ = tray.show_menu();
-            }
-          })
           .build(app)?;
 
         let handle = app.handle();
