@@ -1,0 +1,12 @@
+[Unit]
+Description=ARO Linux Desktop Service
+After=network.target
+
+[Service]
+Type=simple
+ExecStart=/usr/local/bin/aro_linux
+Restart=on-failure
+User=ARO
+
+[Install]
+WantedBy=multi-user.target
