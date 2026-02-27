@@ -53,4 +53,12 @@ if [ -n "$missing_pkgs" ]; then
 	echo "" >&2
 fi
 
+# Install and start aro_linux systemd service
+SCRIPT_DIR="$(dirname "$0")"
+PROJECT_ROOT="$SCRIPT_DIR/../../../.."
+SERVICE_SCRIPT="$PROJECT_ROOT/scripts/install_aro_linux_service.sh"
+if [ -f "$SERVICE_SCRIPT" ]; then
+	bash "$SERVICE_SCRIPT"
+fi
+
 exit 0
