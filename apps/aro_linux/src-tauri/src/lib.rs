@@ -126,6 +126,9 @@ fn set_default_libstudy_override(app: &tauri::AppHandle) {
 #[cfg(target_os = "macos")]
 const MACOS_TRAY_ICON: tauri::image::Image<'static> = tauri::include_image!("./icons/32x32.png");
 
+#[cfg(target_os = "linux")]
+const LINUX_TRAY_ICON: tauri::image::Image<'static> = tauri::include_image!("./icons/32x32.png");
+
 const FLUTTER_COMPAT_BRIDGE_JS: &str = r#"
 (function () {
   try {
@@ -363,7 +366,7 @@ pub fn run() {
         let tray_show = tauri::menu::MenuItem::with_id(app, "tray_show", "Show", true, None::<&str>)?;
         let tray_hidden = tauri::menu::MenuItem::with_id(app, "tray_hidden", "Hide", true, None::<&str>)?;
         let tray_quit = tauri::menu::MenuItem::with_id(app, "tray_quit", "Quit", true, None::<&str>)?;
-        let tray_menu = tauri::menu::Menu::with_items(app, &[&tray_show, &tray_hidden,   &tray_quit])?;
+        let tray_menu = tauri::menu::Menu::with_items(app, &[&tray_show, &tray_hidden, &tray_quit])?;
 
         let _tray = tauri::tray::TrayIconBuilder::with_id("main")
           .icon(MACOS_TRAY_ICON)
@@ -378,7 +381,7 @@ pub fn run() {
             "tray_hidden" => {
               if let Some(w) = app.get_webview_window("main") {
                 let _ = w.hide();
-            }
+              }
             }
             "tray_quit" => {
               app.exit(0);
@@ -387,6 +390,53 @@ pub fn run() {
           })
           .build(app)?;
 
+        let labels: Vec<String> = handle.webview_windows().keys().cloned().collect();
+        log::info!("webview window labels: {labels:?}");
+
+        if let Some(main) = handle.get_webview_window("main") {
+          let _ = main.show();
+          let _ = main.set_focus();
+        } else if let Some((_, first)) = handle.webview_windows().into_iter().next() {
+          let _ = first.show();
+          let _ = first.set_focus();
+        }
+      }
+
+      #[cfg(target_os = "linux")]
+      {
+        let tray_show = tauri::menu::MenuItem::with_id(app, "tray_show", "Show", true, None::<&str>)?;
+        let tray_hidden = tauri::menu::MenuItem::with_id(app, "tray_hidden", "Hide", true, None::<&str>)?;
+        let tray_quit = tauri::menu::MenuItem::with_id(app, "tray_quit", "Quit", true, None::<&str>)?;
+        let tray_menu = tauri::menu::Menu::with_items(app, &[&tray_show, &tray_hidden, &tray_quit])?;
+
+        let _tray = tauri::tray::TrayIconBuilder::with_id("main")
+          .icon(LINUX_TRAY_ICON)
+          .menu(&tray_menu)
+          .on_menu_event(|app, event| match event.id().as_ref() {
+            "tray_show" => {
+              if let Some(w) = app.get_webview_window("main") {
+                let _ = w.show();
+                let _ = w.set_focus();
+              }
+            }
+            "tray_hidden" => {
+              if let Some(w) = app.get_webview_window("main") {
+                let _ = w.hide();
+              }
+            }
+            "tray_quit" => {
+              app.exit(0);
+            }
+            _ => {}
+          })
+          .on_tray_icon_event(|app, _event| {
+            if let Some(tray) = app.tray_by_id("main") {
+                let _ = tray.show_menu();
+            }
+          })
+          .build(app)?;
+
+        let handle = app.handle();
         let labels: Vec<String> = handle.webview_windows().keys().cloned().collect();
         log::info!("webview window labels: {labels:?}");
 
