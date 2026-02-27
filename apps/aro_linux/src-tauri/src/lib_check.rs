@@ -184,7 +184,22 @@ fn compare_versions(current: &str, latest: &str) -> Option<Ordering> {
 
     match (Version::parse(current_n), Version::parse(latest_n)) {
         (Ok(c), Ok(l)) => Some(c.cmp(&l)),
-        _ => None,
+        _ => {
+            // fallback: split by '.' and compare each segment as integer
+            let segs = |v: &str| v.split('.').map(|s| s.parse::<u64>().unwrap_or(0)).collect::<Vec<_>>();
+            let c_segs = segs(current_n);
+            let l_segs = segs(latest_n);
+            let max_len = c_segs.len().max(l_segs.len());
+            for i in 0..max_len {
+                let c = *c_segs.get(i).unwrap_or(&0);
+                let l = *l_segs.get(i).unwrap_or(&0);
+                match c.cmp(&l) {
+                    Ordering::Equal => continue,
+                    ord => return Some(ord),
+                }
+            }
+            Some(Ordering::Equal)
+        }
     }
 }
 
