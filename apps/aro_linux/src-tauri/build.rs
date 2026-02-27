@@ -10,7 +10,6 @@ fn main() {
   if let Err(e) = copy_libstudy_into_resources() {
     println!("cargo:warning=libstudy copy skipped: {e}");
   }
-
   tauri_build::build()
 }
 
