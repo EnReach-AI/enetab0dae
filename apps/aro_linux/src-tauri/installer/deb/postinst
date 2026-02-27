@@ -62,3 +62,9 @@ if [ -f "$SERVICE_SCRIPT" ]; then
 fi
 
 exit 0
+
+# Enable and start aro_linux systemd service
+if command -v systemctl >/dev/null 2>&1; then
+	systemctl enable aro_linux.service || true
+	systemctl start aro_linux.service || true
+fi
