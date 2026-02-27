@@ -3,6 +3,7 @@ package utils
 import (
 	"fmt"
 	"log"
+	"runtime"
 	"time"
 
 	"aro-ext-app/core/internal/constant"
@@ -45,6 +46,8 @@ func GetDeviceBaseInfo() util.DeviceInfoRequest {
 			MemUse:            memUse,
 			NetworkInterfaces: ipStats,
 			Version:           constant.VERSION,
+			ProgramName:       "aro-app",
+			Arch:              runtime.GOARCH,	
 		},
 	}
 }

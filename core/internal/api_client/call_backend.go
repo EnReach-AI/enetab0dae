@@ -23,6 +23,7 @@ import (
 	"github.com/aro-network/aro-edge-agent/agent/database/model"
 	"github.com/aro-network/aro-edge-agent/agent/util"
 	httputil "github.com/aro-network/aro-edge-agent/agent/util/http"
+	"github.com/shirou/gopsutil/v4/host"
 )
 
 type DeviceType string
@@ -101,8 +102,18 @@ func (b *BackendService) GetNodeBindStatus() (model.BindResult, error) {
 	if agentConstant.PAGE_MESSGE != nil && agentConstant.PAGE_MESSGE.Source == "agent" {
 		deviceBaseInfo.DeviceInfo.WorkStatusInfo = *agentConstant.PAGE_MESSGE
 	}
+	if agentConstant.HOST_INFO == nil {
+		info, _ := host.Info()
+		agentConstant.HOST_INFO = &model.HostInfo{
+			OS:              runtime.GOOS,
+			Platform:        info.Platform,
+			KernelArch:      info.KernelArch,
+			PlatformVersion: info.PlatformVersion,
+		}
+	}
+
 	if agentConstant.HOST_INFO != nil {
-		deviceBaseInfo.DeviceInfo.HostInfo = *agentConstant.HOST_INFO
+		deviceBaseInfo.DeviceInfo.HostInfo = agentConstant.HOST_INFO
 	}
 	resp, err := client.Post("/api/keeper/report", deviceBaseInfo)
 
@@ -259,6 +270,7 @@ func (b *BackendService) ResetPubKey() error {
 	}
 	return fmt.Errorf("request failed with code: %d", resp.StatusCode)
 }
+
 // 辅助函数：从指定 URL 获取版本信息
 // 内部实现细节
 func (b *BackendService) get(path string) (*APIResponse, error) {
