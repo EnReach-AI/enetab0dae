@@ -57,7 +57,7 @@ fi
 SCRIPT_DIR="$(dirname "$0")"
 PROJECT_ROOT="$SCRIPT_DIR/../../../.."
 BIN_SRC="$PROJECT_ROOT/apps/aro_linux/src-tauri/target/release/ARO"
-BIN_DST="/usr/local/bin/aro_linux"
+BIN_DST="/usr/bin/ARO"
 if [ -f "$BIN_SRC" ]; then
 	install -Dm755 "$BIN_SRC" "$BIN_DST"
 fi

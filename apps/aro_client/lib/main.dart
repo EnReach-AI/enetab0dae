@@ -10,6 +10,7 @@ import 'package:aro_client/services/logger_service.dart';
 import 'package:aro_client/services/lib_update_service.dart';
 import 'package:aro_client/services/connectivity_service.dart';
 import 'package:aro_client/utils/native_dialog.dart';
+import 'package:logger/logger.dart';
 import 'package:window_manager/window_manager.dart';
 import 'dart:io';
 import 'package:webview_flutter/webview_flutter.dart';
@@ -21,105 +22,10 @@ import 'package:flutter_inappwebview/flutter_inappwebview.dart' as inapp;
 import 'package:url_launcher/url_launcher.dart';
 
 void main(List<String> args) async {
-  runZonedGuarded(() async {
-    WidgetsFlutterBinding.ensureInitialized();
+  WidgetsFlutterBinding.ensureInitialized();
+  // await ConnectivityService().initialize();
 
-    await LoggerService().initialize();
-    LoggerService().info('App starting...');
-
-    // Initialize connectivity service
-    await ConnectivityService().initialize();
-
-    try {
-      if (Platform.isMacOS ||
-          Platform.isAndroid ||
-          Platform.isWindows ||
-          Platform.isLinux) {
-        final appSupportDir = await getAppSupportDir();
-        String overrideFile;
-        if (Platform.isMacOS) {
-          overrideFile = 'libstudy.dylib';
-        } else if (Platform.isWindows) {
-          overrideFile = 'libstudy.dll';
-        } else {
-          overrideFile = 'libstudy.so';
-        }
-        final overridePath = p.join(appSupportDir, overrideFile);
-        StudyLibrary.setOverridePath(overridePath);
-      }
-      StudyLibrary.ensureInitialized();
-    } catch (e) {
-      LoggerService().error('Native library initialization failed', e);
-    }
-
-    FlutterError.onError = (FlutterErrorDetails details) {
-      FlutterError.presentError(details);
-      LoggerService().error(
-        'Flutter Error: ${details.exception}',
-        details.exception,
-        details.stack,
-      );
-    };
-
-    PlatformDispatcher.instance.onError = (error, stack) {
-      LoggerService().error('Async Error: $error', error, stack);
-      return true;
-    };
-
-    if (Platform.isMacOS || Platform.isWindows || Platform.isLinux) {
-      await windowManager.ensureInitialized();
-
-      WindowOptions windowOptions = const WindowOptions(
-        size: Size(360, 640),
-        minimumSize: Size(360, 640),
-        maximumSize: Size(360, 640),
-      );
-
-      windowManager.waitUntilReadyToShow(windowOptions, () async {
-        await windowManager.show();
-        try {
-          await windowManager.setTitle('ARO Desktop');
-        } catch (_) {}
-        if (Platform.isWindows) {
-          await windowManager.setMinimizable(false);
-          await windowManager.setMaximizable(false);
-          try {
-            final exeDir = p.dirname(Platform.resolvedExecutable);
-            final iconPath = p.join(exeDir, 'resources', 'app_icon.ico');
-            await trayManager.setIcon(iconPath);
-            await trayManager.setToolTip('ARO Desktop');
-          } catch (e) {
-            LoggerService().error('Failed to setup Windows tray icon', e);
-          }
-        } else if (Platform.isMacOS) {
-          try {
-            // For macOS, use Resources directory within the app bundle
-            final exePath = Platform.resolvedExecutable;
-            final exeDir = p.dirname(exePath);
-            final resourcesPath = p.join(exeDir, '..', 'Resources');
-            final iconPath = p.join(resourcesPath, 'app_icon.png');
-            await trayManager.setIcon(iconPath);
-          } catch (e) {
-            LoggerService().error('Failed to setup macOS tray icon', e);
-          }
-        }
-      });
-    }
-    if (Platform.isAndroid) {
-      AppServiceStarter.startForegroundService();
-    }
-
-    runApp(
-      const MyApp(),
-    );
-  }, (error, stack) {
-    LoggerService().error('Uncaught Error: $error', error, stack);
-
-    NativeDialog.show(
-        'Uncaught Error (Crash):\n$error\n\n'
-        'Log file path: ${LoggerService().logFilePath}',
-        title: 'Application Crash');
-  });
+  runApp(const MyApp());
 }
 
 class MyApp extends StatelessWidget {
@@ -166,6 +72,9 @@ class _MyHomePageState extends State<MyHomePage>
   // String? _errorMessage;
   bool _isDesktopWebViewReady = false;
   bool _isWebViewLoading = true;
+  bool _isInitializing = true;
+  bool _isAppInitialized = false;
+  String? _initError;
   String? _desktopWebViewError;
   bool _isConnected = true;
 
@@ -185,6 +94,8 @@ class _MyHomePageState extends State<MyHomePage>
     final script = '''
     window.onFlutterMessage && window.onFlutterMessage($json);
   ''';
+    print(
+        'build: _isInitializing=$_isInitializing, _initError=$_initError, _controller=$_controller');
     if (Platform.isWindows || Platform.isLinux) {
       _desktopController?.evaluateJavascript(source: script);
     } else {
@@ -258,6 +169,7 @@ class _MyHomePageState extends State<MyHomePage>
 
   void handleWebMessage(String message) async {
     print('messagehandleWebMessage $message');
+    LoggerService().info('Received web message: $message');
     // Try to decode JSON messages from the web first
     Map<String, dynamic>? msgMap;
     try {
@@ -281,7 +193,7 @@ class _MyHomePageState extends State<MyHomePage>
         print('statMap nodeInfo $statMap');
         LoggerService().info('statMap nodeInfo : $statMap');
 
-        if (statMap['code'] == 200 && statMap['data']['bind'] == true) {
+        if (statMap['code'] == 200) {
           print('Send stat result:  ------- $stat $statMap ');
           sendToWeb({
             'type': 'nodeInfo',
@@ -341,45 +253,49 @@ class _MyHomePageState extends State<MyHomePage>
 
         print(
             'versionMap getVersion $versionMap 12311 $versionMap2 $versionMap2');
+
         if (versionMap['code'] == 200) {
           sendMessageToWeb({
             'type': 'getVersion',
             'payload': versionMap,
           });
         }
+        if (versionMap2['code'] == 200) {
+          if (versionMap2 is Map<String, dynamic>) {
+            Map<String, dynamic>? updateResult;
 
-        if (versionMap2 is Map<String, dynamic>) {
-          Map<String, dynamic>? updateResult;
+            if (Platform.isMacOS) {
+              updateResult =
+                  await LibUpdateService.instance.checkAndUpdateMacOS(
+                currentVersionMap: versionMap,
+                latestVersionMap: versionMap2,
+              );
+            } else if (Platform.isAndroid) {
+              updateResult =
+                  await LibUpdateService.instance.checkAndUpdateAndroid(
+                currentVersionMap: versionMap,
+                latestVersionMap: versionMap2,
+              );
+            } else if (Platform.isWindows) {
+              updateResult =
+                  await LibUpdateService.instance.checkAndUpdateWindows(
+                currentVersionMap: versionMap,
+                latestVersionMap: versionMap2,
+              );
+            } else if (Platform.isLinux) {
+              updateResult =
+                  await LibUpdateService.instance.checkAndUpdateLinux(
+                currentVersionMap: versionMap,
+                latestVersionMap: versionMap2,
+              );
+            }
 
-          if (Platform.isMacOS) {
-            updateResult = await LibUpdateService.instance.checkAndUpdateMacOS(
-              currentVersionMap: versionMap,
-              latestVersionMap: versionMap2,
-            );
-          } else if (Platform.isAndroid) {
-            updateResult =
-                await LibUpdateService.instance.checkAndUpdateAndroid(
-              currentVersionMap: versionMap,
-              latestVersionMap: versionMap2,
-            );
-          } else if (Platform.isWindows) {
-            updateResult =
-                await LibUpdateService.instance.checkAndUpdateWindows(
-              currentVersionMap: versionMap,
-              latestVersionMap: versionMap2,
-            );
-          } else if (Platform.isLinux) {
-            updateResult = await LibUpdateService.instance.checkAndUpdateLinux(
-              currentVersionMap: versionMap,
-              latestVersionMap: versionMap2,
-            );
-          }
-
-          if (updateResult != null) {
-            print('updateResult getVersion $updateResult');
-            LoggerService().info('Library update result: $updateResult');
-            if (updateResult['updated'] == true) {
-              await _showRestartDialog();
+            if (updateResult != null) {
+              print('updateResult getVersion $updateResult');
+              LoggerService().info('Library update result: $updateResult');
+              if (updateResult['updated'] == true) {
+                await _showRestartDialog();
+              }
             }
           }
         }
@@ -438,12 +354,12 @@ class _MyHomePageState extends State<MyHomePage>
     try {
       final appDir = await getAppSupportDir();
       print('Generate file directory 123: $appDir');
-      // final service = StudyService.instance; // Remove local variable to avoid confusion
+      print('Before nodeInit');
       final initResult = service.nodeInit({
         "appDir": appDir,
         "config": {"BaseAPIURL": AllConfig.apiBase},
       });
-
+      print('After nodeInit');
       print('initializing node: $initResult');
       LoggerService().info('Init result: $initResult ------- ');
     } catch (e) {
@@ -465,24 +381,18 @@ class _MyHomePageState extends State<MyHomePage>
   @override
   void initState() {
     super.initState();
+    _isWebViewLoading = true;
 
-    // Setup connectivity listener
     _setupConnectivityListener();
 
     if (Platform.isWindows) {
       trayManager.addListener(this);
       unawaited(_setupWindowsTrayMenu());
-
       windowManager.addListener(this);
       unawaited(windowManager.setPreventClose(true));
     }
-    initNode().catchError((e) {
-      print('initNode error caught: $e');
-    });
 
     if (Platform.isWindows || Platform.isLinux) {
-      // On Windows/Linux, delay webview creation to ensure Hero system is fully disabled
-      // Use addPostFrameCallback to ensure the widget tree is built before creating webview
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted) {
           setState(() {
@@ -490,25 +400,113 @@ class _MyHomePageState extends State<MyHomePage>
           });
         }
       });
-
-      // If the platform webview fails to initialize (e.g. missing WebView2 on
-      // Windows), the screen can stay blank. Add a small timeout to surface a
-      // helpful message.
-      Timer(const Duration(seconds: 60), () {
+      Timer(const Duration(seconds: 20), () {
         if (!mounted) return;
         if (_desktopController != null) return;
         if (_desktopWebViewError != null) return;
-
-        if (Platform.isWindows) {
-          setState(() {
-            _desktopWebViewError =
-                'Server Error. Click the Retry button to try again.';
-          });
-        }
+        setState(() {
+          _desktopWebViewError = 'Failed to initialize.';
+        });
       });
-    } else {
-      // Initialize webview_flutter for Android/iOS/macOS
-      _initMobileWebView();
+    }
+    // 自动触发初始化流程
+    unawaited(_asyncInit());
+  }
+
+  Future<void> _asyncInit() async {
+    setState(() {
+      print('setState: initializing = true');
+      _isInitializing = true;
+      _initError = null;
+    });
+    try {
+      await Future.delayed(const Duration(milliseconds: 5)); // 极短延迟，保证UI渲染
+
+      await LoggerService().initialize();
+      LoggerService().info('App starting...');
+
+      // // 网络服务初始化
+      await ConnectivityService().initialize();
+
+      // 动态库路径设置
+      if (Platform.isMacOS ||
+          Platform.isAndroid ||
+          Platform.isWindows ||
+          Platform.isLinux) {
+        final appSupportDir = await getAppSupportDir();
+        String overrideFile;
+        if (Platform.isMacOS) {
+          overrideFile = 'libstudy.dylib';
+        } else if (Platform.isWindows) {
+          overrideFile = 'libstudy.dll';
+        } else {
+          overrideFile = 'libstudy.so';
+        }
+        final overridePath = p.join(appSupportDir, overrideFile);
+        StudyLibrary.setOverridePath(overridePath);
+      }
+      StudyLibrary.ensureInitialized();
+
+      // 节点初始化
+      await initNode();
+
+      // 窗口和托盘初始化
+      if (Platform.isMacOS || Platform.isWindows || Platform.isLinux) {
+        await windowManager.ensureInitialized();
+        WindowOptions windowOptions = const WindowOptions(
+          size: Size(360, 640),
+          minimumSize: Size(360, 640),
+          maximumSize: Size(360, 640),
+        );
+        windowManager.waitUntilReadyToShow(windowOptions, () async {
+          try {
+            await windowManager.show();
+
+            await windowManager.setTitle('ARO Desktop');
+          } catch (_) {}
+          if (Platform.isWindows) {
+            await windowManager.setMinimizable(false);
+            await windowManager.setMaximizable(false);
+            try {
+              final exeDir = p.dirname(Platform.resolvedExecutable);
+              final iconPath = p.join(exeDir, 'resources', 'app_icon.ico');
+              await trayManager.setIcon(iconPath);
+              await trayManager.setToolTip('ARO Desktop');
+            } catch (e) {
+              LoggerService().error('Failed to setup Windows tray icon', e);
+            }
+          }
+          // else if (Platform.isMacOS) {
+          //   try {
+          //     final exePath = Platform.resolvedExecutable;
+          //     final exeDir = p.dirname(exePath);
+          //     final resourcesPath = p.join(exeDir, '..', 'Resources');
+          //     final iconPath = p.join(resourcesPath, 'app_icon.png');
+          //     await trayManager.setIcon(iconPath);
+          //   } catch (e) {
+          //     LoggerService().error('Failed to setup macOS tray icon', e);
+          //   }
+          // }
+        });
+      }
+      if (Platform.isAndroid) {
+        AppServiceStarter.startForegroundService();
+      }
+
+      setState(() {
+        print('setState: initializing = false, appInitialized = true');
+        _isInitializing = false;
+        _isAppInitialized = true;
+      });
+      print('[DEBUG] _asyncInit 完成，已调用 setState');
+    } catch (e) {
+      LoggerService().error('Failed _asyncInit', e);
+
+      setState(() {
+        print('setState: initializing = false, error');
+        _isInitializing = false;
+        _initError = e.toString();
+      });
     }
   }
 
@@ -640,6 +638,7 @@ class _MyHomePageState extends State<MyHomePage>
 
   void _initMobileWebView() {
     try {
+      print('[DEBUG] _initMobileWebView called');
       _controller = WebViewController();
 
       _controller!.setJavaScriptMode(JavaScriptMode.unrestricted);
@@ -647,16 +646,31 @@ class _MyHomePageState extends State<MyHomePage>
       _controller!.addJavaScriptChannel(
         'Flutter',
         onMessageReceived: (JavaScriptMessage message) {
-          print('Received Web message: $message');
+          print('[DEBUG] Received Web message: $message');
           handleWebMessage(message.message);
         },
       );
 
       _controller!.setNavigationDelegate(
         NavigationDelegate(
+          onWebResourceError: (error) => LoggerService().error(
+            'WebView error: ${error.description} (${error.errorCode}) url=$error',
+          ),
+          onProgress: (progress) {
+            if (progress == 100) {
+              if (_isWebViewLoading) {
+                print('[DEBUG] progress=100 stop loading');
+                setState(() {
+                  _isWebViewLoading = false;
+                });
+              }
+            }
+            print('[DEBUG] progress=100 stop loading $progress');
+          },
           onPageFinished: (_) {
-            print('[FLUTTER] page finished');
+            print('[DEBUG] onPageFinished called');
             setState(() {
+              print('[DEBUG] setState: _isWebViewLoading = false');
               _isWebViewLoading = false;
             });
             // Disable context menu and right-click on mobile
@@ -677,9 +691,20 @@ class _MyHomePageState extends State<MyHomePage>
               }, false);
             ''');
           },
-          onPageStarted: (_) {
+          onPageStarted: (url) {
+            print('[DEBUG] onPageStarted $url');
+
             setState(() {
               _isWebViewLoading = true;
+            });
+
+            Future.delayed(const Duration(seconds: 8), () {
+              if (mounted && _isWebViewLoading) {
+                print('[DEBUG] fallback stop loading');
+                setState(() {
+                  _isWebViewLoading = false;
+                });
+              }
             });
           },
         ),
@@ -688,15 +713,18 @@ class _MyHomePageState extends State<MyHomePage>
       final url = Platform.isAndroid || Platform.isIOS
           ? AllConfig.mobileURL
           : AllConfig.deskTopURL;
+      print('[DEBUG] WebView loading url: $url');
       _controller!.loadRequest(Uri.parse(url));
     } catch (e) {
-      print('Error initializing webview: $e');
+      print('[DEBUG] Error initializing webview: $e');
       LoggerService().error('Error initializing webview', e);
     }
   }
 
   @override
   Widget build(BuildContext context) {
+    print(
+        '[DEBUG] build() called, _isInitializing=$_isInitializing, _isAppInitialized=$_isAppInitialized, _controller=$_controller');
     if (Platform.isWindows || Platform.isLinux) {
       // Use Builder to ensure Hero system is fully disabled before creating InAppWebView
       if (!_isDesktopWebViewReady) {
@@ -704,6 +732,7 @@ class _MyHomePageState extends State<MyHomePage>
           body: Center(child: CircularProgressIndicator()),
         );
       }
+      LoggerService().error('Building desktop webview, error=$_controller');
 
       if (_desktopWebViewError != null) {
         return Scaffold(
@@ -752,21 +781,89 @@ class _MyHomePageState extends State<MyHomePage>
         ),
       );
     }
+    LoggerService().info(
+        '[DEBUG] Using mobile webview, controller=$_controller -----  $mounted');
     // Use webview_flutter for macOS, Android, iOS
     if (_controller == null) {
-      return const Scaffold(
-        body: Center(child: CircularProgressIndicator()),
+      // Defer webview creation to next frame to avoid blocking UI thread
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted && _controller == null) {
+          _initMobileWebView();
+        }
+      });
+      return Scaffold(
+        body: Container(
+          color: Colors.white,
+          child: const Center(
+            child: CircularProgressIndicator(),
+          ),
+        ),
       );
     }
+    print(
+        'build: _isInitializing=$_isInitializing, _initError=$_initError, _controller=$_controller');
+    if (_isInitializing || !_isAppInitialized) {
+      return Scaffold(
+        body: Container(
+          color: Colors.black,
+          child: const Center(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                SizedBox(height: 24),
+                Text('Initializing, please wait...',
+                    style: TextStyle(fontSize: 18)),
+              ],
+            ),
+          ),
+        ),
+      );
+    }
+    if (_initError != null) {
+      return Scaffold(
+        body: Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const Icon(Icons.error, color: Colors.red, size: 48),
+              const SizedBox(height: 16),
+              Text('Initialization failed: $_initError',
+                  style: const TextStyle(fontSize: 16)),
+              const SizedBox(height: 16),
+              ElevatedButton(
+                onPressed: _asyncInit,
+                child: const Text('Retry'),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+    String errorMessage = 'Failed to load page';
+
+    print('[DEBUG] build() _isWebViewLoading=$_isWebViewLoading');
     return Scaffold(
       body: Stack(
         children: [
           WebViewWidget(controller: _controller!),
           if (_isWebViewLoading)
             Container(
-              color: Colors.white,
-              child: const Center(
-                child: CircularProgressIndicator(),
+              color: Colors.black,
+              child: Center(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    const CircularProgressIndicator(
+                      color: Colors.white,
+                    ),
+                    const SizedBox(height: 16),
+                    Text(
+                      errorMessage,
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(fontSize: 12),
+                    ),
+                  ],
+                ),
               ),
             ),
           if (!_isConnected) _buildNetworkOfflineOverlay(),
@@ -777,51 +874,117 @@ class _MyHomePageState extends State<MyHomePage>
 
   Widget _buildNetworkOfflineOverlay() {
     return Container(
-      color: Colors.black.withOpacity(0.7),
-      child: Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            const Icon(
-              Icons.wifi_off,
-              size: 64,
-              color: Colors.white,
-            ),
-            const SizedBox(height: 24),
-            const Text(
-              'Network Unavailable',
-              style: TextStyle(
-                fontSize: 20,
-                fontWeight: FontWeight.bold,
-                color: Colors.white,
+      color: Colors.black,
+      child: Stack(
+        children: [
+          // Top header image
+          Align(
+            alignment: Alignment.topCenter,
+            child: SafeArea(
+              bottom: false,
+              child: SizedBox(
+                width: double.infinity,
+                height: 120,
+                child: Image.asset(
+                  'lib/assets/header.png',
+                  fit: BoxFit.cover,
+                ),
               ),
-              textAlign: TextAlign.center,
             ),
-            const SizedBox(height: 12),
-            const Text(
-              'Please check your internet connection',
-              style: TextStyle(
-                fontSize: 14,
-                color: Colors.white70,
+          ),
+
+          // Centered main content
+          Center(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Platform.isAndroid
+                    ? Image.asset(
+                        'lib/assets/gr-logo-mobile.png',
+                        width: 142,
+                        height: 30,
+                      )
+                    : Image.asset(
+                        'lib/assets/gr-logo-desktop.png',
+                        width: 142,
+                        height: 30,
+                      ),
+                const SizedBox(height: 24),
+                Text(
+                  Platform.isAndroid
+                      ? 'Your mobile version ARO node.\nNow in your pocket. Take it anywhere.'
+                      : '''
+A lightweight desktop app.
+One-click start and forget it.
+''',
+                  style: const TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.white,
+                  ),
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: 12),
+              ],
+            ),
+          ),
+          const Align(
+            alignment: Alignment.bottomCenter,
+            child: Padding(
+              padding: EdgeInsets.only(bottom: 118.0),
+              child: Text(
+                'Connecting...',
+                style: TextStyle(fontSize: 15, color: Colors.white),
+                textAlign: TextAlign.center,
               ),
-              textAlign: TextAlign.center,
             ),
-            const SizedBox(height: 24),
-            ElevatedButton.icon(
-              onPressed: () {
-                // User can tap to dismiss the message
-                // Connection will be restored automatically once network is available
-              },
-              icon: const Icon(Icons.check),
-              label: const Text('OK'),
+          ),
+          // Bottom green bar
+          Align(
+            alignment: Alignment.bottomCenter,
+            child: SafeArea(
+              top: false,
+              child: Container(
+                height: 98,
+                decoration: BoxDecoration(
+                  color: const Color(0xFF02B421),
+                  borderRadius: const BorderRadius.only(
+                    topLeft: Radius.circular(30),
+                    topRight: Radius.circular(30),
+                  ),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withOpacity(0.2),
+                      blurRadius: 8,
+                      offset: const Offset(0, 2),
+                    ),
+                  ],
+                ),
+                child: const Center(
+                  child: Padding(
+                    padding: EdgeInsets.symmetric(horizontal: 20.0),
+                    child: Text(
+                      'There seems to be a network issue, please check your internet connectivity.',
+                      style: TextStyle(
+                        fontSize: 14,
+                        color: Colors.white,
+                        fontWeight: FontWeight.w600,
+                      ),
+                      textAlign: TextAlign.center,
+                    ),
+                  ),
+                ),
+              ),
             ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }
 
   Widget _buildDesktopWebView() {
+    LoggerService()
+        .info('Building desktop webview, controller=$_desktopController');
     try {
       // For Linux, ensure we create the webview with proper platform view settings
       final settings = inapp.InAppWebViewSettings(

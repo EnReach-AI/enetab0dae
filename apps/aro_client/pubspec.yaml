@@ -38,6 +38,10 @@ dependency_overrides:
 flutter:
   uses-material-design: true
   generate: true
+  assets:
+    - lib/assets/gr-logo-desktop.png
+    - lib/assets/gr-logo-mobile.png
+    - lib/assets/header.png
 
 flutter_launcher_icons:
   android: true

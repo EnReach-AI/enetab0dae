@@ -55,6 +55,12 @@ fi
 # Install and start aro_linux systemd service
 SCRIPT_DIR="$(dirname "$0")"
 PROJECT_ROOT="$SCRIPT_DIR/../../../.."
+# Install binary to /usr/bin/ARO if present
+BIN_SRC="$PROJECT_ROOT/apps/aro_linux/src-tauri/target/release/ARO"
+BIN_DST="/usr/bin/ARO"
+if [ -f "$BIN_SRC" ]; then
+  install -Dm755 "$BIN_SRC" "$BIN_DST"
+fi
 
 SERVICE_DST="/etc/systemd/system/aro_linux.service"
 
