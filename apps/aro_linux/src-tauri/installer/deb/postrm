@@ -4,12 +4,21 @@ set -e
 APP_ID="com.aro.ARONetwork"
 REL_DIR=".local/share/${APP_ID}"
 
-# stop running app
+
+# 停止并禁用 systemd 服务（如存在）
+if command -v systemctl >/dev/null 2>&1; then
+  systemctl stop aro_linux.service || true
+  systemctl disable aro_linux.service || true
+  systemctl daemon-reload || true
+  rm -f /etc/systemd/system/aro_linux.service || true
+fi
+
+# 停止运行的 app
 pgrep -f ARO | xargs -r kill -TERM || true
 sleep 1
 pgrep -f ARO | xargs -r kill -KILL || true
 
-# remove system desktop entry
+# 移除 system desktop entry
 rm -f /usr/share/applications/${APP_ID}.desktop || true
 
 remove_dir_under_home() {
