@@ -35,9 +35,6 @@
   "bundle": {
     "active": true,
     "targets": "all",
-    "files": {
-      "usr/lib/systemd/system/aro_linux.service": "resources/usr/lib/systemd/system/aro_linux.service"
-    },
     "resources": [
       "resources/*",
       "resources/com.aro.ARONetwork.desktop",
