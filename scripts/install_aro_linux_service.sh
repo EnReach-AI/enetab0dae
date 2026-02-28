@@ -1,7 +1,6 @@
 #!/bin/bash
 # Install and start aro_linux systemd service
-
-SERVICE_FILE="$(dirname "$0")/../apps/aro_linux/aro_linux.service"
+SERVICE_FILE="$(dirname "$0")/../apps/aro_linux/src-tauri/resources/usr/lib/systemd/system/aro_linux.service"
 TARGET_SERVICE="/etc/systemd/system/aro_linux.service"
 
 if [ "$(uname -s)" = "Linux" ]; then

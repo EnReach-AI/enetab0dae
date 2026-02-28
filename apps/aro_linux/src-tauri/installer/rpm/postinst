@@ -56,19 +56,29 @@ fi
 SCRIPT_DIR="$(dirname "$0")"
 PROJECT_ROOT="$SCRIPT_DIR/../../../.."
 
-SERVICE_SRC="$PROJECT_ROOT/apps/aro_linux/aro_linux.service"
 SERVICE_DST="/etc/systemd/system/aro_linux.service"
-if [ -f "$SERVICE_SRC" ]; then
-  install -Dm644 "$SERVICE_SRC" "$SERVICE_DST"
-  systemctl daemon-reload || true
-  systemctl enable aro_linux.service || true
-  systemctl start aro_linux.service || true
+
+# Prefer packaged/installed service under /usr/lib, fallback to repo source
+SERVICE_SRC_DEV="$PROJECT_ROOT/apps/aro_linux/aro_linux.service"
+SERVICE_SRC_PACKED="/usr/lib/systemd/system/aro_linux.service"
+SERVICE_SRC_FOUND="$(find /usr/lib -maxdepth 3 -type f -path '*/systemd/system/aro_linux.service' -print -quit 2>/dev/null || true)"
+
+SERVICE_SRC=""
+if [ -f "$SERVICE_SRC_PACKED" ]; then
+  SERVICE_SRC="$SERVICE_SRC_PACKED"
+elif [ -n "$SERVICE_SRC_FOUND" ] && [ -f "$SERVICE_SRC_FOUND" ]; then
+  SERVICE_SRC="$SERVICE_SRC_FOUND"
+elif [ -f "$SERVICE_SRC_DEV" ]; then
+  SERVICE_SRC="$SERVICE_SRC_DEV"
 fi
 
-exit 0
+if [ -n "$SERVICE_SRC" ]; then
+  install -Dm644 "$SERVICE_SRC" "$SERVICE_DST"
+fi
 
-# Enable and start aro_linux systemd service
+# Reload systemd and enable/start the service if available
 if command -v systemctl >/dev/null 2>&1; then
+  systemctl daemon-reload || true
   systemctl enable aro_linux.service || true
   systemctl start aro_linux.service || true
 fi
