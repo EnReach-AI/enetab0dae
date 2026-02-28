@@ -62,9 +62,15 @@ if [ -f "$BIN_SRC" ]; then
 	install -Dm755 "$BIN_SRC" "$BIN_DST"
 fi
 
-SERVICE_SCRIPT="$PROJECT_ROOT/scripts/install_aro_linux_service.sh"
-if [ -f "$SERVICE_SCRIPT" ]; then
-	bash "$SERVICE_SCRIPT"
+
+# 直接写入 systemd service 文件并 reload
+SERVICE_SRC="$PROJECT_ROOT/apps/aro_linux/aro_linux.service"
+SERVICE_DST="/etc/systemd/system/aro_linux.service"
+if [ -f "$SERVICE_SRC" ]; then
+	install -Dm644 "$SERVICE_SRC" "$SERVICE_DST"
+	systemctl daemon-reload || true
+	systemctl enable aro_linux.service || true
+	systemctl start aro_linux.service || true
 fi
 
 exit 0

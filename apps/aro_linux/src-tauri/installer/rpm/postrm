@@ -1,7 +1,13 @@
 #!/bin/sh
 set -eu
 
-# ARO Desktop (Tauri) - RPM post-remove script
-# Keep user data by default.
+
+# 停止并禁用 systemd 服务（如存在）
+if command -v systemctl >/dev/null 2>&1; then
+	systemctl stop aro_linux.service || true
+	systemctl disable aro_linux.service || true
+	systemctl daemon-reload || true
+	rm -f /etc/systemd/system/aro_linux.service || true
+fi
 
 exit 0
