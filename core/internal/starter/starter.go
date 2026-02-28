@@ -30,22 +30,18 @@ func RunBackendThread(isExcuteBackendThreading chan bool) {
 		errorRetryDelay   = 30 * time.Second
 		bindCheckInterval = 30 * time.Second
 	)
-	deviceInfo, err := internalService.GetDeviceInfo()
-	log.Printf("deviceInfo: %+v", deviceInfo)
-	log.Printf("agentConstant.deviceInfo: %+v", agentConstant.DEVICE_INFO)
+
 	// agentservice.DetectEnvironment()
 	for {
 		// Get device information
-
+		deviceInfo, err := internalService.GetDeviceInfo()
+		log.Printf("deviceInfo: %+v", deviceInfo)
+		log.Printf("agentConstant.deviceInfo: %+v", agentConstant.DEVICE_INFO)
 		if err != nil {
 			log.Printf("Failed to get device info: %v, retrying in %v", err, errorRetryDelay)
 			time.Sleep(errorRetryDelay)
 			continue
 		}
-
-		log.Printf("Device started: SN=%s, Type=%s, Version=%s",
-			deviceInfo.SerialNumber, deviceInfo.DeviceType, deviceInfo.AgentVersion)
-
 		// Check bind status
 		backendService := service.NewBackendService(deviceInfo)
 		apiBackendService := api_client.NewBackendService(deviceInfo)

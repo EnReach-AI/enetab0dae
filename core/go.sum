@@ -10,8 +10,6 @@ github.com/Netflix/go-expect v0.0.0-20220104043353-73e0943537d2 h1:+vx7roKuyA63n
 github.com/Netflix/go-expect v0.0.0-20220104043353-73e0943537d2/go.mod h1:HBCaDeC1lPdgDeDbhX8XFpy1jqjK0IBG8W5K+xYqA0w=
 github.com/alecthomas/units v0.0.0-20211218093645-b94a6e3cc137 h1:s6gZFSlWYmbqAuRjVTiNNhvNRfY2Wxp9nhfyel4rklc=
 github.com/alecthomas/units v0.0.0-20211218093645-b94a6e3cc137/go.mod h1:OMCwj8VM1Kc9e19TLln2VL61YJF0x1XFtfdL4JdbSyE=
-github.com/aro-network/aro-edge-agent/agent v0.0.0-20260227055604-10a47f9eff3d h1:1T0as7jnmXKwreUvXfVd2tIINLbTuqx49wKwDf6Na6Y=
-github.com/aro-network/aro-edge-agent/agent v0.0.0-20260227055604-10a47f9eff3d/go.mod h1:V8ywMCP0pL9qdiEEhCsPyHhXfMLXokYcEovPKTkfApk=
 github.com/aro-network/aro-edge-agent/agent v0.0.0-20260227073011-2218033cb1d4 h1:vI52MIFUXfLadjAPZyJ2T+xxlIA3uR9CB5mbyRFGZKU=
 github.com/aro-network/aro-edge-agent/agent v0.0.0-20260227073011-2218033cb1d4/go.mod h1:V8ywMCP0pL9qdiEEhCsPyHhXfMLXokYcEovPKTkfApk=
 github.com/aro-network/aro-proxy-worker/x v0.0.0-20260129021610-a2e00bd80c78 h1:O4K1YW7S0mAIfRBWq3ZtlqSb/sZ64eR8V53/nbsw+oQ=
