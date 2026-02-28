@@ -95,19 +95,19 @@ func InitLibstudy(initParamsJSON *C.char) *C.char {
 		log.Printf("All config: %+v", allConfig)
 		log.Printf("initLibStudy params: %+v", paramsStr)
 		// 创建 channel 用于等待后台线程初始化完成
-		initDone := make(chan bool, 1)
-		go starter.RunBackendThread(initDone)
+		// initDone := make(chan bool, 1)
+		go starter.RunBackendThread()
 
-		// 等待初始化完成，最多等待 40 秒
-		select {
-		case <-initDone:
-			log.Println("Backend thread initialization completed")
-			details["backend_status"] = "initialized"
-		case <-time.After(40 * time.Second):
-			log.Println("Backend thread initialization timeout, but continuing...")
-			details["backend_status"] = "timeout"
-			return reply(400, "Libstudy initialized failed timeout", details)
-		}
+		// // 等待初始化完成，最多等待 40 秒
+		// select {
+		// case <-initDone:
+		// 	log.Println("Backend thread initialization completed")
+		// 	details["backend_status"] = "initialized"
+		// case <-time.After(40 * time.Second):
+		// 	log.Println("Backend thread initialization timeout, but continuing...")
+		// 	details["backend_status"] = "timeout"
+		// 	return reply(400, "Libstudy initialized failed timeout", details)
+		// }
 	}
 	return reply(200, "Libstudy initialized successfully", details)
 

@@ -21,7 +21,7 @@ var cfg = config.GetConfig()
 
 var AppBackendService *api_client.APIClient
 
-func RunBackendThread(isExcuteBackendThreading chan bool) {
+func RunBackendThread() {
 
 	agentConstant.Init2(cfg.Get(config.KeyAgentPath), constant.VERSION)
 
@@ -59,18 +59,6 @@ func RunBackendThread(isExcuteBackendThreading chan bool) {
 
 		AppBackendService = api_client.NewAPIClient(cfg.Get(config.KeyAPIURL), cfg.Get(config.KeyClientId), cfg.Get(config.KeySN), bindResult.UUID)
 
-		// 发送初始化完成信号（只发送一次）
-		if isExcuteBackendThreading != nil {
-			select {
-			case isExcuteBackendThreading <- true:
-				log.Println("Backend initialization completed, signal sent")
-			default:
-				log.Println("Backend initialization signal channel full")
-			}
-			// 设置为 nil 防止后续循环重复发送
-			isExcuteBackendThreading = nil
-		}
-
 		// 检查设备是否已绑定
 		if !bindResult.Binded {
 			log.Println("Device not bound, waiting for binding...")
@@ -85,11 +73,12 @@ func RunBackendThread(isExcuteBackendThreading chan bool) {
 
 		// }
 		if bindResult.Binded {
-			go job.ConnectGrpcServer(ctx, backendService, bindResult.UUID)
-			// go service.LoopDetectX86SleepConfig(ctx)
-			proxyManager := proxy.NewProxyManager(ctx, cancel)
-			go proxyManager.KeepAliveStartProxy()
-			// Start heartbeat
+			if !bindResult.BanIP {
+				go job.ConnectGrpcServer(ctx, backendService, bindResult.UUID)
+				// go service.LoopDetectX86SleepConfig(ctx)
+				proxyManager := proxy.NewProxyManager(ctx, cancel)
+				go proxyManager.KeepAliveStartProxy()
+			}
 			go job.StartHeartBeat(ctx, bindResult.UUID, backendService)
 		}
 
