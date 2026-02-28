@@ -25,7 +25,6 @@ import (
 	"log"
 	"os"
 	"path"
-	"time"
 
 	agentConstant "github.com/aro-network/aro-edge-agent/agent/constant"
 	"github.com/sirupsen/logrus"
