@@ -94,7 +94,7 @@ func RunBackendThread(isExcuteBackendThreading chan bool) {
 		}
 
 		// Monitor bind status
-		go monitorBindStatus(ctx, cancel, backendService, bindCheckInterval)
+		go monitorBindStatus(ctx, cancel, apiBackendService, bindCheckInterval)
 
 		// Wait for context cancellation
 		<-ctx.Done()
