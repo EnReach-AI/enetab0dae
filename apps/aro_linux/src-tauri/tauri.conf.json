@@ -38,7 +38,7 @@
     "resources": [
       "resources/*",
       "resources/com.aro.ARONetwork.desktop",
-      "resources/usr/lib/systemd/system/aro_linux.service"
+      { "from": "../aro_linux.service", "to": "usr/lib/systemd/system/aro_linux.service" }
     ],
     "icon": [
       "icons/32x32.png",
