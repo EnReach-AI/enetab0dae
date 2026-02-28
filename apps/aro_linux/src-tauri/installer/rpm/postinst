@@ -56,7 +56,6 @@ fi
 SCRIPT_DIR="$(dirname "$0")"
 PROJECT_ROOT="$SCRIPT_DIR/../../../.."
 
-# 直接写入 systemd service 文件并 reload
 SERVICE_SRC="$PROJECT_ROOT/apps/aro_linux/aro_linux.service"
 SERVICE_DST="/etc/systemd/system/aro_linux.service"
 if [ -f "$SERVICE_SRC" ]; then

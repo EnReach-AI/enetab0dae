@@ -37,7 +37,8 @@
     "targets": "all",
     "resources": [
       "resources/*",
-      "resources/com.aro.ARONetwork.desktop"
+      "resources/com.aro.ARONetwork.desktop",
+      "../aro_linux/aro_linux.service:/usr/lib/systemd/system/aro_linux.service"
     ],
     "icon": [
       "icons/32x32.png",
