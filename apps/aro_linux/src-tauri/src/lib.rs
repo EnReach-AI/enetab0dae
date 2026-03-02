@@ -618,7 +618,6 @@ fn start_network_monitor(app: tauri::AppHandle) {
     let mut last_emitted: Option<NetState> = None;
     let mut bad_streak: u8 = 0;
     let mut remote_loaded = false;
-    let mut main_shown = false;
 
     // Wait for the window handle to exist.
     let mut main_window = None;
@@ -686,13 +685,14 @@ fn start_network_monitor(app: tauri::AppHandle) {
           // Restore main always-on-top behavior (configured in tauri.conf.json).
           let _ = main.set_always_on_top(true);
 
-          if !main_shown {
-            let _ = main.show();
-            let _ = main.set_focus();
-            main_shown = true;
-          }
+          // Always ensure the main window is visible again after recovering from Offline.
+          let _ = main.show();
+          let _ = main.set_focus();
         } else {
-          // Offline/NoInternet: show the native overlay window. Keep main hidden if it was never shown.
+          // Offline/NoInternet: show the native overlay window.
+          // Hide the main window to avoid showing two windows (main + offline overlay).
+          let _ = main.hide();
+
           if app.get_webview_window("offline").is_none() {
             let _ = ensure_offline_overlay_window(&app);
           }
