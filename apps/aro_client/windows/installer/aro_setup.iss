@@ -94,7 +94,7 @@ end;
 
 procedure KillAllProcesses();
 begin
-  KillProcess('aro_desktop.exe');
+  KillProcess('{#MyAppExeName}');
 
   KillProcess('flutter_window.exe');
 end;
@@ -193,30 +193,50 @@ begin
   );
 end;
 
+procedure KillWebView2GlobalLastResort();
+begin
+  { Last resort: kill WebView2 runtime processes globally.
+    This can affect other apps using WebView2, so only call this when our
+    WebView2 folder remains locked after multiple retries. }
+  KillProcess('msedgewebview2.exe');
+  KillProcess('edgewebview2.exe');
+end;
+
+var
+  g_webview2_dir: string;
+
 procedure CurUninstallStepChanged(CurUninstallStep: TUninstallStep);
 var
-  WebView2Dir: string;
   i: Integer;
 begin
   if CurUninstallStep = usUninstall then
   begin
+    { Kill the main app early so it can release WebView2 handles before
+      file removal starts. }
     KillAllProcesses();
-
-    WaitAllProcessesExit(15000);
-
-    WebView2Dir := ExpandConstant('{app}\aro_desktop.exe.WebView2');
-    { WebView2 can keep file handles briefly after the main app exits.
-      Retry a few times and stop only WebView2 instances that reference
-      our own user-data folder. }
-    for i := 1 to 12 do
+    WaitAllProcessesExit(30000);
+    g_webview2_dir := ExpandConstant('{app}\aro_desktop.exe.WebView2');
+  end
+  else if CurUninstallStep = usPostUninstall then
+  begin
+    { After most files are removed, retry deleting the WebView2 folder.
+      If it remains locked, stop WebView2 processes (targeted first, then
+      global last-resort) and retry. }
+    if g_webview2_dir <> '' then
     begin
-      if DeleteTreeBestEffort(WebView2Dir) then
-        Break;
+      for i := 1 to 20 do
+      begin
+        if DeleteTreeBestEffort(g_webview2_dir) then
+          Break;
 
-      KillWebView2ForFolder(WebView2Dir);
-      Sleep(800);
+        if i <= 14 then
+          KillWebView2ForFolder(g_webview2_dir)
+        else
+          KillWebView2GlobalLastResort();
+
+        WaitWebView2Exit(10000);
+        Sleep(800);
+      end;
     end;
-
-    DeleteTreeBestEffort(ExpandConstant('{app}'));
   end;
 end;
