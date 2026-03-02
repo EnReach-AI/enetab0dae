@@ -25,7 +25,8 @@ PrivilegesRequired=lowest
 
 ArchitecturesInstallIn64BitMode=x64
 
-UninstallFilesDir={app}\uninstall
+; Place uninstaller files outside {app} so {app} can be fully removed.
+UninstallFilesDir={localappdata}\{#MyAppName}\uninstall
 CreateUninstallRegKey=yes
 Uninstallable=yes
 
@@ -216,6 +217,26 @@ begin
     KillAllProcesses();
     WaitAllProcessesExit(30000);
     g_webview2_dir := ExpandConstant('{app}\aro_desktop.exe.WebView2');
+
+    { Proactively free locks held by WebView2 so uninstall can remove {app}. }
+    if g_webview2_dir <> '' then
+    begin
+      for i := 1 to 6 do
+      begin
+        if DeleteTreeBestEffort(g_webview2_dir) then
+          Break;
+
+        KillWebView2ForFolder(g_webview2_dir);
+        Sleep(600);
+      end;
+
+      if DirExists(g_webview2_dir) then
+      begin
+        KillWebView2GlobalLastResort();
+        WaitWebView2Exit(15000);
+        DeleteTreeBestEffort(g_webview2_dir);
+      end;
+    end;
   end
   else if CurUninstallStep = usPostUninstall then
   begin

@@ -22,6 +22,59 @@ use tauri::Emitter;
 use tauri::Manager;
 use tauri_plugin_shell::ShellExt;
 
+#[cfg(target_family = "unix")]
+use std::os::unix::io::AsRawFd;
+
+static INSTANCE_LOCK_FILE: OnceLock<std::fs::File> = OnceLock::new();
+
+fn acquire_single_instance_lock() -> bool {
+  #[cfg(target_family = "unix")]
+  {
+    let runtime_dir = std::env::var_os("XDG_RUNTIME_DIR")
+      .map(std::path::PathBuf::from)
+      .unwrap_or_else(|| std::path::PathBuf::from("/tmp"));
+
+    let lock_path = runtime_dir.join("com.aro.ARONetwork.lock");
+
+    let file = match std::fs::OpenOptions::new()
+      .create(true)
+      .read(true)
+      .write(true)
+      .open(&lock_path)
+    {
+      Ok(f) => f,
+      Err(e) => {
+        log::warn!("single-instance: failed to open lock file {:?}: {e}", lock_path);
+        return true;
+      }
+    };
+
+    let fd = file.as_raw_fd();
+    let rc = unsafe { libc::flock(fd, libc::LOCK_EX | libc::LOCK_NB) };
+    if rc != 0 {
+      let err = std::io::Error::last_os_error();
+      if let Some(code) = err.raw_os_error() {
+        if code == libc::EWOULDBLOCK || code == libc::EAGAIN {
+          log::info!("single-instance: another instance is running; exiting");
+          return false;
+        }
+      }
+
+      // If we can't determine lock state reliably, don't block startup.
+      log::warn!("single-instance: flock failed: {err}");
+      return true;
+    }
+
+    let _ = INSTANCE_LOCK_FILE.set(file);
+    true
+  }
+
+  #[cfg(not(target_family = "unix"))]
+  {
+    true
+  }
+}
+
 use url::Url;
 
 const OFFLINE_HEADER_PNG: &[u8] = include_bytes!("../icons/header.png");
@@ -675,6 +728,10 @@ fn start_network_monitor(app: tauri::AppHandle) {
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+  if !acquire_single_instance_lock() {
+    return;
+  }
+
   let builder = tauri::Builder::default()
     .plugin(tauri_plugin_shell::init())
     .on_page_load(|window, _payload| {
