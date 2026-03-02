@@ -529,6 +529,7 @@ fn ensure_offline_overlay_window(app: &tauri::AppHandle) -> Result<(), String> {
     .resizable(false)
     .decorations(false)
     .always_on_top(true)
+    .skip_taskbar(true)
     .visible(false)
     .build()
     .map_err(|e| format!("failed to create offline overlay window: {e}"))?;
@@ -827,11 +828,6 @@ pub fn run() {
       // Ensure libstudy is always loaded from the same per-user location.
       // This makes install + update paths consistent: ~/.local/share/<identifier>/libstudy.so
       set_default_libstudy_override(&app.handle());
-
-      // Native offline overlay window (data-url backed) so we never depend on a local index.html.
-      if let Err(e) = ensure_offline_overlay_window(&app.handle()) {
-        log::warn!("offline overlay window not available: {e}");
-      }
 
       // Tauri-layer network monitor: emits 'aro-net-status' for UI prompts.
       start_network_monitor(app.handle().clone());
