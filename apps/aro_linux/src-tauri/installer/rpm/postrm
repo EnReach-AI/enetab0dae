@@ -22,13 +22,7 @@ pgrep -f ARO | xargs -r kill -KILL || true
 # Remove system desktop entry
 rm -f "/usr/share/applications/${APP_ID}.desktop" || true
 
-# Stop and disable legacy systemd service (if present)
-if command -v systemctl >/dev/null 2>&1; then
-	systemctl stop aro_linux.service || true
-	systemctl disable aro_linux.service || true
-	systemctl daemon-reload || true
-	rm -f /etc/systemd/system/aro_linux.service || true
-fi
+
 
 exit 0
 

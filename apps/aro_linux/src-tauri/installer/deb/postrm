@@ -8,13 +8,6 @@ REL_DIR=".local/share/${APP_ID}"
 rm -f "/etc/xdg/autostart/${APP_ID}.desktop" || true
 
 
-# 停止并禁用 systemd 服务（如存在）
-if command -v systemctl >/dev/null 2>&1; then
-  systemctl stop aro_linux.service || true
-  systemctl disable aro_linux.service || true
-  systemctl daemon-reload || true
-  rm -f /etc/systemd/system/aro_linux.service || true
-fi
 
 # 停止运行的 app
 pgrep -f ARO | xargs -r kill -TERM || true
