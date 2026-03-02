@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=ARO Desktop
+Comment=Start ARO Desktop on login
+Exec=/usr/bin/ARO
+TryExec=/usr/bin/ARO
+Terminal=false
+X-GNOME-Autostart-enabled=true

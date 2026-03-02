@@ -62,33 +62,46 @@ if [ -f "$BIN_SRC" ]; then
 	install -Dm755 "$BIN_SRC" "$BIN_DST"
 fi
 
+# If the bundle installed the canonical binary (e.g. /usr/bin/aro-desktop),
+# keep /usr/bin/ARO as a stable entrypoint for autostart.
+if [ -x "/usr/bin/aro-desktop" ] && [ ! -e "$BIN_DST" ]; then
+	ln -sf "/usr/bin/aro-desktop" "$BIN_DST" || true
+fi
 
-# Install systemd service into /etc/systemd/system from a few possible locations
-SERVICE_DST="/etc/systemd/system/aro_linux.service"
+# Install XDG autostart desktop entry (system-wide)
+APP_ID="com.aro.ARONetwork"
+AUTOSTART_DST="/etc/xdg/autostart/${APP_ID}.desktop"
 
 # 1) development source path (when running from repo)
-SERVICE_SRC_DEV="$PROJECT_ROOT/apps/aro_linux/aro_linux.service"
+AUTOSTART_SRC_DEV="$PROJECT_ROOT/apps/aro_linux/src-tauri/resources/etc/xdg/autostart/${APP_ID}.desktop"
 # 2) packaged bundled resource path (product name may contain spaces)
-SERVICE_SRC_BUNDLED="/usr/lib/ARO Desktop/resources/usr/lib/systemd/system/aro_linux.service"
+AUTOSTART_SRC_BUNDLED="/usr/lib/ARO Desktop/resources/etc/xdg/autostart/${APP_ID}.desktop"
 # 3) find under /usr/lib for installed bundle resources
-SERVICE_SRC_FOUND="$(find /usr/lib -maxdepth 3 -type f -path '*/resources/usr/lib/systemd/system/aro_linux.service' -print -quit 2>/dev/null || true)"
+AUTOSTART_SRC_FOUND="$(find /usr/lib -maxdepth 4 -type f -path "*/resources/etc/xdg/autostart/${APP_ID}.desktop" -print -quit 2>/dev/null || true)"
 
-SERVICE_SRC=""
-if [ -f "$SERVICE_SRC_DEV" ]; then
-	SERVICE_SRC="$SERVICE_SRC_DEV"
-elif [ -f "$SERVICE_SRC_BUNDLED" ]; then
-	SERVICE_SRC="$SERVICE_SRC_BUNDLED"
-elif [ -n "$SERVICE_SRC_FOUND" ] && [ -f "$SERVICE_SRC_FOUND" ]; then
-	SERVICE_SRC="$SERVICE_SRC_FOUND"
+AUTOSTART_SRC=""
+if [ -f "$AUTOSTART_SRC_DEV" ]; then
+	AUTOSTART_SRC="$AUTOSTART_SRC_DEV"
+elif [ -f "$AUTOSTART_SRC_BUNDLED" ]; then
+	AUTOSTART_SRC="$AUTOSTART_SRC_BUNDLED"
+elif [ -n "$AUTOSTART_SRC_FOUND" ] && [ -f "$AUTOSTART_SRC_FOUND" ]; then
+	AUTOSTART_SRC="$AUTOSTART_SRC_FOUND"
 fi
 
-if [ -n "$SERVICE_SRC" ]; then
-	install -Dm644 "$SERVICE_SRC" "$SERVICE_DST"
-fi
-
-# Reload systemd and enable/start the service if systemctl is available
-if command -v systemctl >/dev/null 2>&1; then
-	systemctl daemon-reload || true
-	systemctl enable aro_linux.service || true
-	systemctl start aro_linux.service || true
+if [ -n "$AUTOSTART_SRC" ]; then
+	install -Dm644 "$AUTOSTART_SRC" "$AUTOSTART_DST"
+else
+	# Fallback: create a minimal autostart entry
+	install -d -m 0755 "/etc/xdg/autostart"
+	cat >"$AUTOSTART_DST" <<'EOF'
+[Desktop Entry]
+Type=Application
+Name=ARO Desktop
+Comment=Start ARO Desktop on login
+Exec=/usr/bin/ARO
+TryExec=/usr/bin/ARO
+Terminal=false
+X-GNOME-Autostart-enabled=true
+EOF
+	chmod 0644 "$AUTOSTART_DST" || true
 fi

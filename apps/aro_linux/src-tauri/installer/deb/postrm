@@ -4,6 +4,9 @@ set -e
 APP_ID="com.aro.ARONetwork"
 REL_DIR=".local/share/${APP_ID}"
 
+# Remove XDG autostart entry (system-wide)
+rm -f "/etc/xdg/autostart/${APP_ID}.desktop" || true
+
 
 # 停止并禁用 systemd 服务（如存在）
 if command -v systemctl >/dev/null 2>&1; then
