@@ -69,9 +69,11 @@ Flags: nowait postinstall skipifsilent
 
 [UninstallDelete]
 
-Type: filesandordirs; Name: "{app}\aro_desktop.exe.WebView2"
-
-Type: filesandordirs; Name: "{app}"
+; NOTE:
+; We intentionally do NOT delete "{app}" or "{app}\aro_desktop.exe.WebView2" here.
+; When WebView2 keeps file handles open, Inno will show the finished-page warning:
+;   "Some elements could not be removed..."
+; We instead run a detached cleanup script after the uninstaller exits.
 
 [Code]
 
@@ -205,6 +207,51 @@ end;
 
 var
   g_webview2_dir: string;
+  g_app_dir: string;
+
+procedure StartDetachedCleanup(AppDir: string; WebView2Dir: string);
+var
+  ResultCode: Integer;
+  CmdPath, Cmd: string;
+  Content: AnsiString;
+begin
+  { Runs AFTER uninstall exits to avoid file-in-use problems.
+    Best-effort: kill processes and retry directory deletion. }
+  CmdPath := ExpandConstant('{tmp}\aro_cleanup.cmd');
+  DeleteFile(CmdPath);
+
+  Cmd :=
+    '@echo off' + #13#10 +
+    'setlocal enableextensions' + #13#10 +
+    'set "APP_DIR=' + AppDir + '"' + #13#10 +
+    'set "WV2_DIR=' + WebView2Dir + '"' + #13#10 +
+    'for /l %%i in (1,1,20) do (' + #13#10 +
+    '  taskkill /IM "{#MyAppExeName}" /F /T >nul 2>nul' + #13#10 +
+    '  taskkill /IM "flutter_window.exe" /F /T >nul 2>nul' + #13#10 +
+    '  taskkill /IM "msedgewebview2.exe" /F /T >nul 2>nul' + #13#10 +
+    '  taskkill /IM "edgewebview2.exe" /F /T >nul 2>nul' + #13#10 +
+    '  if exist "%WV2_DIR%" rmdir /s /q "%WV2_DIR%" >nul 2>nul' + #13#10 +
+    '  if exist "%APP_DIR%" rmdir /s /q "%APP_DIR%" >nul 2>nul' + #13#10 +
+    '  if not exist "%APP_DIR%" goto :done' + #13#10 +
+    '  timeout /t 1 /nobreak >nul' + #13#10 +
+    ')' + #13#10 +
+    ':done' + #13#10 +
+    'del /f /q "%~f0" >nul 2>nul' + #13#10 +
+    'endlocal' + #13#10;
+
+  Content := AnsiString(Cmd);
+  SaveStringToFile(CmdPath, Content, False);
+
+  { Start detached so uninstall can finish immediately. }
+  Exec(
+    'cmd.exe',
+    '/c start "" /min "' + CmdPath + '"',
+    '',
+    SW_HIDE,
+    ewNoWait,
+    ResultCode
+  );
+end;
 
 procedure CurUninstallStepChanged(CurUninstallStep: TUninstallStep);
 var
@@ -216,7 +263,8 @@ begin
       file removal starts. }
     KillAllProcesses();
     WaitAllProcessesExit(30000);
-    g_webview2_dir := ExpandConstant('{app}\aro_desktop.exe.WebView2');
+    g_app_dir := ExpandConstant('{app}');
+    g_webview2_dir := ExpandConstant('{app}\\aro_desktop.exe.WebView2');
 
     { Proactively free locks held by WebView2 so uninstall can remove {app}. }
     if g_webview2_dir <> '' then
@@ -240,24 +288,9 @@ begin
   end
   else if CurUninstallStep = usPostUninstall then
   begin
-    { After most files are removed, retry deleting the WebView2 folder.
-      If it remains locked, stop WebView2 processes (targeted first, then
-      global last-resort) and retry. }
-    if g_webview2_dir <> '' then
-    begin
-      for i := 1 to 20 do
-      begin
-        if DeleteTreeBestEffort(g_webview2_dir) then
-          Break;
-
-        if i <= 14 then
-          KillWebView2ForFolder(g_webview2_dir)
-        else
-          KillWebView2GlobalLastResort();
-
-        WaitWebView2Exit(10000);
-        Sleep(800);
-      end;
-    end;
+    { Final safety net: run detached cleanup to remove WebView2 + install dir
+      after the uninstaller exits, preventing "Some elements..." warnings. }
+    if (g_app_dir <> '') and (g_webview2_dir <> '') then
+      StartDetachedCleanup(g_app_dir, g_webview2_dir);
   end;
 end;
