@@ -88,17 +88,90 @@ end;
 
 procedure KillProcess(ProcessName: string);
 begin
-ExecAndLog('taskkill', '/F /T /IM ' + ProcessName, '');
+ExecAndLog(ExpandConstant('{sys}\taskkill.exe'), '/F /T /IM ' + ProcessName, '');
+end;
+
+procedure KillProcessByPath(const ExePath: string);
+var
+  PS: string;
+begin
+  PS :=
+    '-NoProfile -ExecutionPolicy Bypass -Command '
+    + '"$p=''''' + ExePath + '''''; '
+    + 'Get-CimInstance Win32_Process | '
+    + 'Where-Object { $_.ExecutablePath -and ($_.ExecutablePath -ieq $p) } | '
+    + 'ForEach-Object { try { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue } catch {} }"';
+
+  ExecAndLog(ExpandConstant('{sys}\WindowsPowerShell\v1.0\powershell.exe'), PS, '');
+end;
+
+function ForceDeleteDir(const DirPath: string): Boolean;
+var
+  i: Integer;
+begin
+  if not DirExists(DirPath) then
+  begin
+    Result := True;
+    exit;
+  end;
+
+  Result := False;
+  for i := 1 to 20 do
+  begin
+    if DelTree(DirPath, True, True, True) then
+    begin
+      if not DirExists(DirPath) then
+      begin
+        Result := True;
+        exit;
+      end;
+    end;
+
+    ExecAndLog('cmd.exe', '/c rd /s /q "' + DirPath + '"', '');
+    Sleep(300);
+
+    if not DirExists(DirPath) then
+    begin
+      Result := True;
+      exit;
+    end;
+  end;
+
+  Log('ForceDeleteDir: failed to remove ' + DirPath);
+end;
+
+procedure CleanupWebView2Dirs();
+var
+  AppWebView2Dir: string;
+  LocalWebView2Dir: string;
+begin
+  AppWebView2Dir := ExpandConstant('{app}\{#MyAppExeName}.WebView2');
+  LocalWebView2Dir := ExpandConstant('{localappdata}\{#MyAppExeName}.WebView2');
+
+  Log('CleanupWebView2Dirs: try remove ' + AppWebView2Dir);
+  ForceDeleteDir(AppWebView2Dir);
+
+  Log('CleanupWebView2Dirs: try remove ' + LocalWebView2Dir);
+  ForceDeleteDir(LocalWebView2Dir);
 end;
 
 procedure KillAllProcesses();
 var
   WebView2DirToken: string;
+  AppExePath: string;
+  FlutterWindowExePath: string;
+  AppWebView2Dir: string;
+  LocalWebView2Dir: string;
   PS: string;
 begin
 
+AppExePath := ExpandConstant('{app}\{#MyAppExeName}');
+FlutterWindowExePath := ExpandConstant('{app}\flutter_window.exe');
+
 KillProcess('{#MyAppExeName}');
 KillProcess('flutter_window.exe');
+KillProcessByPath(AppExePath);
+KillProcessByPath(FlutterWindowExePath);
 
 { Avoid killing all WebView2 runtime processes system-wide.
   Instead, terminate only those that reference our app's WebView2 user-data dir (see PowerShell below). }
@@ -106,17 +179,26 @@ KillProcess('flutter_window.exe');
 { Kill processes whose CommandLine references the app's WebView2 user-data dir.
   WMIC is deprecated on newer Windows, so prefer PowerShell/CIM. }
 WebView2DirToken := '{#MyAppExeName}.WebView2';
+AppWebView2Dir := ExpandConstant('{app}\{#MyAppExeName}.WebView2');
+LocalWebView2Dir := ExpandConstant('{localappdata}\{#MyAppExeName}.WebView2');
 PS :=
   '-NoProfile -ExecutionPolicy Bypass -Command '
   + '"$token=''''' + WebView2DirToken + '''''; '
+  + '$appDir=''''' + AppWebView2Dir + '''''; '
+  + '$localDir=''''' + LocalWebView2Dir + '''''; '
   + 'Get-CimInstance Win32_Process | '
-  + 'Where-Object { $_.CommandLine -and ($_.CommandLine -like (''*'' + $token + ''*'')) } | '
+  + 'Where-Object { $_.CommandLine -and (($_.CommandLine -like (''*'' + $token + ''*'')) -or ($_.CommandLine -like (''*'' + $appDir + ''*'')) -or ($_.CommandLine -like (''*'' + $localDir + ''*''))) } | '
   + 'ForEach-Object { try { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue } catch {} }"';
 
 ExecAndLog('powershell.exe', PS, '');
 
 { Fallback for older environments where CIM is unavailable }
 ExecAndLog('cmd.exe', '/c wmic process where "CommandLine like ''%' + WebView2DirToken + '%''" call terminate', '');
+
+{ Last fallback: if still locked by WebView2 runtime, force-kill common runtime process names }
+ExecAndLog(ExpandConstant('{sys}\taskkill.exe'), '/F /T /IM msedgewebview2.exe', '');
+ExecAndLog(ExpandConstant('{sys}\taskkill.exe'), '/F /T /IM edgewebview2.exe', '');
+ExecAndLog(ExpandConstant('{sys}\taskkill.exe'), '/F /T /IM WebView2Manager.exe', '');
 
 end;
 
@@ -168,6 +250,13 @@ begin
 KillAllProcesses();
 
 WaitProcessesExit();
+CleanupWebView2Dirs();
+end;
+
+if CurUninstallStep = usPostUninstall then
+begin
+  { Retry once more at the end to handle delayed process exits }
+  CleanupWebView2Dirs();
 end;
 
 end;
@@ -178,5 +267,6 @@ begin
   Log('InitializeUninstall: attempting to terminate running processes');
   KillAllProcesses();
   WaitProcessesExit();
+  CleanupWebView2Dirs();
   Result := True;
 end;
