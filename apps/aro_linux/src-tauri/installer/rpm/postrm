@@ -3,6 +3,14 @@ set -eu
 
 APP_ID="com.aro.ARONetwork"
 
+# RPM %postun runs for both uninstall and upgrade:
+# - $1 == 0 : package is being erased (final uninstall)
+# - $1 == 1 : package is being upgraded
+# Only perform removal actions on final uninstall.
+if [ "${1:-0}" != "0" ]; then
+	exit 0
+fi
+
 # Remove XDG autostart entry (system-wide)
 rm -f "/etc/xdg/autostart/${APP_ID}.desktop" || true
 

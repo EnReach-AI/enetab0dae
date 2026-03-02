@@ -14,29 +14,31 @@ AppPublisherURL={#MyAppURL}
 AppSupportURL={#MyAppURL}
 AppUpdatesURL={#MyAppURL}
 
-DefaultDirName={autopf}\{#MyAppName}
+DefaultDirName={autopf}{#MyAppName}
 DefaultGroupName={#MyAppName}
 
 DisableDirPage=no
 DisableProgramGroupPage=yes
 
-PrivilegesRequired=lowest
+; 必须管理员权限，否则无法删除 Program Files
+PrivilegesRequired=admin
+
 ArchitecturesInstallIn64BitMode=x64
 
 Compression=lzma
 SolidCompression=yes
 WizardStyle=modern
 
-OutputDir=..\..
+OutputDir=....
 OutputBaseFilename=AROClient-Setup
 
 SetupIconFile=..\runner\resources\app_icon.ico
 
-UninstallDisplayIcon={app}\{#MyAppExeName}
+UninstallDisplayIcon={app}{#MyAppExeName}
 
 AppMutex=AROClientMutex
 
-UninstallFilesDir={localappdata}\{#MyAppName}\uninstall
+UninstallFilesDir={localappdata}{#MyAppName}\uninstall
 CreateUninstallRegKey=yes
 Uninstallable=yes
 
@@ -47,19 +49,24 @@ Name: "english"; MessagesFile: "compiler:Default.isl"
 Name: "desktopicon"; Description: "Create a desktop icon"; Flags: unchecked
 
 [Files]
-Source: "..\..\build\windows\x64\runner\Release\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
+Source: "....\build\windows\x64\runner\Release*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
 
 [Icons]
-Name: "{autoprograms}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"
-Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; Tasks: desktopicon
+Name: "{autoprograms}{#MyAppName}"; Filename: "{app}{#MyAppExeName}"
+Name: "{autodesktop}{#MyAppName}"; Filename: "{app}{#MyAppExeName}"; Tasks: desktopicon
 
 [Run]
-Filename: "{app}\{#MyAppExeName}"; Description: "Launch {#MyAppName}"; Flags: nowait postinstall skipifsilent
+Filename: "{app}{#MyAppExeName}"; Description: "Launch {#MyAppName}"; Flags: nowait postinstall skipifsilent
 
 [UninstallDelete]
 
-Type: filesandordirs; Name: "{app}\{#MyAppExeName}.WebView2"
+; 删除 WebView2 缓存
+Type: filesandordirs; Name: "{app}{#MyAppExeName}.WebView2"
+
+; 删除安装目录
 Type: filesandordirs; Name: "{app}"
+
+; 删除 AppData 缓存
 Type: filesandordirs; Name: "{localappdata}\ARO Desktop"
 Type: filesandordirs; Name: "{appdata}\ARO Desktop"
 
@@ -67,123 +74,95 @@ Type: filesandordirs; Name: "{appdata}\ARO Desktop"
 
 procedure KillProcess(ProcessName: string);
 var
-  ResultCode, i: Integer;
+ResultCode: Integer;
 begin
-  for i := 1 to 5 do
-  begin
-    Exec(
-      'taskkill',
-      '/IM ' + ProcessName + ' /F /T',
-      '',
-      SW_HIDE,
-      ewWaitUntilTerminated,
-      ResultCode
-    );
-    Sleep(700);
-  end;
+Exec(
+'taskkill',
+'/F /T /IM ' + ProcessName,
+'',
+SW_HIDE,
+ewWaitUntilTerminated,
+ResultCode
+);
 end;
 
 procedure KillAllProcesses();
+var
+ResultCode: Integer;
 begin
-  KillProcess('{#MyAppExeName}');
-  KillProcess('flutter_window.exe');
-  KillProcess('msedgewebview2.exe');
-  KillProcess('edgewebview2.exe');
-  KillProcess('WebView2Manager.exe');
+
+KillProcess('{#MyAppExeName}');
+KillProcess('flutter_window.exe');
+
+KillProcess('msedgewebview2.exe');
+KillProcess('edgewebview2.exe');
+KillProcess('WebView2Manager.exe');
+
+Exec(
+'cmd.exe',
+'/c wmic process where "CommandLine like ''%aro_desktop.exe.WebView2%''" call terminate',
+'',
+SW_HIDE,
+ewWaitUntilTerminated,
+ResultCode
+);
+
 end;
 
 function IsProcessRunning(ProcessName: string): Boolean;
 var
-  ResultCode: Integer;
-  OutFile, Content, Cmd: string;
+ResultCode: Integer;
+TmpFile, Content, Cmd: string;
 begin
-  Result := False;
+Result := False;
 
-  OutFile := ExpandConstant('{tmp}\tasklist.txt');
-  DeleteFile(OutFile);
+TmpFile := ExpandConstant('{tmp}\tasklist.txt');
+DeleteFile(TmpFile);
 
-  Cmd := 'tasklist /FI "IMAGENAME eq ' + ProcessName + '" /NH > "' + OutFile + '"';
+Cmd := 'tasklist /FI "IMAGENAME eq ' + ProcessName + '" /NH > "' + TmpFile + '"';
 
-  if Exec('cmd.exe', '/c ' + Cmd, '', SW_HIDE, ewWaitUntilTerminated, ResultCode) then
-  begin
-    if LoadStringFromFile(OutFile, Content) then
-      Result := Pos(LowerCase(ProcessName), LowerCase(Content)) > 0;
-  end;
+if Exec('cmd.exe', '/c ' + Cmd, '', SW_HIDE, ewWaitUntilTerminated, ResultCode) then
+begin
+if LoadStringFromFile(TmpFile, Content) then
+Result := Pos(LowerCase(ProcessName), LowerCase(Content)) > 0;
+end;
 end;
 
-procedure WaitAllProcessesExit(TimeoutMS: Integer);
+procedure WaitProcessesExit();
 var
-  Elapsed: Integer;
+i: Integer;
 begin
-  Elapsed := 0;
 
-  while Elapsed < TimeoutMS do
-  begin
-    if not (IsProcessRunning('{#MyAppExeName}') or
-            IsProcessRunning('flutter_window.exe') or
-            IsProcessRunning('msedgewebview2.exe')) then
-      Exit;
+for i := 1 to 30 do
+begin
 
-    Sleep(500);
-    Elapsed := Elapsed + 500;
-  end;
+```
+if not (
+  IsProcessRunning('{#MyAppExeName}') or
+  IsProcessRunning('flutter_window.exe') or
+  IsProcessRunning('msedgewebview2.exe')
+) then
+  exit;
+
+Sleep(500);
+```
+
 end;
 
-var
-  AppDir: string;
-
-procedure RunCleanupScript();
-var
-  CmdPath, Cmd: string;
-  ResultCode: Integer;
-begin
-
-  CmdPath := ExpandConstant('{tmp}\aro_cleanup.cmd');
-
-  Cmd :=
-    '@echo off' + #13#10 +
-    'set APP=' + AppDir + #13#10 +
-    'for /l %%i in (1,1,15) do (' + #13#10 +
-    'taskkill /IM aro_desktop.exe /F >nul 2>nul' + #13#10 +
-    'taskkill /IM flutter_window.exe /F >nul 2>nul' + #13#10 +
-    'taskkill /IM msedgewebview2.exe /F >nul 2>nul' + #13#10 +
-    'rmdir /s /q "%APP%" >nul 2>nul' + #13#10 +
-    'if not exist "%APP%" goto done' + #13#10 +
-    'timeout /t 1 >nul' + #13#10 +
-    ')' + #13#10 +
-    ':done' + #13#10 +
-    'exit';
-
-  SaveStringToFile(CmdPath, Cmd, False);
-
-  Exec(
-    'cmd.exe',
-    '/c start "" /min "' + CmdPath + '"',
-    '',
-    SW_HIDE,
-    ewNoWait,
-    ResultCode
-  );
 end;
 
 procedure CurUninstallStepChanged(CurUninstallStep: TUninstallStep);
 begin
 
-  if CurUninstallStep = usUninstall then
-  begin
+if CurUninstallStep = usUninstall then
+begin
 
-    KillAllProcesses();
-    WaitAllProcessesExit(20000);
+```
+KillAllProcesses();
 
-    AppDir := ExpandConstant('{app}');
-  end;
+WaitProcessesExit();
+```
 
-  if CurUninstallStep = usPostUninstall then
-  begin
-
-    if AppDir <> '' then
-      RunCleanupScript();
-
-  end;
+end;
 
 end;

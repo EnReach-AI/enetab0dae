@@ -32,7 +32,7 @@ remove_dir_under_home() {
 }
 
 case "$1" in
-  purge|remove)
+  purge)
     for d in /home/* /root; do
       if [ -d "$d" ]; then
         remove_dir_under_home "$d"
