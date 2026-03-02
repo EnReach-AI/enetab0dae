@@ -785,6 +785,48 @@ pub fn run() {
         return;
       }
 
+      // Check for browser error pages (e.g. DNS failure) immediately and suppress them.
+      // This is a comprehensive check for any page load that doesn't look like our app.
+      let detect_error_js = r#"
+        (function() {
+          const text = document.body ? document.body.innerText : '';
+          // Common browser error keywords (English + Chinese + generic)
+          const errorKeywords = [
+            'Error resolving',
+            'Temporary failure',
+            'name resolution',
+            'This site can’t be reached',
+            'ERR_NAME_NOT_RESOLVED',
+            'DNS_PROBE_FINISHED_NXDOMAIN',
+            'ERR_CONNECTION_REFUSED',
+            'ERR_TIMED_OUT',
+            '找不到服务器',
+            '连接超时',
+            '网络连接错误'
+          ];
+          
+          let isError = errorKeywords.some(kw => text.includes(kw));
+          
+          // Additional check: valid ARO app pages usually have a root div.
+          // If the page has very little content and NO root div, it's likely an error page.
+          const hasRoot = document.getElementById('root') || document.getElementById('app');
+          if (!hasRoot && text.length < 500) {
+             // Heuristic: small page content without app root -> likely error page
+             isError = true;
+          }
+
+          if (isError) {
+             // invoke Rust command to switch to offline UI
+             window.__TAURI__.core.invoke('report_page_load_error', { error: text.substring(0, 100) });
+             // Clear the body to hide the error message immediately 
+             document.body.innerHTML = '';
+             document.body.style.backgroundColor = '#000000'; // Match app background
+          }
+        })();
+      "#;
+      let _ = window.eval(detect_error_js);
+      let _ = window.eval(detect_error_js);
+
       if let Err(e) = window.eval(FLUTTER_COMPAT_BRIDGE_JS) {
         log::warn!("failed to inject compat bridge (page load): {e}");
       }
@@ -981,6 +1023,7 @@ pub fn run() {
     })
     .invoke_handler(tauri::generate_handler![
       bridge_log,
+      report_page_load_error,
       set_libstudy_override_path,
       init_libstudy,
       init_libstudy_with_params,
@@ -1297,6 +1340,27 @@ async fn get_rewards() -> Result<String, String> {
   println!("[get_rewards] response={resp}");
   log::info!("get_rewards response={resp}");
   Ok(resp)
+}
+
+#[tauri::command]
+fn report_page_load_error(app: tauri::AppHandle, window: tauri::WebviewWindow, error: String) {
+  log::warn!("report_page_load_error: {} (in window {})", error, window.label());
+
+  // If the main window failed to load, treat it as effectively offline.
+  if window.label() == "main" {
+    // Hide the main window to avoid showing the error page.
+    let _ = window.hide();
+    
+    // Show the offline overlay if not already visible.
+    if app.get_webview_window("offline").is_none() {
+      let _ = ensure_offline_overlay_window(&app);
+    }
+    
+    if let Some(off) = app.get_webview_window("offline") {
+      let _ = off.show();
+      let _ = off.set_focus();
+    }
+  }
 }
 
 #[tauri::command]
