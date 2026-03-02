@@ -6,8 +6,15 @@ APP_ID="com.aro.ARONetwork"
 # Remove XDG autostart entry (system-wide)
 rm -f "/etc/xdg/autostart/${APP_ID}.desktop" || true
 
+# Stop running app (best-effort)
+pgrep -f ARO | xargs -r kill -TERM || true
+sleep 1
+pgrep -f ARO | xargs -r kill -KILL || true
 
-# 停止并禁用 systemd 服务（如存在）
+# Remove system desktop entry
+rm -f "/usr/share/applications/${APP_ID}.desktop" || true
+
+# Stop and disable legacy systemd service (if present)
 if command -v systemctl >/dev/null 2>&1; then
 	systemctl stop aro_linux.service || true
 	systemctl disable aro_linux.service || true
@@ -16,3 +23,5 @@ if command -v systemctl >/dev/null 2>&1; then
 fi
 
 exit 0
+
+

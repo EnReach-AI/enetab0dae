@@ -4,13 +4,111 @@ mod libstudy;
 mod lib_check;
 
 use std::backtrace::Backtrace;
+use std::fs;
+use std::io::Write;
+use std::net::{TcpStream, ToSocketAddrs};
+use std::path::{Path, PathBuf};
+use std::sync::OnceLock;
+use std::time::Duration;
+
+use base64::Engine;
+use serde::Serialize;
 use time::{
   format_description,
   OffsetDateTime,
 };
 
+use tauri::Emitter;
 use tauri::Manager;
 use tauri_plugin_shell::ShellExt;
+
+use url::Url;
+
+const OFFLINE_HEADER_PNG: &[u8] = include_bytes!("../dist/assets/header.png");
+const OFFLINE_LOGO_PNG: &[u8] = include_bytes!("../dist/assets/gr-logo-desktop.png");
+
+static OFFLINE_OVERLAY_HTML: OnceLock<String> = OnceLock::new();
+static CRASH_LOG_DIR: OnceLock<PathBuf> = OnceLock::new();
+
+const DEFAULT_MAX_LOG_FILE_SIZE_BYTES: u128 = 10 * 1024 * 1024; // 10 MiB
+const DEFAULT_MAX_CRASH_FILE_SIZE_BYTES: u64 = 2 * 1024 * 1024; // 2 MiB
+
+fn parse_u128_env(name: &str) -> Option<u128> {
+  std::env::var(name)
+    .ok()
+    .map(|s| s.trim().to_string())
+    .filter(|s| !s.is_empty())
+    .and_then(|s| s.parse::<u128>().ok())
+}
+
+fn resolve_max_log_file_size_bytes() -> u128 {
+  // Prefer bytes; fall back to MB.
+  if let Some(bytes) = parse_u128_env("ARO_LOG_MAX_FILE_SIZE_BYTES") {
+    return bytes.max(1024 * 1024);
+  }
+  if let Some(mb) = parse_u128_env("ARO_LOG_MAX_FILE_SIZE_MB") {
+    return (mb * 1024 * 1024).max(1024 * 1024);
+  }
+  DEFAULT_MAX_LOG_FILE_SIZE_BYTES
+}
+
+fn rotate_file_keep_all_if_oversize(path: &Path, max_size: u64) -> Result<(), String> {
+  if !path.exists() {
+    return Ok(());
+  }
+  let size = fs::metadata(path)
+    .map_err(|e| format!("failed to stat {path:?}: {e}"))?
+    .len();
+  if size <= max_size {
+    return Ok(());
+  }
+
+  let now = OffsetDateTime::now_local().unwrap_or_else(|_| OffsetDateTime::now_utc());
+  let stamp = now
+    .format(&format_description::parse("[year]-[month]-[day]_[hour]-[minute]-[second]")
+      .map_err(|e| format!("failed to build time format: {e}"))?)
+    .map_err(|e| format!("failed to format time: {e}"))?;
+
+  let file_stem = path
+    .file_stem()
+    .and_then(|s| s.to_str())
+    .unwrap_or("log");
+  let rotated_name = format!("{file_stem}_{stamp}.log");
+
+  let dir = path.parent().unwrap_or_else(|| Path::new("."));
+  let rotated = dir.join(rotated_name);
+
+  fs::rename(path, &rotated)
+    .map_err(|e| format!("failed to rotate {path:?} -> {rotated:?}: {e}"))?;
+  Ok(())
+}
+
+fn init_crash_log_dir(app: &tauri::AppHandle) {
+  if CRASH_LOG_DIR.get().is_some() {
+    return;
+  }
+  let dir = app
+    .path()
+    .app_log_dir()
+    .unwrap_or_else(|_| std::env::temp_dir().join("aro_desktop_logs"));
+  let _ = fs::create_dir_all(&dir);
+  let _ = CRASH_LOG_DIR.set(dir);
+}
+
+fn append_crash_log(message: &str) {
+  let Some(dir) = CRASH_LOG_DIR.get() else {
+    // Best-effort: at least stderr.
+    eprintln!("[crash-log] {message}");
+    return;
+  };
+
+  let path = dir.join("crash.log");
+  let _ = rotate_file_keep_all_if_oversize(&path, DEFAULT_MAX_CRASH_FILE_SIZE_BYTES);
+
+  if let Ok(mut f) = fs::OpenOptions::new().create(true).append(true).open(&path) {
+    let _ = writeln!(f, "{message}");
+  }
+}
 
 #[cfg(target_os = "linux")]
 use tauri_plugin_dialog::DialogExt;
@@ -287,9 +385,328 @@ const FLUTTER_COMPAT_BRIDGE_JS: &str = r#"
 })();
 "#;
 
+fn offline_overlay_html() -> &'static str {
+  OFFLINE_OVERLAY_HTML.get_or_init(|| {
+    let header_b64 = base64::engine::general_purpose::STANDARD.encode(OFFLINE_HEADER_PNG);
+    let logo_b64 = base64::engine::general_purpose::STANDARD.encode(OFFLINE_LOGO_PNG);
+
+    let mut html = r#"<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>ARO Desktop</title>
+  <style>
+    html, body { margin:0; padding:0; width:100%; height:100%; background:#000; color:#fff; font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; }
+    #root { position:fixed; inset:0; }
+    .top { position:absolute; top:0; left:0; right:0; height:120px; overflow:hidden; }
+    .header { width:100%; height:120px; object-fit:cover; display:block; }
+    .logo-tl { position:absolute; top:18px; left:18px; width:142px; height:30px; object-fit:contain; pointer-events:none; }
+    .center { position:absolute; inset:0; display:flex; align-items:center; justify-content:center; padding:24px; text-align:center; }
+    .logo { width:142px; height:30px; object-fit:contain; display:block; margin:0 auto 24px auto; pointer-events:none; }
+    .desc { font-size:14px; font-weight:700; opacity:0.95; white-space:pre-line; }
+    .connecting { position:absolute; left:0; right:0; bottom:118px; text-align:center; font-size:15px; opacity:0.9; }
+    .bottom { position:absolute; left:0; right:0; bottom:0; height:98px; background:#02B421; border-top-left-radius:30px; border-top-right-radius:30px; display:flex; align-items:center; justify-content:center; padding:0 20px; box-shadow:0 2px 8px rgba(0,0,0,0.2); text-align:center; font-size:14px; font-weight:600; }
+  </style>
+</head>
+<body>
+  <div id="root">
+    <div class="top">
+      <img class="header" alt="" src="data:image/png;base64,__HEADER_B64__" />
+    </div>
+    <div class="center">
+      <div>
+        <img class="logo" alt="ARO" src="data:image/png;base64,__LOGO_B64__" />
+        <div class="desc">A lightweight desktop app.
+One-click start and forget it.</div>
+      </div>
+    </div>
+    <div class="connecting">Connecting...</div>
+    <div class="bottom" id="msg">There seems to be a network issue, please check your internet connectivity.</div>
+  </div>
+
+  <script>
+    (function() {
+      const setMsg = (state) => {
+        const el = document.getElementById('msg');
+        if (!el) return;
+        if (state === 'offline') {
+          el.textContent = 'Network disconnected. Please check your connectivity.';
+        } else if (state === 'no_internet') {
+          el.textContent = 'There seems to be a network issue, please check your internet connectivity.';
+        } else {
+          el.textContent = 'Connecting...';
+        }
+      };
+
+      const listen = () => {
+        try {
+          const t = window.__TAURI__;
+          const fn = t && t.event && t.event.listen;
+          if (typeof fn !== 'function') return false;
+          fn('aro-net-status', (event) => {
+            const p = event && event.payload ? event.payload : null;
+            const s = p && p.state ? String(p.state) : '';
+            setMsg(s);
+          });
+          return true;
+        } catch (_) { return false; }
+      };
+      listen() || setTimeout(listen, 250);
+    })();
+  </script>
+</body>
+</html>"#.to_string();
+
+    html = html.replace("__HEADER_B64__", &header_b64);
+    html = html.replace("__LOGO_B64__", &logo_b64);
+    html
+  })
+}
+
+fn ensure_offline_overlay_window(app: &tauri::AppHandle) -> Result<(), String> {
+  if app.get_webview_window("offline").is_some() {
+    return Ok(());
+  }
+
+  let about_blank = Url::parse("about:blank").map_err(|e| format!("invalid about:blank url: {e}"))?;
+  tauri::WebviewWindowBuilder::new(app, "offline", tauri::WebviewUrl::External(about_blank))
+    .title("ARO Desktop")
+    .inner_size(360.0, 640.0)
+    .resizable(false)
+    .decorations(false)
+    .always_on_top(true)
+    .visible(false)
+    .build()
+    .map_err(|e| format!("failed to create offline overlay window: {e}"))?;
+
+  Ok(())
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "snake_case")]
+enum NetState {
+  Online,
+  Offline,
+  NoInternet,
+}
+
+#[derive(Debug, Clone, Serialize)]
+struct NetStatusPayload {
+  state: NetState,
+  checked_at_ms: i128,
+}
+
+fn check_remote_reachability(remote_ui_url: &str, timeout: Duration) -> NetState {
+  let parsed = match Url::parse(remote_ui_url) {
+    Ok(u) => u,
+    Err(_) => return NetState::NoInternet,
+  };
+
+  let host = match parsed.host_str() {
+    Some(h) => h.to_string(),
+    None => return NetState::NoInternet,
+  };
+
+  let port = parsed.port_or_known_default().unwrap_or(443);
+  let addrs: Vec<std::net::SocketAddr> = match (host.as_str(), port).to_socket_addrs() {
+    Ok(it) => it.take(3).collect(),
+    Err(e) => {
+      // DNS failure or resolver not available.
+      log::debug!("net: resolve failed host={host} port={port} err={e}");
+      return NetState::NoInternet;
+    }
+  };
+
+  // Try a few resolved addresses; treat fast 'unreachable' as offline.
+  let mut saw_unreachable = false;
+  let mut saw_timeout = false;
+
+  for addr in addrs {
+    match TcpStream::connect_timeout(&addr, timeout) {
+      Ok(_) => return NetState::Online,
+      Err(e) => {
+        use std::io::ErrorKind;
+        match e.kind() {
+          ErrorKind::NetworkUnreachable | ErrorKind::NotConnected | ErrorKind::AddrNotAvailable => {
+            saw_unreachable = true;
+          }
+          ErrorKind::TimedOut => {
+            saw_timeout = true;
+          }
+          _ => {}
+        }
+        log::debug!("net: connect failed addr={addr} err={e}");
+      }
+    }
+  }
+
+  if saw_unreachable {
+    return NetState::Offline;
+  }
+  if saw_timeout {
+    return NetState::NoInternet;
+  }
+  NetState::NoInternet
+}
+
+fn start_network_monitor(app: tauri::AppHandle) {
+  // Default to the current remote UI.
+  let remote_ui_url = std::env::var("ARO_REMOTE_UI_URL")
+    .ok()
+    .filter(|s| !s.trim().is_empty())
+    .unwrap_or_else(|| "https://0ee63895-262b.ipproxy.aro.network/desktop/".to_string());
+
+  // Faster reaction for “断网/网络差” UI switching.
+  let poll_interval = Duration::from_millis(300);
+  let timeout = Duration::from_millis(250);
+
+  std::thread::spawn(move || {
+    let mut last_emitted: Option<NetState> = None;
+    let mut bad_streak: u8 = 0;
+    let mut remote_loaded = false;
+    let mut main_shown = false;
+
+    // Wait for the window handle to exist.
+    let mut main_window = None;
+    for _ in 0..200 {
+      if let Some(w) = app.get_webview_window("main") {
+        main_window = Some(w);
+        break;
+      }
+      std::thread::sleep(Duration::from_millis(10));
+    }
+
+    let Some(main) = main_window else {
+      log::warn!("net: main window not found; network monitor running without UI");
+      // Still run and log state changes.
+      loop {
+        let _ = check_remote_reachability(&remote_ui_url, timeout);
+        std::thread::sleep(poll_interval);
+      }
+    };
+
+    loop {
+      let raw_state = check_remote_reachability(&remote_ui_url, timeout);
+      let state = if raw_state == NetState::Online {
+        bad_streak = 0;
+        NetState::Online
+      } else {
+        bad_streak = bad_streak.saturating_add(1);
+        // Require two consecutive bad reads before we consider it truly bad.
+        if bad_streak >= 2 { raw_state } else { last_emitted.unwrap_or(raw_state) }
+      };
+
+      let now = OffsetDateTime::now_utc().unix_timestamp_nanos() / 1_000_000;
+      let payload = NetStatusPayload {
+        state,
+        checked_at_ms: now,
+      };
+
+      // Emit only when state changes, or if we haven't been able to emit yet.
+      let should_emit = last_emitted.map(|s| s != state).unwrap_or(true);
+      if should_emit {
+        // Emit to all windows (main + offline overlay).
+        let _ = app.emit("aro-net-status", payload.clone());
+
+        // Online: load the remote UI if needed, show the main window, hide overlay.
+        if state == NetState::Online {
+          if !remote_loaded {
+            let target = remote_ui_url.as_str();
+            match Url::parse(target) {
+              Ok(u) => {
+                let mut ww = main.clone();
+                if let Err(e) = ww.navigate(u) {
+                  log::warn!("net: navigate failed target={target} err={e}");
+                } else {
+                  remote_loaded = true;
+                }
+              }
+              Err(e) => log::warn!("net: invalid target url={target} err={e}"),
+            }
+          }
+
+          if let Some(off) = app.get_webview_window("offline") {
+            let _ = off.hide();
+          }
+
+          // Restore main always-on-top behavior (configured in tauri.conf.json).
+          let _ = main.set_always_on_top(true);
+
+          if !main_shown {
+            let _ = main.show();
+            let _ = main.set_focus();
+            main_shown = true;
+          }
+        } else {
+          // Offline/NoInternet: show the native overlay window. Keep main hidden if it was never shown.
+          if app.get_webview_window("offline").is_none() {
+            let _ = ensure_offline_overlay_window(&app);
+          }
+
+          if let Some(off) = app.get_webview_window("offline") {
+            // Ensure the overlay is actually above the main window.
+            let _ = main.set_always_on_top(false);
+            let _ = off.set_always_on_top(true);
+
+            // Best-effort: match main window bounds.
+            if let Ok(pos) = main.outer_position() {
+              let _ = off.set_position(pos);
+            }
+            if let Ok(size) = main.outer_size() {
+              let _ = off.set_size(size);
+            } else {
+              // Fallback to configured fixed size.
+              let _ = off.set_size(tauri::LogicalSize::new(360.0, 640.0));
+            }
+            let _ = off.show();
+            let _ = off.set_focus();
+          }
+        }
+
+        last_emitted = Some(state);
+        log::info!("net: state -> {:?}", state);
+      }
+
+      std::thread::sleep(poll_interval);
+    }
+  });
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-  let builder = tauri::Builder::default().plugin(tauri_plugin_shell::init());
+  let builder = tauri::Builder::default()
+    .plugin(tauri_plugin_shell::init())
+    .on_page_load(|window, _payload| {
+      // Inject scripts on every page load for reliability (remote UI navigation / reloads).
+      if window.label() == "offline" {
+        // Fill the about:blank window with our offline overlay HTML.
+        // Use JSON string encoding to avoid JS escaping issues.
+        match serde_json::to_string(offline_overlay_html()) {
+          Ok(html_js) => {
+            let js = format!(
+              "document.open();document.write({});document.close();",
+              html_js
+            );
+            if let Err(e) = window.eval(&js) {
+              log::warn!("failed to write offline overlay html (page load): {e}");
+            }
+          }
+          Err(e) => {
+            log::warn!("failed to encode offline overlay html: {e}");
+          }
+        }
+        return;
+      }
+
+      if window.label() != "main" {
+        return;
+      }
+
+      if let Err(e) = window.eval(FLUTTER_COMPAT_BRIDGE_JS) {
+        log::warn!("failed to inject compat bridge (page load): {e}");
+      }
+    });
 
   #[cfg(target_os = "linux")]
   let builder = builder.plugin(tauri_plugin_dialog::init());
@@ -301,9 +718,16 @@ pub fn run() {
       } else {
         log::LevelFilter::Info
       };
+
+      init_crash_log_dir(&app.handle());
+      let max_file_size = resolve_max_log_file_size_bytes();
+
       app.handle().plugin(
         tauri_plugin_log::Builder::default()
           .level(log_level)
+          // Rotate previous log file when it grows too large (rotation happens on startup).
+          .rotation_strategy(tauri_plugin_log::RotationStrategy::KeepAll)
+          .max_file_size(max_file_size)
           .format(|out, message, record| {
             let now = OffsetDateTime::now_local().unwrap_or_else(|_| OffsetDateTime::now_utc());
             let fmt = format_description::parse("[year]-[month]-[day] [hour]:[minute]:[second].[subsecond digits:3]")
@@ -346,6 +770,14 @@ pub fn run() {
       // Ensure libstudy is always loaded from the same per-user location.
       // This makes install + update paths consistent: ~/.local/share/<identifier>/libstudy.so
       set_default_libstudy_override(&app.handle());
+
+      // Native offline overlay window (data-url backed) so we never depend on a local index.html.
+      if let Err(e) = ensure_offline_overlay_window(&app.handle()) {
+        log::warn!("offline overlay window not available: {e}");
+      }
+
+      // Tauri-layer network monitor: emits 'aro-net-status' for UI prompts.
+      start_network_monitor(app.handle().clone());
 
       #[cfg(target_os = "macos")]
       {
@@ -393,13 +825,7 @@ pub fn run() {
         let labels: Vec<String> = handle.webview_windows().keys().cloned().collect();
         log::info!("webview window labels: {labels:?}");
 
-        if let Some(main) = handle.get_webview_window("main") {
-          let _ = main.show();
-          let _ = main.set_focus();
-        } else if let Some((_, first)) = handle.webview_windows().into_iter().next() {
-          let _ = first.show();
-          let _ = first.set_focus();
-        }
+        // Do not show the window here; network monitor will show it after routing.
       }
 
       #[cfg(target_os = "linux")]
@@ -435,13 +861,7 @@ pub fn run() {
         let labels: Vec<String> = handle.webview_windows().keys().cloned().collect();
         log::info!("webview window labels: {labels:?}");
 
-        if let Some(main) = handle.get_webview_window("main") {
-          let _ = main.show();
-          let _ = main.set_focus();
-        } else if let Some((_, first)) = handle.webview_windows().into_iter().next() {
-          let _ = first.show();
-          let _ = first.set_focus();
-        }
+        // Do not show the window here; network monitor will show it after routing.
       }
 
       // Do not eager-load: Flutter sets override path before loading.
@@ -459,19 +879,8 @@ pub fn run() {
         }
       }
 
-      // The window is configured as `visible: false` in `tauri.conf.json`.
-      // On macOS we explicitly show/focus it above; do the same on Linux/Windows
-      // so the app does not run "headless" with no way to open it.
-      #[cfg(any(target_os = "linux", target_os = "windows"))]
-      {
-        if let Some(main) = app.get_webview_window("main") {
-          log::info!("showing main window on startup");
-          let _ = main.show();
-          let _ = main.set_focus();
-        } else {
-          log::warn!("main window not found; cannot show on startup");
-        }
-      }
+      // Do not show the window here; the network monitor will show it after
+      // it routes to the appropriate page (remote UI vs offline page).
 
       // Optional eager init (useful in dev to verify logging / libstudy init even if the web page
         // doesn't call it).
@@ -544,8 +953,13 @@ fn install_panic_hook() {
 
       // Log to both stderr and the configured logger (tauri-plugin-log) so we
       // get it in dev console and in log files.
-      eprintln!("[{ts}] [panic] thread={thread_name} location={location} payload={payload}\n{backtrace}");
-      log::error!("panic thread={thread_name} location={location} payload={payload}\n{backtrace}");
+      let msg = format!(
+        "[{ts}] [panic] thread={thread_name} location={location} payload={payload}\n{backtrace}"
+      );
+      eprintln!("{msg}");
+      log::error!("{msg}");
+      // Also write to a dedicated crash log file (best-effort).
+      append_crash_log(&msg);
     }));
   });
 }
