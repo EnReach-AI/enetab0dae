@@ -234,6 +234,7 @@ class _MyHomePageState extends State<MyHomePage>
       final rewardsMap = jsonDecode(rewards);
 
       print('node rewardsMap: $rewardsMap');
+      LoggerService().info('node rewardsMap: $rewardsMap');
       if (rewardsMap['code'] == 200) {
         sendMessageToWeb({
           'type': 'nodeRewards',

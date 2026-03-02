@@ -24,8 +24,8 @@ use tauri_plugin_shell::ShellExt;
 
 use url::Url;
 
-const OFFLINE_HEADER_PNG: &[u8] = include_bytes!("../dist/assets/header.png");
-const OFFLINE_LOGO_PNG: &[u8] = include_bytes!("../dist/assets/gr-logo-desktop.png");
+const OFFLINE_HEADER_PNG: &[u8] = include_bytes!("../icons/header.png");
+const OFFLINE_LOGO_PNG: &[u8] = include_bytes!("../icons/gr-logo-desktop.png");
 
 static OFFLINE_OVERLAY_HTML: OnceLock<String> = OnceLock::new();
 static CRASH_LOG_DIR: OnceLock<PathBuf> = OnceLock::new();

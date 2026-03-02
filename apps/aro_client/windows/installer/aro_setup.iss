@@ -1,4 +1,4 @@
-#define MyAppName "ARO"
+#define MyAppName "ARO Desktop"
 #define MyAppVersion "0.0.1"
 #define MyAppPublisher "ARO Network"
 #define MyAppURL "https://aro.network"
@@ -23,8 +23,15 @@ DisableProgramGroupPage=yes
 
 PrivilegesRequired=lowest
 
-OutputDir=.\Output
-OutputBaseFilename=ARO_Setup
+ArchitecturesInstallIn64BitMode=x64
+
+UninstallFilesDir={app}\uninstall
+CreateUninstallRegKey=yes
+Uninstallable=yes
+
+; Output to the app root (apps/aro_client) so CI can upload it easily.
+OutputDir=..\..
+OutputBaseFilename=AROClient-Setup
 
 SetupIconFile=..\runner\resources\app_icon.ico
 
@@ -63,24 +70,6 @@ Flags: nowait postinstall skipifsilent
 
 Type: filesandordirs; Name: "{app}\aro_desktop.exe.WebView2"
 
-; AppData
-Type: filesandordirs; Name: "{userappdata}\ARO"
-Type: filesandordirs; Name: "{localappdata}\ARO"
-
-; Flutter
-Type: filesandordirs; Name: "{userappdata}\aro_desktop"
-Type: filesandordirs; Name: "{localappdata}\aro_desktop"
-
-; vendor
-Type: filesandordirs; Name: "{userappdata}\com.aro"
-Type: filesandordirs; Name: "{localappdata}\com.aro"
-
-; logs
-Type: filesandordirs; Name: "{userappdata}\libstudy"
-
-; Documents
-Type: filesandordirs; Name: "{userdocs}\ARO Desktop"
-
 Type: filesandordirs; Name: "{app}"
 
 [Code]
@@ -108,11 +97,6 @@ begin
   KillProcess('aro_desktop.exe');
 
   KillProcess('flutter_window.exe');
-
-  KillProcess('msedgewebview2.exe');
-  KillProcess('edgewebview2.exe');
-
-  KillProcess('msedge.exe');
 end;
 
 function IsProcessRunning(ProcessName: string): Boolean;
@@ -142,10 +126,7 @@ begin
   while Elapsed < TimeoutMS do
   begin
     if not (IsProcessRunning('aro_desktop.exe') or
-            IsProcessRunning('flutter_window.exe') or
-            IsProcessRunning('msedgewebview2.exe') or
-            IsProcessRunning('edgewebview2.exe') or
-            IsProcessRunning('msedge.exe')) then
+            IsProcessRunning('flutter_window.exe')) then
       Exit;
 
     Sleep(500);
@@ -153,13 +134,69 @@ begin
   end;
 end;
 
-procedure DeleteIfExists(DirName: string);
+procedure WaitWebView2Exit(TimeoutMS: Integer);
+var
+  Elapsed: Integer;
 begin
+  Elapsed := 0;
+  while Elapsed < TimeoutMS do
+  begin
+    if not (IsProcessRunning('msedgewebview2.exe') or
+            IsProcessRunning('edgewebview2.exe')) then
+      Exit;
+
+    Sleep(500);
+    Elapsed := Elapsed + 500;
+  end;
+end;
+
+function DeleteTreeBestEffort(DirName: string): Boolean;
+begin
+  Result := True;
   if DirExists(DirName) then
-    DelTree(DirName, True, True, True);
+    Result := DelTree(DirName, True, True, True);
+end;
+
+function EscapeForPowerShellSingleQuotedString(Value: string): string;
+begin
+  { In PowerShell, single-quoted strings escape a single quote by doubling it. }
+  Result := StringChangeEx(Value, '''', '''''', True);
+end;
+
+procedure KillWebView2ForFolder(WebView2Dir: string);
+var
+  ResultCode: Integer;
+  EscDir, PS: string;
+begin
+  { Best-effort: stop only WebView2 processes whose command line references
+    our app-specific WebView2 user data folder. This avoids killing WebView2
+    used by other apps. }
+  EscDir := EscapeForPowerShellSingleQuotedString(WebView2Dir);
+
+  PS :=
+    '$dir = ''' + EscDir + '''; ' +
+    'Get-CimInstance Win32_Process | ' +
+    'Where-Object { ' +
+    '  ($_.Name -eq ''msedgewebview2.exe'' -or $_.Name -eq ''edgewebview2.exe'') ' +
+    '  -and $_.CommandLine -and ($_.CommandLine -like (''*'' + $dir + ''*'')) ' +
+    '} | ForEach-Object { ' +
+    '  try { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue } catch {} ' +
+    '};';
+
+  Exec(
+    'powershell.exe',
+    '-NoProfile -ExecutionPolicy Bypass -Command "' + PS + '"',
+    '',
+    SW_HIDE,
+    ewWaitUntilTerminated,
+    ResultCode
+  );
 end;
 
 procedure CurUninstallStepChanged(CurUninstallStep: TUninstallStep);
+var
+  WebView2Dir: string;
+  i: Integer;
 begin
   if CurUninstallStep = usUninstall then
   begin
@@ -167,17 +204,19 @@ begin
 
     WaitAllProcessesExit(15000);
 
-    DeleteIfExists(ExpandConstant('{app}\aro_desktop.exe.WebView2'));
+    WebView2Dir := ExpandConstant('{app}\aro_desktop.exe.WebView2');
+    { WebView2 can keep file handles briefly after the main app exits.
+      Retry a few times and stop only WebView2 instances that reference
+      our own user-data folder. }
+    for i := 1 to 12 do
+    begin
+      if DeleteTreeBestEffort(WebView2Dir) then
+        Break;
 
-    DeleteIfExists(ExpandConstant('{app}'));
+      KillWebView2ForFolder(WebView2Dir);
+      Sleep(800);
+    end;
 
-    DeleteIfExists(ExpandConstant('{userappdata}\ARO'));
-    DeleteIfExists(ExpandConstant('{localappdata}\ARO'));
-    DeleteIfExists(ExpandConstant('{userappdata}\aro_desktop'));
-    DeleteIfExists(ExpandConstant('{localappdata}\aro_desktop'));
-    DeleteIfExists(ExpandConstant('{userappdata}\com.aro'));
-    DeleteIfExists(ExpandConstant('{localappdata}\com.aro'));
-    DeleteIfExists(ExpandConstant('{userappdata}\libstudy'));
-    DeleteIfExists(ExpandConstant('{userdocs}\ARO Desktop'));
+    DeleteTreeBestEffort(ExpandConstant('{app}'));
   end;
 end;
