@@ -668,8 +668,15 @@ fn start_network_monitor(app: tauri::AppHandle) {
           }
         }
         None => {
-          // Initial state: accept raw_state immediately to show UI quickly.
-          raw_state
+          // Initial startup: avoid jumping to Offline/NoInternet on a single transient failure.
+          // Keep main flow as Online until we confirm consecutive failures.
+          if raw_state == NetState::Online {
+            NetState::Online
+          } else if fail_count >= 1 {
+            raw_state
+          } else {
+            NetState::Online
+          }
         }
       };
 
@@ -785,46 +792,75 @@ pub fn run() {
         return;
       }
 
-      // Check for browser error pages (e.g. DNS failure) immediately and suppress them.
-      // This is a comprehensive check for any page load that doesn't look like our app.
+      // Detect real browser/network error pages and fallback to Tauri overlay.
+      // Keep detection strict to avoid false-positive on normal app startup.
       let detect_error_js = r#"
         (function() {
-          const text = document.body ? document.body.innerText : '';
-          // Common browser error keywords (English + Chinese + generic)
-          const errorKeywords = [
-            'Error resolving',
-            'Temporary failure',
-            'name resolution',
-            'This site can’t be reached',
-            'ERR_NAME_NOT_RESOLVED',
-            'DNS_PROBE_FINISHED_NXDOMAIN',
-            'ERR_CONNECTION_REFUSED',
-            'ERR_TIMED_OUT',
+          if (window.__ARO_PAGE_ERROR_WATCH_INSTALLED__) return;
+          window.__ARO_PAGE_ERROR_WATCH_INSTALLED__ = true;
+
+          const signatures = [
+            'error resolving',
+            'temporary failure in name resolution',
+            'err_name_not_resolved',
+            'dns_probe_finished_nxdomain',
+            'err_connection_refused',
+            'err_timed_out',
+            'this site can\'t be reached',
+            'this site can’t be reached',
             '找不到服务器',
-            '连接超时',
-            '网络连接错误'
+            '连接超时'
           ];
-          
-          let isError = errorKeywords.some(kw => text.includes(kw));
-          
-          // Additional check: valid ARO app pages usually have a root div.
-          // If the page has very little content and NO root div, it's likely an error page.
-          const hasRoot = document.getElementById('root') || document.getElementById('app');
-          if (!hasRoot && text.length < 500) {
-             // Heuristic: small page content without app root -> likely error page
-             isError = true;
+
+          const invokeFallback = (reason) => {
+            try {
+              const t = window.__TAURI__;
+              const invoke = t && t.core && t.core.invoke;
+              if (typeof invoke === 'function') {
+                invoke('report_page_load_error', { error: reason });
+              }
+            } catch (_) {}
+
+            try {
+              if (document.body) {
+                document.body.innerHTML = '';
+                document.body.style.backgroundColor = '#000000';
+              }
+            } catch (_) {}
+          };
+
+          const inspect = () => {
+            try {
+              const text = document.body ? (document.body.innerText || '') : '';
+              const title = document.title || '';
+              const href = String(window.location && window.location.href ? window.location.href : '');
+              const haystack = (text + '\n' + title + '\n' + href).toLowerCase();
+              const matched = signatures.find((s) => haystack.includes(s));
+              if (matched) {
+                invokeFallback('browser_error_signature:' + matched);
+                return true;
+              }
+            } catch (_) {}
+            return false;
+          };
+
+          const runChecks = () => {
+            if (inspect()) return;
+            setTimeout(inspect, 1200);
+            setTimeout(inspect, 2500);
+          };
+
+          if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', runChecks, { once: true });
+          } else {
+            runChecks();
           }
 
-          if (isError) {
-             // invoke Rust command to switch to offline UI
-             window.__TAURI__.core.invoke('report_page_load_error', { error: text.substring(0, 100) });
-             // Clear the body to hide the error message immediately 
-             document.body.innerHTML = '';
-             document.body.style.backgroundColor = '#000000'; // Match app background
-          }
+          window.addEventListener('error', function () {
+            setTimeout(inspect, 0);
+          }, true);
         })();
       "#;
-      let _ = window.eval(detect_error_js);
       let _ = window.eval(detect_error_js);
 
       if let Err(e) = window.eval(FLUTTER_COMPAT_BRIDGE_JS) {
