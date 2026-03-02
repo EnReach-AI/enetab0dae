@@ -14,7 +14,7 @@ AppPublisherURL={#MyAppURL}
 AppSupportURL={#MyAppURL}
 AppUpdatesURL={#MyAppURL}
 
-DefaultDirName={autopf}{#MyAppName}
+DefaultDirName={autopf}\{#MyAppName}
 DefaultGroupName={#MyAppName}
 
 DisableDirPage=no
@@ -34,11 +34,11 @@ OutputBaseFilename=AROClient-Setup
 
 SetupIconFile=..\runner\resources\app_icon.ico
 
-UninstallDisplayIcon={app}{#MyAppExeName}
+UninstallDisplayIcon={app}\{#MyAppExeName}
 
 AppMutex=AROClientMutex
 
-UninstallFilesDir={localappdata}{#MyAppName}\uninstall
+UninstallFilesDir={localappdata}\{#MyAppName}\uninstall
 CreateUninstallRegKey=yes
 Uninstallable=yes
 
@@ -52,60 +52,71 @@ Name: "desktopicon"; Description: "Create a desktop icon"; Flags: unchecked
 Source: "....\build\windows\x64\runner\Release*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
 
 [Icons]
-Name: "{autoprograms}{#MyAppName}"; Filename: "{app}{#MyAppExeName}"
-Name: "{autodesktop}{#MyAppName}"; Filename: "{app}{#MyAppExeName}"; Tasks: desktopicon
+Name: "{autoprograms}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"
+Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; Tasks: desktopicon
 
 [Run]
-Filename: "{app}{#MyAppExeName}"; Description: "Launch {#MyAppName}"; Flags: nowait postinstall skipifsilent
+Filename: "{app}\{#MyAppExeName}"; Description: "Launch {#MyAppName}"; Flags: nowait postinstall skipifsilent
 
 [UninstallDelete]
 
 ; 删除 WebView2 缓存
-Type: filesandordirs; Name: "{app}{#MyAppExeName}.WebView2"
+Type: filesandordirs; Name: "{app}\{#MyAppExeName}.WebView2"
+Type: filesandordirs; Name: "{localappdata}\{#MyAppExeName}.WebView2"
 
 ; 删除安装目录
 Type: filesandordirs; Name: "{app}"
 
 ; 删除 AppData 缓存
-Type: filesandordirs; Name: "{localappdata}\ARO Desktop"
-Type: filesandordirs; Name: "{appdata}\ARO Desktop"
+Type: filesandordirs; Name: "{localappdata}\{#MyAppName}"
+Type: filesandordirs; Name: "{appdata}\{#MyAppName}"
 
 [Code]
 
-procedure KillProcess(ProcessName: string);
+function ExecAndLog(const Filename, Params, WorkingDir: string): Integer;
 var
-ResultCode: Integer;
+  ResultCode: Integer;
+  Ok: Boolean;
 begin
-Exec(
-'taskkill',
-'/F /T /IM ' + ProcessName,
-'',
-SW_HIDE,
-ewWaitUntilTerminated,
-ResultCode
-);
+  Ok := Exec(Filename, Params, WorkingDir, SW_HIDE, ewWaitUntilTerminated, ResultCode);
+  Log(Format('Exec: %s %s => ok=%d, rc=%d', [Filename, Params, Ord(Ok), ResultCode]));
+  if Ok then
+    Result := ResultCode
+  else
+    Result := -1;
+end;
+
+procedure KillProcess(ProcessName: string);
+begin
+ExecAndLog('taskkill', '/F /T /IM ' + ProcessName, '');
 end;
 
 procedure KillAllProcesses();
 var
-ResultCode: Integer;
+  WebView2DirToken: string;
+  PS: string;
 begin
 
 KillProcess('{#MyAppExeName}');
 KillProcess('flutter_window.exe');
 
-KillProcess('msedgewebview2.exe');
-KillProcess('edgewebview2.exe');
-KillProcess('WebView2Manager.exe');
+{ Avoid killing all WebView2 runtime processes system-wide.
+  Instead, terminate only those that reference our app's WebView2 user-data dir (see PowerShell below). }
 
-Exec(
-'cmd.exe',
-'/c wmic process where "CommandLine like ''%aro_desktop.exe.WebView2%''" call terminate',
-'',
-SW_HIDE,
-ewWaitUntilTerminated,
-ResultCode
-);
+{ Kill processes whose CommandLine references the app's WebView2 user-data dir.
+  WMIC is deprecated on newer Windows, so prefer PowerShell/CIM. }
+WebView2DirToken := '{#MyAppExeName}.WebView2';
+PS :=
+  '-NoProfile -ExecutionPolicy Bypass -Command '
+  + '"$token=''''' + WebView2DirToken + '''''; '
+  + 'Get-CimInstance Win32_Process | '
+  + 'Where-Object { $_.CommandLine -and ($_.CommandLine -like (''*'' + $token + ''*'')) } | '
+  + 'ForEach-Object { try { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue } catch {} }"';
+
+ExecAndLog('powershell.exe', PS, '');
+
+{ Fallback for older environments where CIM is unavailable }
+ExecAndLog('cmd.exe', '/c wmic process where "CommandLine like ''%' + WebView2DirToken + '%''" call terminate', '');
 
 end;
 
@@ -133,20 +144,18 @@ var
 i: Integer;
 begin
 
-for i := 1 to 30 do
+for i := 1 to 120 do
 begin
-
-```
 if not (
   IsProcessRunning('{#MyAppExeName}') or
   IsProcessRunning('flutter_window.exe') or
-  IsProcessRunning('msedgewebview2.exe')
+  IsProcessRunning('msedgewebview2.exe') or
+  IsProcessRunning('edgewebview2.exe') or
+  IsProcessRunning('WebView2Manager.exe')
 ) then
   exit;
 
 Sleep(500);
-```
-
 end;
 
 end;
@@ -156,13 +165,18 @@ begin
 
 if CurUninstallStep = usUninstall then
 begin
-
-```
 KillAllProcesses();
 
 WaitProcessesExit();
-```
+end;
 
 end;
 
+function InitializeUninstall(): Boolean;
+begin
+  { Run early so files/directories are not locked when deletion starts }
+  Log('InitializeUninstall: attempting to terminate running processes');
+  KillAllProcesses();
+  WaitProcessesExit();
+  Result := True;
 end;

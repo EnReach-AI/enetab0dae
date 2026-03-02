@@ -612,12 +612,13 @@ fn start_network_monitor(app: tauri::AppHandle) {
     .unwrap_or_else(|| "https://0ee63895-262b.ipproxy.aro.network/desktop/".to_string());
 
   // Faster reaction for “断网/网络差” UI switching.
-  let poll_interval = Duration::from_millis(300);
-  let timeout = Duration::from_millis(250);
+  let poll_interval = Duration::from_millis(1000); // 1s check
+  let timeout = Duration::from_millis(1500); // 1.5s timeout
 
   std::thread::spawn(move || {
     let mut last_emitted: Option<NetState> = None;
-    let mut bad_streak: u8 = 0;
+    let mut fail_count: u8 = 0;
+    let mut success_count: u8 = 0;
     let mut remote_loaded = false;
 
     // Wait for the window handle to exist.
@@ -641,13 +642,35 @@ fn start_network_monitor(app: tauri::AppHandle) {
 
     loop {
       let raw_state = check_remote_reachability(&remote_ui_url, timeout);
-      let state = if raw_state == NetState::Online {
-        bad_streak = 0;
-        NetState::Online
+      
+      if raw_state == NetState::Online {
+        fail_count = 0;
+        success_count = success_count.saturating_add(1);
       } else {
-        bad_streak = bad_streak.saturating_add(1);
-        // Require two consecutive bad reads before we consider it truly bad.
-        if bad_streak >= 2 { raw_state } else { last_emitted.unwrap_or(raw_state) }
+        success_count = 0;
+        fail_count = fail_count.saturating_add(1);
+      }
+
+      // Determine the effective state with hysteresis.
+      let state = match last_emitted {
+        Some(NetState::Online) => {
+          // If currently Online, require 2 failures to switch to Offline/NoInternet.
+          if fail_count >= 2 { raw_state } else { NetState::Online }
+        }
+        Some(s) => {
+          // If currently Offline/NoInternet
+          if raw_state == NetState::Online {
+             // Require 2 successes to switch back to Online.
+             if success_count >= 2 { NetState::Online } else { s }
+          } else {
+             // Switch between Offline <-> NoInternet immediately if valid
+             raw_state
+          }
+        }
+        None => {
+          // Initial state: accept raw_state immediately to show UI quickly.
+          raw_state
+        }
       };
 
       let now = OffsetDateTime::now_utc().unix_timestamp_nanos() / 1_000_000;
@@ -657,6 +680,7 @@ fn start_network_monitor(app: tauri::AppHandle) {
       };
 
       // Emit only when state changes, or if we haven't been able to emit yet.
+      // Note: If raw_state flipped but we suppressed it due to hysteresis, state == last_emitted, so we won't emit.
       let should_emit = last_emitted.map(|s| s != state).unwrap_or(true);
       if should_emit {
         // Emit to all windows (main + offline overlay).
