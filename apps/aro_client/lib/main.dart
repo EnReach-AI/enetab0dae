@@ -79,6 +79,7 @@ class _MyHomePageState extends State<MyHomePage>
   bool _isConnected = true;
 
   bool _trayMenuOpening = false;
+  bool _isShuttingDown = false;
 
   final service = StudyService.instance;
 
@@ -545,9 +546,33 @@ class _MyHomePageState extends State<MyHomePage>
   }
 
   Future<void> _trayExit() async {
+    await _shutdownAndExit();
+  }
+
+  Future<void> _shutdownAndExit() async {
+    if (_isShuttingDown) return;
+    _isShuttingDown = true;
+
+    if (Platform.isWindows) {
+      try {
+        trayManager.removeListener(this);
+      } catch (_) {}
+      try {
+        windowManager.removeListener(this);
+      } catch (_) {}
+      try {
+        await trayManager.destroy();
+      } catch (_) {}
+      try {
+        await windowManager.destroy();
+      } catch (_) {}
+    }
+
     try {
-      await trayManager.destroy();
+      _desktopController = null;
+      _controller = null;
     } catch (_) {}
+
     exit(0);
   }
 
@@ -630,9 +655,18 @@ class _MyHomePageState extends State<MyHomePage>
   @override
   void dispose() {
     if (Platform.isWindows) {
-      trayManager.removeListener(this);
-      windowManager.removeListener(this);
+      try {
+        trayManager.removeListener(this);
+      } catch (_) {}
+      try {
+        windowManager.removeListener(this);
+      } catch (_) {}
+      try {
+        trayManager.destroy();
+      } catch (_) {}
     }
+    _desktopController = null;
+    _controller = null;
     ConnectivityService().dispose();
     super.dispose();
   }

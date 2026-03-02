@@ -105,6 +105,20 @@ begin
   ExecAndLog(ExpandConstant('{sys}\WindowsPowerShell\v1.0\powershell.exe'), PS, '');
 end;
 
+procedure KillProcessesUnderDir(const DirPath: string);
+var
+  PS: string;
+begin
+  PS :=
+    '-NoProfile -ExecutionPolicy Bypass -Command '
+    + '"$dir=''''' + DirPath + '''''; '
+    + 'Get-CimInstance Win32_Process | '
+    + 'Where-Object { $_.ExecutablePath -and ($_.ExecutablePath -like ($dir + ''\\*'')) } | '
+    + 'ForEach-Object { try { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue } catch {} }"';
+
+  ExecAndLog(ExpandConstant('{sys}\WindowsPowerShell\v1.0\powershell.exe'), PS, '');
+end;
+
 function ForceDeleteDir(const DirPath: string): Boolean;
 var
   i: Integer;
@@ -172,6 +186,7 @@ KillProcess('{#MyAppExeName}');
 KillProcess('flutter_window.exe');
 KillProcessByPath(AppExePath);
 KillProcessByPath(FlutterWindowExePath);
+KillProcessesUnderDir(ExpandConstant('{app}'));
 
 { Avoid killing all WebView2 runtime processes system-wide.
   Instead, terminate only those that reference our app's WebView2 user-data dir (see PowerShell below). }
