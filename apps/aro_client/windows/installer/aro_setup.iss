@@ -225,22 +225,27 @@ begin
     'setlocal enableextensions' + #13#10 +
     'set "APP_DIR=' + AppDir + '"' + #13#10 +
     'set "WV2_DIR=' + WebView2Dir + '"' + #13#10 +
+    'set "WV2_TOKEN={#MyAppExeName}.WebView2"' + #13#10 +
     'set "LOG=%TEMP%\aro_uninstall_cleanup.log"' + #13#10 +
     'echo ===== ARO cleanup start %DATE% %TIME% =====>>"%LOG%"' + #13#10 +
     'echo APP_DIR="%APP_DIR%">>"%LOG%"' + #13#10 +
     'echo WV2_DIR="%WV2_DIR%">>"%LOG%"' + #13#10 +
+    'echo WV2_TOKEN="%WV2_TOKEN%">>"%LOG%"' + #13#10 +
     'for /l %%i in (1,1,20) do (' + #13#10 +
     '  echo ---- attempt %%i %DATE% %TIME% ---->>"%LOG%"' + #13#10 +
     '  taskkill /IM "{#MyAppExeName}" /F /T >nul 2>nul' + #13#10 +
     '  taskkill /IM "flutter_window.exe" /F /T >nul 2>nul' + #13#10 +
-    '  powershell.exe -NoProfile -ExecutionPolicy Bypass -Command "$a=$env:APP_DIR; $w=$env:WV2_DIR; Get-CimInstance Win32_Process | Where-Object { $_.CommandLine -and (($_.CommandLine -like (''*'' + $w + ''*'')) -or ($_.CommandLine -like (''*'' + $a + ''*''))) } | ForEach-Object { try { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue } catch {} }" >>"%LOG%" 2>&1' + #13#10 +
-    '  if %%i LSS 15 (' + #13#10 +
-    '    powershell.exe -NoProfile -ExecutionPolicy Bypass -Command "$dir=$env:WV2_DIR; Get-CimInstance Win32_Process | Where-Object { ($_.Name -eq ''msedgewebview2.exe'' -or $_.Name -eq ''edgewebview2.exe'') -and $_.CommandLine -and ($_.CommandLine -like (''*'' + $dir + ''*'')) } | ForEach-Object { try { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue } catch {} }" >>"%LOG%" 2>&1' + #13#10 +
+    '  powershell.exe -NoProfile -ExecutionPolicy Bypass -Command "$a=$env:APP_DIR; $w=$env:WV2_DIR; $t=$env:WV2_TOKEN; Get-CimInstance Win32_Process | Where-Object { $_.CommandLine -and (($_.CommandLine -like (''*'' + $w + ''*'')) -or ($_.CommandLine -like (''*'' + $a + ''*'')) -or ($_.CommandLine -like (''*'' + $t + ''*''))) } | ForEach-Object { try { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue } catch {} }" >>"%LOG%" 2>&1' + #13#10 +
+    '  wmic process where "CommandLine like ''%{#MyAppExeName}.WebView2%''" call terminate >>"%LOG%" 2>&1' + #13#10 +
+    '  if %%i LSS 6 (' + #13#10 +
+    '    powershell.exe -NoProfile -ExecutionPolicy Bypass -Command "$dir=$env:WV2_DIR; $tok=$env:WV2_TOKEN; Get-CimInstance Win32_Process | Where-Object { ($_.Name -eq ''msedgewebview2.exe'' -or $_.Name -eq ''edgewebview2.exe'') -and $_.CommandLine -and (($_.CommandLine -like (''*'' + $dir + ''*'')) -or ($_.CommandLine -like (''*'' + $tok + ''*''))) } | ForEach-Object { try { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue } catch {} }" >>"%LOG%" 2>&1' + #13#10 +
     '  ) else (' + #13#10 +
     '    echo global taskkill webview2>>"%LOG%"' + #13#10 +
     '    taskkill /IM "msedgewebview2.exe" /F /T >>"%LOG%" 2>&1' + #13#10 +
     '    taskkill /IM "edgewebview2.exe" /F /T >>"%LOG%" 2>&1' + #13#10 +
+    '    taskkill /IM "WebView2Manager.exe" /F /T >>"%LOG%" 2>&1' + #13#10 +
     '  )' + #13#10 +
+    '  tasklist /FO TABLE | findstr /I "msedgewebview2.exe edgewebview2.exe" >>"%LOG%" 2>&1' + #13#10 +
     '  if exist "%WV2_DIR%" attrib -r -s -h "%WV2_DIR%\*" /s /d >nul 2>nul' + #13#10 +
     '  if exist "%WV2_DIR%" rmdir /s /q "%WV2_DIR%" >nul 2>nul' + #13#10 +
     '  if exist "%APP_DIR%" rmdir /s /q "%APP_DIR%" >nul 2>nul' + #13#10 +
