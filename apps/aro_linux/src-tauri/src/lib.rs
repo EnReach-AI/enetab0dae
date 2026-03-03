@@ -149,10 +149,13 @@ fn init_crash_log_dir(app: &tauri::AppHandle) {
 }
 
 fn append_crash_log(message: &str) {
-  let Some(dir) = CRASH_LOG_DIR.get() else {
-    // Best-effort: at least stderr.
-    eprintln!("[crash-log] {message}");
-    return;
+  let dir = if let Some(dir) = CRASH_LOG_DIR.get() {
+    dir.clone()
+  } else {
+    let fallback_dir = std::env::temp_dir().join("aro_desktop_logs");
+    let _ = fs::create_dir_all(&fallback_dir);
+    let _ = CRASH_LOG_DIR.set(fallback_dir.clone());
+    fallback_dir
   };
 
   let path = dir.join("crash.log");
@@ -160,6 +163,8 @@ fn append_crash_log(message: &str) {
 
   if let Ok(mut f) = fs::OpenOptions::new().create(true).append(true).open(&path) {
     let _ = writeln!(f, "{message}");
+  } else {
+    eprintln!("[crash-log] {message}");
   }
 }
 
@@ -438,6 +443,80 @@ const FLUTTER_COMPAT_BRIDGE_JS: &str = r#"
 })();
 "#;
 
+const GLOBAL_APP_CRASH_BRIDGE_JS: &str = r#"
+(function () {
+  try {
+    if (window.__ARO_CRASH_LOGGER_INSTALLED__) return;
+    window.__ARO_CRASH_LOGGER_INSTALLED__ = true;
+
+    const invoke = (cmd, args) => {
+      const w = window;
+      const fn = (w.__TAURI__ && w.__TAURI__.core && w.__TAURI__.core.invoke)
+        || (w.__TAURI_INTERNALS__ && w.__TAURI_INTERNALS__.invoke);
+      if (typeof fn === 'function') {
+        return fn(cmd, args);
+      }
+      return Promise.reject(new Error('Tauri invoke is not available'));
+    };
+
+    const sendCrash = (payload) => {
+      try {
+        invoke('bridge_crash_log', payload);
+      } catch {}
+    };
+
+    window.addEventListener('error', (event) => {
+      const maybeError = event && event.error;
+      const message =
+        (maybeError && maybeError.message)
+        || event.message
+        || 'unknown window error';
+      const stack = (maybeError && maybeError.stack)
+        ? String(maybeError.stack)
+        : null;
+      sendCrash({
+        kind: 'window.error',
+        message: String(message),
+        stack,
+        url: event.filename ? String(event.filename) : null,
+        line: Number.isFinite(event.lineno) ? Number(event.lineno) : null,
+        column: Number.isFinite(event.colno) ? Number(event.colno) : null,
+      });
+    });
+
+    window.addEventListener('unhandledrejection', (event) => {
+      const reason = event && event.reason;
+      let message = 'unhandled rejection';
+      let stack = null;
+
+      if (reason && typeof reason === 'object') {
+        if (typeof reason.message === 'string' && reason.message.length > 0) {
+          message = reason.message;
+        } else {
+          try { message = JSON.stringify(reason); } catch { message = String(reason); }
+        }
+        if (typeof reason.stack === 'string' && reason.stack.length > 0) {
+          stack = reason.stack;
+        }
+      } else if (typeof reason === 'string') {
+        message = reason;
+      } else if (typeof reason !== 'undefined') {
+        message = String(reason);
+      }
+
+      sendCrash({
+        kind: 'unhandledrejection',
+        message: String(message),
+        stack,
+        url: null,
+        line: null,
+        column: null,
+      });
+    });
+  } catch {}
+})();
+"#;
+
 fn offline_overlay_html() -> &'static str {
   OFFLINE_OVERLAY_HTML.get_or_init(|| {
     let header_b64 = base64::engine::general_purpose::STANDARD.encode(OFFLINE_HEADER_PNG);
@@ -668,15 +747,8 @@ fn start_network_monitor(app: tauri::AppHandle) {
           }
         }
         None => {
-          // Initial startup: avoid jumping to Offline/NoInternet on a single transient failure.
-          // Keep main flow as Online until we confirm consecutive failures.
-          if raw_state == NetState::Online {
-            NetState::Online
-          } else if fail_count >= 1 {
-            raw_state
-          } else {
-            NetState::Online
-          }
+          // Initial state: accept raw_state immediately to show UI quickly.
+          raw_state
         }
       };
 
@@ -764,6 +836,8 @@ pub fn run() {
     return;
   }
 
+  install_panic_hook();
+
   let builder = tauri::Builder::default()
     .plugin(tauri_plugin_shell::init())
     .on_page_load(|window, _payload| {
@@ -792,76 +866,9 @@ pub fn run() {
         return;
       }
 
-      // Detect real browser/network error pages and fallback to Tauri overlay.
-      // Keep detection strict to avoid false-positive on normal app startup.
-      let detect_error_js = r#"
-        (function() {
-          if (window.__ARO_PAGE_ERROR_WATCH_INSTALLED__) return;
-          window.__ARO_PAGE_ERROR_WATCH_INSTALLED__ = true;
-
-          const signatures = [
-            'error resolving',
-            'temporary failure in name resolution',
-            'err_name_not_resolved',
-            'dns_probe_finished_nxdomain',
-            'err_connection_refused',
-            'err_timed_out',
-            'this site can\'t be reached',
-            'this site can’t be reached',
-            '找不到服务器',
-            '连接超时'
-          ];
-
-          const invokeFallback = (reason) => {
-            try {
-              const t = window.__TAURI__;
-              const invoke = t && t.core && t.core.invoke;
-              if (typeof invoke === 'function') {
-                invoke('report_page_load_error', { error: reason });
-              }
-            } catch (_) {}
-
-            try {
-              if (document.body) {
-                document.body.innerHTML = '';
-                document.body.style.backgroundColor = '#000000';
-              }
-            } catch (_) {}
-          };
-
-          const inspect = () => {
-            try {
-              const text = document.body ? (document.body.innerText || '') : '';
-              const title = document.title || '';
-              const href = String(window.location && window.location.href ? window.location.href : '');
-              const haystack = (text + '\n' + title + '\n' + href).toLowerCase();
-              const matched = signatures.find((s) => haystack.includes(s));
-              if (matched) {
-                invokeFallback('browser_error_signature:' + matched);
-                return true;
-              }
-            } catch (_) {}
-            return false;
-          };
-
-          const runChecks = () => {
-            if (inspect()) return;
-            setTimeout(inspect, 1200);
-            setTimeout(inspect, 2500);
-          };
-
-          if (document.readyState === 'loading') {
-            document.addEventListener('DOMContentLoaded', runChecks, { once: true });
-          } else {
-            runChecks();
-          }
-
-          window.addEventListener('error', function () {
-            setTimeout(inspect, 0);
-          }, true);
-        })();
-      "#;
-      let _ = window.eval(detect_error_js);
+      if let Err(e) = window.eval(GLOBAL_APP_CRASH_BRIDGE_JS) {
+        log::warn!("failed to inject global crash bridge (page load): {e}");
+      }
 
       if let Err(e) = window.eval(FLUTTER_COMPAT_BRIDGE_JS) {
         log::warn!("failed to inject compat bridge (page load): {e}");
@@ -924,8 +931,6 @@ pub fn run() {
       #[cfg(target_os = "windows")]
       log::info!("Platform: Windows (auto-update not supported)");
       log::info!("==========================================================");
-
-      install_panic_hook();
 
       // Ensure libstudy is always loaded from the same per-user location.
       // This makes install + update paths consistent: ~/.local/share/<identifier>/libstudy.so
@@ -1027,10 +1032,13 @@ pub fn run() {
       // Provide a Flutter-compatible JS bridge so the remote React page can keep
       // using window.Flutter.postMessage + window.onFlutterMessage.
       if let Some(main) = app.get_webview_window("main") {
+        if let Err(e) = main.eval(GLOBAL_APP_CRASH_BRIDGE_JS) {
+          log::warn!("failed to inject global crash bridge: {e}");
+        }
         if let Err(e) = main.eval(FLUTTER_COMPAT_BRIDGE_JS) {
-          log::warn!("failed to inject Flutter compat bridge: {e}");
+          log::warn!("failed to inject  compat bridge: {e}");
         } else {
-          log::info!("Flutter compat bridge injected");
+          log::info!("Compat bridge injected");
         }
       }
 
@@ -1059,7 +1067,7 @@ pub fn run() {
     })
     .invoke_handler(tauri::generate_handler![
       bridge_log,
-      report_page_load_error,
+      bridge_crash_log,
       set_libstudy_override_path,
       init_libstudy,
       init_libstudy_with_params,
@@ -1127,6 +1135,39 @@ fn bridge_log(message: String) {
 }
 
 #[tauri::command]
+fn bridge_crash_log(
+  kind: String,
+  message: String,
+  stack: Option<String>,
+  url: Option<String>,
+  line: Option<u32>,
+  column: Option<u32>,
+) {
+  let now = OffsetDateTime::now_local().unwrap_or_else(|_| OffsetDateTime::now_utc());
+  let fmt = format_description::parse("[year]-[month]-[day] [hour]:[minute]:[second].[subsecond digits:3]")
+    .unwrap_or_else(|_| format_description::parse("[year]-[month]-[day]T[hour]:[minute]:[second].[subsecond digits:3]").expect("valid fallback time format"));
+  let ts = now
+    .format(&fmt)
+    .unwrap_or_else(|_| "<time-format-error>".to_string());
+
+  let entry = format!(
+    "[{ts}] [web-crash] kind={kind} url={} line={} column={} message={}\nstack={} ",
+    url.unwrap_or_else(|| "<unknown>".to_string()),
+    line
+      .map(|value| value.to_string())
+      .unwrap_or_else(|| "<unknown>".to_string()),
+    column
+      .map(|value| value.to_string())
+      .unwrap_or_else(|| "<unknown>".to_string()),
+    message,
+    stack.unwrap_or_else(|| "<none>".to_string()),
+  );
+
+  log::error!("{entry}");
+  append_crash_log(&entry);
+}
+
+#[tauri::command]
 fn libstudy_info() -> Result<serde_json::Value, String> {
   let (loaded, path) = libstudy::info().map_err(|e| e.to_string())?;
   Ok(serde_json::json!({
@@ -1162,6 +1203,9 @@ async fn init_libstudy_auto(app: tauri::AppHandle) -> Result<String, String> {
   // Ensure the per-user copy exists and prefer it for loading.
   set_default_libstudy_override(&app);
 
+  log::info!("init_libstudy_ing");
+  
+
   #[cfg(target_os = "linux")]
   let app_for_update_prompt = app.clone();
 
@@ -1191,6 +1235,7 @@ async fn init_libstudy_auto(app: tauri::AppHandle) -> Result<String, String> {
       "BaseWSURL": "staging-ws.aro.network"
     }
   });
+
 
   println!("[init_libstudy_auto] init_params={}", init_params);
   log::info!("init_libstudy_auto: {init_params}");
@@ -1376,27 +1421,6 @@ async fn get_rewards() -> Result<String, String> {
   println!("[get_rewards] response={resp}");
   log::info!("get_rewards response={resp}");
   Ok(resp)
-}
-
-#[tauri::command]
-fn report_page_load_error(app: tauri::AppHandle, window: tauri::WebviewWindow, error: String) {
-  log::warn!("report_page_load_error: {} (in window {})", error, window.label());
-
-  // If the main window failed to load, treat it as effectively offline.
-  if window.label() == "main" {
-    // Hide the main window to avoid showing the error page.
-    let _ = window.hide();
-    
-    // Show the offline overlay if not already visible.
-    if app.get_webview_window("offline").is_none() {
-      let _ = ensure_offline_overlay_window(&app);
-    }
-    
-    if let Some(off) = app.get_webview_window("offline") {
-      let _ = off.show();
-      let _ = off.set_focus();
-    }
-  }
 }
 
 #[tauri::command]
