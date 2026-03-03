@@ -34,6 +34,118 @@ fn now_ms_i64() -> i64 {
   (OffsetDateTime::now_utc().unix_timestamp_nanos() / 1_000_000) as i64
 }
 
+// -------------------------
+// libstudy (Go) call routing
+// -------------------------
+//
+// We embed a Go shared library (libstudy). On macOS and some GUI runtimes, it's
+// common to run application code on threads with a very small native stack
+// (~512KB). Calling into the Go runtime from such a thread can crash the whole
+// process with:
+//   fatal error: morestack on g0
+//
+// To avoid this, route all Go calls through a dedicated worker thread that we
+// create with an explicitly large stack.
+
+#[derive(Debug)]
+enum LibstudyOp {
+  Init { init_params_json: String },
+  NodeSignUp,
+  GetNodeStat,
+  GetRewards,
+  GetCurrentVersion,
+  GetLastVersion,
+}
+
+struct LibstudyRequest {
+  op: LibstudyOp,
+  resp: std::sync::mpsc::Sender<Result<String, String>>,
+}
+
+struct LibstudyWorker {
+  tx: std::sync::mpsc::Sender<LibstudyRequest>,
+}
+
+static LIBSTUDY_WORKER: OnceLock<LibstudyWorker> = OnceLock::new();
+
+fn init_libstudy_worker() {
+  if LIBSTUDY_WORKER.get().is_some() {
+    return;
+  }
+
+  let (tx, rx) = std::sync::mpsc::channel::<LibstudyRequest>();
+
+  // Go runtime is happiest when entered on a thread with a sufficiently large
+  // native stack. 8MiB is a conservative choice.
+  let builder = std::thread::Builder::new()
+    .name("libstudy-go-worker".to_string())
+    .stack_size(8 * 1024 * 1024);
+
+  let _ = builder.spawn(move || {
+    while let Ok(req) = rx.recv() {
+      let result: Result<String, String> = match req.op {
+        LibstudyOp::Init { init_params_json } => libstudy::with_lib(|lib, _path| lib.init(&init_params_json))
+          .map_err(|e| e.to_string()),
+        LibstudyOp::NodeSignUp => libstudy::with_lib(|lib, _path| lib.node_sign_up())
+          .map_err(|e| e.to_string()),
+        LibstudyOp::GetNodeStat => libstudy::with_lib(|lib, _path| lib.get_node_stat())
+          .map_err(|e| e.to_string()),
+        LibstudyOp::GetRewards => libstudy::with_lib(|lib, _path| lib.get_rewards())
+          .map_err(|e| e.to_string()),
+        LibstudyOp::GetCurrentVersion => libstudy::with_lib(|lib, _path| lib.get_current_version())
+          .map_err(|e| e.to_string()),
+        LibstudyOp::GetLastVersion => libstudy::with_lib(|lib, _path| lib.get_last_version())
+          .map_err(|e| e.to_string()),
+      };
+
+      let _ = req.resp.send(result);
+    }
+  });
+
+  let _ = LIBSTUDY_WORKER.set(LibstudyWorker { tx });
+}
+
+async fn call_libstudy(op: LibstudyOp) -> Result<String, String> {
+  init_libstudy_worker();
+
+  let worker = LIBSTUDY_WORKER
+    .get()
+    .ok_or_else(|| "libstudy worker not initialized".to_string())?;
+
+  let (resp_tx, resp_rx) = std::sync::mpsc::channel::<Result<String, String>>();
+  worker
+    .tx
+    .send(LibstudyRequest { op, resp: resp_tx })
+    .map_err(|e| format!("failed to enqueue libstudy request: {e}"))?;
+
+  // Waiting for a response is blocking; do it off the async runtime.
+  tauri::async_runtime::spawn_blocking(move || {
+    resp_rx
+      .recv()
+      .map_err(|e| format!("libstudy worker dropped response: {e}"))?
+  })
+  .await
+  .map_err(|e| format!("libstudy wait task join error: {e}"))?
+}
+
+fn call_libstudy_sync(op: LibstudyOp) -> Result<String, String> {
+  init_libstudy_worker();
+
+  let worker = LIBSTUDY_WORKER
+    .get()
+    .ok_or_else(|| "libstudy worker not initialized".to_string())?;
+
+  let (resp_tx, resp_rx) = std::sync::mpsc::channel::<Result<String, String>>();
+  worker
+    .tx
+    .send(LibstudyRequest { op, resp: resp_tx })
+    .map_err(|e| format!("failed to enqueue libstudy request: {e}"))?;
+
+  resp_rx
+    .recv()
+    .map_err(|e| format!("libstudy worker dropped response: {e}"))?
+}
+
 fn emit_no_internet_and_show_overlay(
   app: &tauri::AppHandle,
   main_window: Option<tauri::WebviewWindow>,
@@ -1049,6 +1161,9 @@ pub fn run() {
       // This makes install + update paths consistent: ~/.local/share/<identifier>/libstudy.so
       set_default_libstudy_override(&app.handle());
 
+      // Initialize the Go-call worker early to avoid first-call surprises.
+      init_libstudy_worker();
+
       // Tauri-layer network monitor: emits 'aro-net-status' for UI prompts.
       start_network_monitor(app.handle().clone());
 
@@ -1300,7 +1415,7 @@ fn set_libstudy_override_path(path: Option<String>) -> Result<(), String> {
 }
 
 #[tauri::command]
-fn init_libstudy(api_base_url: Option<String>, ws_base_url: Option<String>) -> Result<String, String> {
+async fn init_libstudy(api_base_url: Option<String>, ws_base_url: Option<String>) -> Result<String, String> {
   let init_params = serde_json::json!({
     "config": {
       // Match Go struct field names (no json tags in libstudy): BaseAPIURL/BaseWSURL
@@ -1308,8 +1423,10 @@ fn init_libstudy(api_base_url: Option<String>, ws_base_url: Option<String>) -> R
       "BaseWSURL": ws_base_url.unwrap_or_default()
     }
   });
-  libstudy::with_lib(|lib, _path| lib.init(&init_params.to_string()))
-    .map_err(|e| e.to_string())
+  call_libstudy(LibstudyOp::Init {
+    init_params_json: init_params.to_string(),
+  })
+  .await
 }
 
 #[tauri::command]
@@ -1354,10 +1471,9 @@ async fn init_libstudy_auto(app: tauri::AppHandle) -> Result<String, String> {
   println!("[init_libstudy_auto] init_params={}", init_params);
   log::info!("init_libstudy_auto: {init_params}");
 
-    log::info!("init_libstudy_auto: attempting to load libstudy...");
-    let result = libstudy::with_lib(|lib, path| {
-      log::info!("init_libstudy_auto: libstudy loaded from {:?}, calling init...", path);
-      lib.init(&init_params.to_string())
+    log::info!("init_libstudy_auto: attempting to load libstudy (via go-worker)...");
+    let result = call_libstudy_sync(LibstudyOp::Init {
+      init_params_json: init_params.to_string(),
     });
 
     match result {
@@ -1396,8 +1512,8 @@ async fn init_libstudy_auto(app: tauri::AppHandle) -> Result<String, String> {
         #[cfg(target_os = "linux")]
         {
           log::info!("init_libstudy_auto: checking for libstudy updates (Linux)...");
-          let current_version_result = libstudy::with_lib(|lib, _| lib.get_current_version());
-          let latest_version_result = libstudy::with_lib(|lib, _| lib.get_last_version());
+          let current_version_result = call_libstudy_sync(LibstudyOp::GetCurrentVersion);
+          let latest_version_result = call_libstudy_sync(LibstudyOp::GetLastVersion);
           
           if let (Ok(current_ver), Ok(latest_ver)) = (current_version_result, latest_version_result) {
             match (serde_json::from_str::<serde_json::Value>(&current_ver), 
@@ -1486,7 +1602,7 @@ fn open_external(app: tauri::AppHandle, url: String) -> Result<(), String> {
 }
 
 #[tauri::command]
-fn init_libstudy_with_params(
+async fn init_libstudy_with_params(
   init_params_json: String,
   working_dir: Option<String>,
 ) -> Result<String, String> {
@@ -1494,16 +1610,12 @@ fn init_libstudy_with_params(
     std::env::set_current_dir(dir).map_err(|e| format!("failed to set current dir to {dir:?}: {e}"))?;
   }
 
-  libstudy::with_lib(|lib, _path| lib.init(&init_params_json)).map_err(|e| e.to_string())
+  call_libstudy(LibstudyOp::Init { init_params_json }).await
 }
 
 #[tauri::command]
 async fn node_sign_up() -> Result<String, String> {
-  let resp = tauri::async_runtime::spawn_blocking(|| {
-    libstudy::with_lib(|lib, _path| lib.node_sign_up()).map_err(|e| e.to_string())
-  })
-  .await
-  .map_err(|e| format!("node_sign_up task join error: {e}"))??;
+  let resp = call_libstudy(LibstudyOp::NodeSignUp).await?;
 
   println!("[node_sign_up] response={resp}");
   log::info!("node_sign_up response={resp}");
@@ -1514,11 +1626,7 @@ async fn node_sign_up() -> Result<String, String> {
 
 #[tauri::command]
 async fn get_node_stat(app: tauri::AppHandle) -> Result<String, String> {
-  let resp = tauri::async_runtime::spawn_blocking(|| {
-    libstudy::with_lib(|lib, _path| lib.get_node_stat()).map_err(|e| e.to_string())
-  })
-  .await
-  .map_err(|e| format!("get_node_stat task join error: {e}"))??;
+  let resp = call_libstudy(LibstudyOp::GetNodeStat).await?;
   println!("[get_node_stat] response={resp}");
   log::info!("get_node_stat response={resp}");
 
@@ -1556,11 +1664,7 @@ async fn get_node_stat(app: tauri::AppHandle) -> Result<String, String> {
 
 #[tauri::command]
 async fn get_rewards() -> Result<String, String> {
-  let resp = tauri::async_runtime::spawn_blocking(|| {
-    libstudy::with_lib(|lib, _path| lib.get_rewards()).map_err(|e| e.to_string())
-  })
-  .await
-  .map_err(|e| format!("get_rewards task join error: {e}"))??;
+  let resp = call_libstudy(LibstudyOp::GetRewards).await?;
 
   println!("[get_rewards] response={resp}");
   log::info!("get_rewards response={resp}");
@@ -1569,11 +1673,7 @@ async fn get_rewards() -> Result<String, String> {
 
 #[tauri::command]
 async fn get_current_version() -> Result<String, String> {
-  let resp = tauri::async_runtime::spawn_blocking(|| {
-    libstudy::with_lib(|lib, _path| lib.get_current_version()).map_err(|e| e.to_string())
-  })
-  .await
-  .map_err(|e| format!("get_current_version task join error: {e}"))??;
+  let resp = call_libstudy(LibstudyOp::GetCurrentVersion).await?;
     println!("[get_current_version] response={resp}");
   log::info!("get_current_version response={resp}");
   Ok(resp)
@@ -1581,11 +1681,7 @@ async fn get_current_version() -> Result<String, String> {
 
 #[tauri::command]
 async fn get_last_version() -> Result<String, String> {
-  let resp = tauri::async_runtime::spawn_blocking(|| {
-    libstudy::with_lib(|lib, _path| lib.get_last_version()).map_err(|e| e.to_string())
-  })
-  .await
-  .map_err(|e| format!("get_last_version task join error: {e}"))??;
+  let resp = call_libstudy(LibstudyOp::GetLastVersion).await?;
 
   println!("[get_last_version] response={resp}");
   log::info!("get_last_version response={resp}");
