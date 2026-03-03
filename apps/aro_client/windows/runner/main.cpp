@@ -2,6 +2,8 @@
 #include <flutter/flutter_view_controller.h>
 #include <windows.h>
 
+#include <shlobj.h>
+
 #include <algorithm>
 
 #include "flutter_window.h"
@@ -15,6 +17,46 @@ HANDLE g_aro_app_mutex = nullptr;
 
 constexpr const wchar_t kFlutterWindowClassName[] = L"FLUTTER_RUNNER_WIN32_WINDOW";
 constexpr const wchar_t kMainWindowTitle[] = L"ARO Desktop";
+
+constexpr const wchar_t kWebView2UserDataEnvVar[] = L"WEBVIEW2_USER_DATA_FOLDER";
+
+std::wstring GetLocalAppDataPath() {
+  wchar_t buffer[MAX_PATH];
+  DWORD len = ::GetEnvironmentVariableW(L"LOCALAPPDATA", buffer, MAX_PATH);
+  if (len > 0 && len < MAX_PATH) {
+    return std::wstring(buffer, len);
+  }
+
+  PWSTR known_folder_path = nullptr;
+  if (SUCCEEDED(::SHGetKnownFolderPath(FOLDERID_LocalAppData, 0, nullptr,
+                                       &known_folder_path)) &&
+      known_folder_path) {
+    std::wstring result(known_folder_path);
+    ::CoTaskMemFree(known_folder_path);
+    return result;
+  }
+
+  return L"";
+}
+
+void ConfigureWebView2UserDataFolder() {
+  // WebView2 defaults to creating '<exe>.WebView2' next to the executable.
+  // When installed under Program Files, that directory can become hard to
+  // remove during uninstall (locked by lingering msedgewebview2.exe), and it
+  // also mixes writable cache with read-only install files.
+  //
+  // Setting WEBVIEW2_USER_DATA_FOLDER forces WebView2 to use a per-user
+  // writable location under LocalAppData.
+  const std::wstring local_appdata = GetLocalAppDataPath();
+  if (local_appdata.empty()) {
+    return;
+  }
+
+  const std::wstring user_data_dir = local_appdata + L"\\" + kMainWindowTitle +
+                                     L"\\WebView2";
+  ::SHCreateDirectoryExW(nullptr, user_data_dir.c_str(), nullptr);
+  ::SetEnvironmentVariableW(kWebView2UserDataEnvVar, user_data_dir.c_str());
+}
 
 bool HasArg(const std::vector<std::string>& args, const char* flag) {
   return std::find(args.begin(), args.end(), std::string(flag)) != args.end();
@@ -39,6 +81,9 @@ int APIENTRY wWinMain(_In_ HINSTANCE instance, _In_opt_ HINSTANCE prev,
                       _In_ wchar_t *command_line, _In_ int show_command) {
   // Read args early (used for single-instance/restart flow).
   std::vector<std::string> command_line_arguments = GetCommandLineArguments();
+
+  // Must run before any WebView2-backed plugin initializes.
+  ConfigureWebView2UserDataFolder();
 
   // Create a named mutex for single-instance + uninstall detection.
   // We create it with initial ownership so a restart can wait for release.

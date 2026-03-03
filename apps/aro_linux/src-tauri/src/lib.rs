@@ -904,6 +904,8 @@ fn start_network_monitor(app: tauri::AppHandle) {
       }
       std::thread::sleep(Duration::from_millis(10));
     }
+        log::info!("net: Here ");
+
 
     let Some(main) = main_window else {
       log::warn!("net: main window not found; network monitor running without UI");
@@ -1143,6 +1145,7 @@ pub fn run() {
         log::info!(" (Log file location): {}", log_dir.display());
         println!("(Log file location): {}", log_dir.display());
       }
+      log::info!("====================Net init ====================");
 
       // Log system environment information
       log::info!("==================== System Environment ====================");
@@ -1632,6 +1635,8 @@ async fn get_node_stat(app: tauri::AppHandle) -> Result<String, String> {
 
   // If the API call failed in a network-y way, switch to the offline overlay.
   // libstudy tends to wrap transport errors into { code: 500, message: "request failed: ..." }.
+  log::info!("get_rewardsRes response={resp}");
+
   if let Ok(v) = serde_json::from_str::<serde_json::Value>(&resp) {
     let code_500 = v.get("code").and_then(|c| c.as_i64()) == Some(500);
     if code_500 {

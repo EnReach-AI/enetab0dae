@@ -3,6 +3,7 @@
 #define MyAppPublisher "ARO Network"
 #define MyAppURL "https://aro.network"
 #define MyAppExeName "aro_desktop.exe"
+#define MyAppExeBase "aro_desktop"
 
 [Setup]
 AppId={{E6390888-0010-4820-9786-0C7A14897099}
@@ -38,6 +39,11 @@ UninstallDisplayIcon={app}\{#MyAppExeName}
 
 AppMutex=AROClientMutex
 
+; Ask Restart Manager to close running app-related processes during uninstall/install
+CloseApplications=yes
+RestartApplications=no
+CloseApplicationsFilter={#MyAppExeName},flutter_window.exe,msedgewebview2.exe,edgewebview2.exe,WebView2Manager.exe
+
 UninstallFilesDir={localappdata}\{#MyAppName}\uninstall
 CreateUninstallRegKey=yes
 Uninstallable=yes
@@ -62,7 +68,25 @@ Filename: "{app}\{#MyAppExeName}"; Description: "Launch {#MyAppName}"; Flags: no
 
 ; 删除 WebView2 缓存
 Type: filesandordirs; Name: "{app}\{#MyAppExeName}.WebView2"
+Type: filesandordirs; Name: "{app}\{#MyAppExeName}.webview2"
+Type: filesandordirs; Name: "{app}\{#MyAppExeBase}.WebView2"
+Type: filesandordirs; Name: "{app}\{#MyAppExeBase}.webview2"
 Type: filesandordirs; Name: "{localappdata}\{#MyAppExeName}.WebView2"
+Type: filesandordirs; Name: "{localappdata}\{#MyAppExeName}.webview2"
+Type: filesandordirs; Name: "{localappdata}\{#MyAppExeBase}.WebView2"
+Type: filesandordirs; Name: "{localappdata}\{#MyAppExeBase}.webview2"
+Type: filesandordirs; Name: "{userappdata}\{#MyAppExeName}.WebView2"
+Type: filesandordirs; Name: "{userappdata}\{#MyAppExeName}.webview2"
+Type: filesandordirs; Name: "{userappdata}\{#MyAppExeBase}.WebView2"
+Type: filesandordirs; Name: "{userappdata}\{#MyAppExeBase}.webview2"
+Type: filesandordirs; Name: "{localappdata}\{#MyAppName}\{#MyAppExeName}.WebView2"
+Type: filesandordirs; Name: "{localappdata}\{#MyAppName}\{#MyAppExeName}.webview2"
+Type: filesandordirs; Name: "{localappdata}\{#MyAppName}\{#MyAppExeBase}.WebView2"
+Type: filesandordirs; Name: "{localappdata}\{#MyAppName}\{#MyAppExeBase}.webview2"
+Type: filesandordirs; Name: "{userappdata}\{#MyAppName}\{#MyAppExeName}.WebView2"
+Type: filesandordirs; Name: "{userappdata}\{#MyAppName}\{#MyAppExeName}.webview2"
+Type: filesandordirs; Name: "{userappdata}\{#MyAppName}\{#MyAppExeBase}.WebView2"
+Type: filesandordirs; Name: "{userappdata}\{#MyAppName}\{#MyAppExeBase}.webview2"
 
 ; 删除安装目录
 Type: filesandordirs; Name: "{app}"
@@ -132,6 +156,8 @@ begin
   Result := False;
   for i := 1 to 20 do
   begin
+    ExecAndLog('cmd.exe', '/c attrib -r -s -h /s /d "' + DirPath + '\\*"', '');
+
     if DelTree(DirPath, True, True, True) then
     begin
       if not DirExists(DirPath) then
@@ -157,25 +183,120 @@ end;
 procedure CleanupWebView2Dirs();
 var
   AppWebView2Dir: string;
+  AppWebView2DirNoExe: string;
+  AppWebView2DirLower: string;
+  AppWebView2DirNoExeLower: string;
   LocalWebView2Dir: string;
+  LocalWebView2DirNoExe: string;
+  LocalWebView2DirLower: string;
+  LocalWebView2DirNoExeLower: string;
+  RoamingWebView2Dir: string;
+  RoamingWebView2DirNoExe: string;
+  RoamingWebView2DirLower: string;
+  RoamingWebView2DirNoExeLower: string;
+  LocalAppSubWebView2Dir: string;
+  LocalAppSubWebView2DirNoExe: string;
+  LocalAppSubWebView2DirLower: string;
+  LocalAppSubWebView2DirNoExeLower: string;
+  RoamingAppSubWebView2Dir: string;
+  RoamingAppSubWebView2DirNoExe: string;
+  RoamingAppSubWebView2DirLower: string;
+  RoamingAppSubWebView2DirNoExeLower: string;
 begin
   AppWebView2Dir := ExpandConstant('{app}\{#MyAppExeName}.WebView2');
+  AppWebView2DirNoExe := ExpandConstant('{app}\{#MyAppExeBase}.WebView2');
+  AppWebView2DirLower := ExpandConstant('{app}\{#MyAppExeName}.webview2');
+  AppWebView2DirNoExeLower := ExpandConstant('{app}\{#MyAppExeBase}.webview2');
   LocalWebView2Dir := ExpandConstant('{localappdata}\{#MyAppExeName}.WebView2');
+  LocalWebView2DirNoExe := ExpandConstant('{localappdata}\{#MyAppExeBase}.WebView2');
+  LocalWebView2DirLower := ExpandConstant('{localappdata}\{#MyAppExeName}.webview2');
+  LocalWebView2DirNoExeLower := ExpandConstant('{localappdata}\{#MyAppExeBase}.webview2');
+  RoamingWebView2Dir := ExpandConstant('{userappdata}\{#MyAppExeName}.WebView2');
+  RoamingWebView2DirNoExe := ExpandConstant('{userappdata}\{#MyAppExeBase}.WebView2');
+  RoamingWebView2DirLower := ExpandConstant('{userappdata}\{#MyAppExeName}.webview2');
+  RoamingWebView2DirNoExeLower := ExpandConstant('{userappdata}\{#MyAppExeBase}.webview2');
+  LocalAppSubWebView2Dir := ExpandConstant('{localappdata}\{#MyAppName}\{#MyAppExeName}.WebView2');
+  LocalAppSubWebView2DirNoExe := ExpandConstant('{localappdata}\{#MyAppName}\{#MyAppExeBase}.WebView2');
+  LocalAppSubWebView2DirLower := ExpandConstant('{localappdata}\{#MyAppName}\{#MyAppExeName}.webview2');
+  LocalAppSubWebView2DirNoExeLower := ExpandConstant('{localappdata}\{#MyAppName}\{#MyAppExeBase}.webview2');
+  RoamingAppSubWebView2Dir := ExpandConstant('{userappdata}\{#MyAppName}\{#MyAppExeName}.WebView2');
+  RoamingAppSubWebView2DirNoExe := ExpandConstant('{userappdata}\{#MyAppName}\{#MyAppExeBase}.WebView2');
+  RoamingAppSubWebView2DirLower := ExpandConstant('{userappdata}\{#MyAppName}\{#MyAppExeName}.webview2');
+  RoamingAppSubWebView2DirNoExeLower := ExpandConstant('{userappdata}\{#MyAppName}\{#MyAppExeBase}.webview2');
 
   Log('CleanupWebView2Dirs: try remove ' + AppWebView2Dir);
   ForceDeleteDir(AppWebView2Dir);
 
+  Log('CleanupWebView2Dirs: try remove ' + AppWebView2DirLower);
+  ForceDeleteDir(AppWebView2DirLower);
+
+  Log('CleanupWebView2Dirs: try remove ' + AppWebView2DirNoExe);
+  ForceDeleteDir(AppWebView2DirNoExe);
+
+  Log('CleanupWebView2Dirs: try remove ' + AppWebView2DirNoExeLower);
+  ForceDeleteDir(AppWebView2DirNoExeLower);
+
   Log('CleanupWebView2Dirs: try remove ' + LocalWebView2Dir);
   ForceDeleteDir(LocalWebView2Dir);
+
+  Log('CleanupWebView2Dirs: try remove ' + LocalWebView2DirLower);
+  ForceDeleteDir(LocalWebView2DirLower);
+
+  Log('CleanupWebView2Dirs: try remove ' + LocalWebView2DirNoExe);
+  ForceDeleteDir(LocalWebView2DirNoExe);
+
+  Log('CleanupWebView2Dirs: try remove ' + LocalWebView2DirNoExeLower);
+  ForceDeleteDir(LocalWebView2DirNoExeLower);
+
+  Log('CleanupWebView2Dirs: try remove ' + RoamingWebView2Dir);
+  ForceDeleteDir(RoamingWebView2Dir);
+
+  Log('CleanupWebView2Dirs: try remove ' + RoamingWebView2DirLower);
+  ForceDeleteDir(RoamingWebView2DirLower);
+
+  Log('CleanupWebView2Dirs: try remove ' + RoamingWebView2DirNoExe);
+  ForceDeleteDir(RoamingWebView2DirNoExe);
+
+  Log('CleanupWebView2Dirs: try remove ' + RoamingWebView2DirNoExeLower);
+  ForceDeleteDir(RoamingWebView2DirNoExeLower);
+
+  Log('CleanupWebView2Dirs: try remove ' + LocalAppSubWebView2Dir);
+  ForceDeleteDir(LocalAppSubWebView2Dir);
+
+  Log('CleanupWebView2Dirs: try remove ' + LocalAppSubWebView2DirLower);
+  ForceDeleteDir(LocalAppSubWebView2DirLower);
+
+  Log('CleanupWebView2Dirs: try remove ' + LocalAppSubWebView2DirNoExe);
+  ForceDeleteDir(LocalAppSubWebView2DirNoExe);
+
+  Log('CleanupWebView2Dirs: try remove ' + LocalAppSubWebView2DirNoExeLower);
+  ForceDeleteDir(LocalAppSubWebView2DirNoExeLower);
+
+  Log('CleanupWebView2Dirs: try remove ' + RoamingAppSubWebView2Dir);
+  ForceDeleteDir(RoamingAppSubWebView2Dir);
+
+  Log('CleanupWebView2Dirs: try remove ' + RoamingAppSubWebView2DirLower);
+  ForceDeleteDir(RoamingAppSubWebView2DirLower);
+
+  Log('CleanupWebView2Dirs: try remove ' + RoamingAppSubWebView2DirNoExe);
+  ForceDeleteDir(RoamingAppSubWebView2DirNoExe);
+
+  Log('CleanupWebView2Dirs: try remove ' + RoamingAppSubWebView2DirNoExeLower);
+  ForceDeleteDir(RoamingAppSubWebView2DirNoExeLower);
 end;
 
 procedure KillAllProcesses();
 var
   WebView2DirToken: string;
+  WebView2DirTokenNoExe: string;
   AppExePath: string;
   FlutterWindowExePath: string;
   AppWebView2Dir: string;
+  AppWebView2DirNoExe: string;
   LocalWebView2Dir: string;
+  LocalWebView2DirNoExe: string;
+  RoamingWebView2Dir: string;
+  RoamingWebView2DirNoExe: string;
   PS: string;
 begin
 
@@ -194,21 +315,32 @@ KillProcessesUnderDir(ExpandConstant('{app}'));
 { Kill processes whose CommandLine references the app's WebView2 user-data dir.
   WMIC is deprecated on newer Windows, so prefer PowerShell/CIM. }
 WebView2DirToken := '{#MyAppExeName}.WebView2';
+WebView2DirTokenNoExe := '{#MyAppExeBase}.WebView2';
 AppWebView2Dir := ExpandConstant('{app}\{#MyAppExeName}.WebView2');
+AppWebView2DirNoExe := ExpandConstant('{app}\{#MyAppExeBase}.WebView2');
 LocalWebView2Dir := ExpandConstant('{localappdata}\{#MyAppExeName}.WebView2');
+LocalWebView2DirNoExe := ExpandConstant('{localappdata}\{#MyAppExeBase}.WebView2');
+RoamingWebView2Dir := ExpandConstant('{userappdata}\{#MyAppExeName}.WebView2');
+RoamingWebView2DirNoExe := ExpandConstant('{userappdata}\{#MyAppExeBase}.WebView2');
 PS :=
   '-NoProfile -ExecutionPolicy Bypass -Command '
   + '"$token=''''' + WebView2DirToken + '''''; '
+  + '$tokenNoExe=''''' + WebView2DirTokenNoExe + '''''; '
   + '$appDir=''''' + AppWebView2Dir + '''''; '
+  + '$appDirNoExe=''''' + AppWebView2DirNoExe + '''''; '
   + '$localDir=''''' + LocalWebView2Dir + '''''; '
+  + '$localDirNoExe=''''' + LocalWebView2DirNoExe + '''''; '
+  + '$roamingDir=''''' + RoamingWebView2Dir + '''''; '
+  + '$roamingDirNoExe=''''' + RoamingWebView2DirNoExe + '''''; '
   + 'Get-CimInstance Win32_Process | '
-  + 'Where-Object { $_.CommandLine -and (($_.CommandLine -like (''*'' + $token + ''*'')) -or ($_.CommandLine -like (''*'' + $appDir + ''*'')) -or ($_.CommandLine -like (''*'' + $localDir + ''*''))) } | '
+  + 'Where-Object { $_.CommandLine -and (($_.CommandLine -like (''*'' + $token + ''*'')) -or ($_.CommandLine -like (''*'' + $tokenNoExe + ''*'')) -or ($_.CommandLine -like (''*'' + $appDir + ''*'')) -or ($_.CommandLine -like (''*'' + $appDirNoExe + ''*'')) -or ($_.CommandLine -like (''*'' + $localDir + ''*'')) -or ($_.CommandLine -like (''*'' + $localDirNoExe + ''*'')) -or ($_.CommandLine -like (''*'' + $roamingDir + ''*'')) -or ($_.CommandLine -like (''*'' + $roamingDirNoExe + ''*''))) } | '
   + 'ForEach-Object { try { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue } catch {} }"';
 
 ExecAndLog('powershell.exe', PS, '');
 
 { Fallback for older environments where CIM is unavailable }
 ExecAndLog('cmd.exe', '/c wmic process where "CommandLine like ''%' + WebView2DirToken + '%''" call terminate', '');
+ExecAndLog('cmd.exe', '/c wmic process where "CommandLine like ''%' + WebView2DirTokenNoExe + '%''" call terminate', '');
 
 { Last fallback: if still locked by WebView2 runtime, force-kill common runtime process names }
 ExecAndLog(ExpandConstant('{sys}\taskkill.exe'), '/F /T /IM msedgewebview2.exe', '');
