@@ -25,6 +25,7 @@ import (
 	"log"
 	"os"
 	"path"
+	"sync"
 
 	agentConstant "github.com/aro-network/aro-edge-agent/agent/constant"
 	"github.com/sirupsen/logrus"
@@ -32,7 +33,7 @@ import (
 
 var cfg = config.GetConfig()
 
-
+var backendThreadOnce sync.Once
 
 // NodeSignUp 节点注册（/api/liteNode/signUp）
 // 参数：publicKeyPem - RSA 公钥（PEM 格式）
@@ -51,7 +52,7 @@ func NodeSignUp() *C.char {
 				"serialNumber": sn,
 			},
 		}
-		return toCStringJSON(apiResponse)
+		return toCStringJSON("NodeSignUp", apiResponse)
 	}
 	var apiResponse = api_client.APIResponse{
 		Code:    400,
@@ -59,8 +60,9 @@ func NodeSignUp() *C.char {
 		Data:    nil,
 	}
 
-	return toCStringJSON(apiResponse)
+	return toCStringJSON("NodeSignUp", apiResponse)
 }
+
 //
 //export InitLibstudy
 func InitLibstudy(initParamsJSON *C.char) *C.char {
@@ -73,7 +75,7 @@ func InitLibstudy(initParamsJSON *C.char) *C.char {
 	if paramsStr != "" {
 		if err := json.Unmarshal([]byte(paramsStr), &initParams); err != nil {
 			details["params_error"] = err.Error()
-			return reply(400, fmt.Sprintf("Failed to parse init params: %v", err), details)
+			return reply("InitLibstudy", 400, fmt.Sprintf("Failed to parse init params: %v", err), details)
 		}
 		if initParams.AppDir != "" {
 			appDir := initParams.AppDir
@@ -81,7 +83,7 @@ func InitLibstudy(initParamsJSON *C.char) *C.char {
 			cfg.SetAndSave(config.KeyAgentPath, appDir)
 
 		} else {
-			reply(400, "Libstudy initialized failed: AppDir is empty", details)
+			reply("InitLibstudy", 400, "Libstudy initialized failed: AppDir is empty", details)
 		}
 		// 验证并更新服务器配置
 		if initParams.Config.BaseAPIURL != "" {
@@ -93,9 +95,11 @@ func InitLibstudy(initParamsJSON *C.char) *C.char {
 		initLog()
 		log.Printf("All config: %+v", allConfig)
 		log.Printf("initLibStudy params: %+v", paramsStr)
-		// 创建 channel 用于等待后台线程初始化完成
-		// initDone := make(chan bool, 1)
-		go starter.RunBackendThread()
+		// 使用 sync.Once 确保后台线程只启动一次
+		backendThreadOnce.Do(func() {
+			go starter.RunBackendThread()
+			log.Println("Backend thread started (first time only)")
+		})
 
 		// // 等待初始化完成，最多等待 40 秒
 		// select {
@@ -105,10 +109,10 @@ func InitLibstudy(initParamsJSON *C.char) *C.char {
 		// case <-time.After(40 * time.Second):
 		// 	log.Println("Backend thread initialization timeout, but continuing...")
 		// 	details["backend_status"] = "timeout"
-		// 	return reply(400, "Libstudy initialized failed timeout", details)
+		// 	return reply("InitLibstudy", 400, "Libstudy initialized failed timeout", details)
 		// }
 	}
-	return reply(200, "Libstudy initialized successfully", details)
+	return reply("InitLibstudy", 200, "Libstudy initialized successfully", details)
 
 }
 
@@ -152,14 +156,14 @@ func goStringFromC(s *C.char) string {
 
 // recoverAndLog 捕获 panic 并返回错误 JSON
 
-func toCStringJSON(v interface{}) *C.char {
+func toCStringJSON(methodName string, v interface{}) *C.char {
 	data, _ := json.Marshal(v)
-	log.Printf("response json: %+v", v)
+	log.Printf("[%s] response json: %+v", methodName, v)
 	return C.CString(string(data))
 }
 
-func reply(code int, message string, data interface{}) *C.char {
-	return toCStringJSON(api_client.APIResponse{
+func reply(methodName string, code int, message string, data interface{}) *C.char {
+	return toCStringJSON(methodName, api_client.APIResponse{
 		Code:    code,
 		Message: message,
 		Data:    data,
@@ -225,7 +229,7 @@ func GetNodeStat() *C.char {
 		Message: "success",
 		Data:    NodeBindResponse,
 	}
-	return toCStringJSON(apiResponse)
+	return toCStringJSON("GetNodeStat", apiResponse)
 }
 
 // GetRewards 获取奖励信息（/api/liteNode/rewards）
@@ -237,9 +241,9 @@ func GetRewards() *C.char {
 	log.Println("GetRewards called")
 	response, err := api_client.GetRewards()
 	if err != nil {
-		return reply(500, err.Error(), nil)
+		return reply("GetRewards", 500, err.Error(), nil)
 	}
-	return toCStringJSON(response)
+	return toCStringJSON("GetRewards", response)
 }
 
 // 返回：版本号字符串（C 字符串，调用方需要 free）
@@ -248,7 +252,7 @@ func GetRewards() *C.char {
 func GetCurrentVersion() *C.char {
 	defer utils.RecoverAndLog("GetCurrentVersion")
 	// 从 core/version 包读取注入的版本信息
-	return reply(200, "success", constant.VERSION)
+	return reply("GetCurrentVersion", 200, "success", constant.VERSION)
 }
 
 //export GetLastVersion
@@ -256,10 +260,10 @@ func GetLastVersion() *C.char {
 	defer utils.RecoverAndLog("GetLastVersion")
 	resp, err := api_client.GetLastVersion(constant.PROGRAM_APP, constant.ENV)
 	if err != nil {
-		return reply(500, err.Error(), nil)
+		return reply("GetLastVersion", 500, err.Error(), nil)
 	}
 
-	return toCStringJSON(resp)
+	return toCStringJSON("GetLastVersion", resp)
 }
 
 // ======================
