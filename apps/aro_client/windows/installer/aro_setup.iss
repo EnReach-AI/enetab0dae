@@ -4,6 +4,7 @@
 #define MyAppURL "https://aro.network"
 #define MyAppExeName "aro_desktop.exe"
 #define MyAppExeBase "aro_desktop"
+#define MyAppMutexName "AROClientMutex"
 
 [Setup]
 AppId={{E6390888-0010-4820-9786-0C7A14897099}
@@ -460,6 +461,12 @@ if LoadStringFromFile(TmpFile, Content) then
 Result := Pos(LowerCase(ProcessName), LowerCase(Content)) > 0;
 end;
 
+function IsAppRunning(): Boolean;
+begin
+  { Prefer mutex check (fast, reliable) and also fall back to tasklist }
+  Result := CheckForMutexes('{#MyAppMutexName}') or IsProcessRunning('{#MyAppExeName}');
+end;
+
 function EnsureAppNotRunningNoUI(): Boolean;
 var
   i: Integer;
@@ -534,6 +541,18 @@ end;
 
 function InitializeUninstall(): Boolean;
 begin
+  { Block uninstall while app is running }
+  if IsAppRunning() then
+  begin
+    MsgBox(
+      '{#MyAppName} is currently running.\r\n\r\nPlease quit/close {#MyAppName} (including the system tray icon), then run the uninstaller again.',
+      mbInformation,
+      MB_OK
+    );
+    Result := False;
+    exit;
+  end;
+
   { Run early so files/directories are not locked when deletion starts }
   Log('InitializeUninstall: attempting to terminate running processes');
   Log(Format('InitializeUninstall: IsAdminLoggedOn=%d', [Ord(IsAdminLoggedOn)]));
