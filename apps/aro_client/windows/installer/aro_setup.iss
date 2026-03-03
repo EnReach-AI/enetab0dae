@@ -115,6 +115,39 @@ begin
 ExecAndLog(ExpandConstant('{sys}\taskkill.exe'), '/F /T /IM ' + ProcessName, '');
 end;
 
+procedure KillProcessByNamePS(const ProcessBaseName: string);
+var
+  PS: string;
+begin
+  { ProcessBaseName should be without .exe, e.g. "aro_desktop" }
+  PS :=
+    '-NoProfile -ExecutionPolicy Bypass -Command '
+    + '"$n=''''' + ProcessBaseName + '''''; '
+    + '$ps = Get-Process -Name $n -ErrorAction SilentlyContinue; '
+    + 'if ($ps) { '
+    + '  $ps | ForEach-Object { try { $_.CloseMainWindow() | Out-Null } catch {} }; '
+    + '  Start-Sleep -Milliseconds 800; '
+    + '  $ps = Get-Process -Name $n -ErrorAction SilentlyContinue; '
+    + '  $ps | ForEach-Object { try { Stop-Process -Id $_.Id -Force -ErrorAction SilentlyContinue } catch {} }; '
+    + '}"';
+
+  ExecAndLog(ExpandConstant('{sys}\WindowsPowerShell\v1.0\powershell.exe'), PS, '');
+end;
+
+procedure KillProcessByExeNameCIM(const ExeName: string);
+var
+  PS: string;
+begin
+  { ExeName should include .exe, e.g. "aro_desktop.exe" }
+  PS :=
+    '-NoProfile -ExecutionPolicy Bypass -Command '
+    + '"$n=''''' + ExeName + '''''; '
+    + 'Get-CimInstance Win32_Process -Filter (\"Name=''$n''\") -ErrorAction SilentlyContinue | '
+    + 'ForEach-Object { try { Invoke-CimMethod -InputObject $_ -MethodName Terminate -ErrorAction SilentlyContinue | Out-Null } catch {} }"';
+
+  ExecAndLog(ExpandConstant('{sys}\WindowsPowerShell\v1.0\powershell.exe'), PS, '');
+end;
+
 procedure KillProcessByPath(const ExePath: string);
 var
   PS: string;
@@ -303,6 +336,12 @@ begin
 AppExePath := ExpandConstant('{app}\{#MyAppExeName}');
 FlutterWindowExePath := ExpandConstant('{app}\flutter_window.exe');
 
+{ First try: close gracefully then force kill by PID/name (more reliable than /IM on some systems) }
+KillProcessByNamePS('{#MyAppExeBase}');
+KillProcessByNamePS('flutter_window');
+KillProcessByExeNameCIM('{#MyAppExeName}');
+KillProcessByExeNameCIM('flutter_window.exe');
+
 KillProcess('{#MyAppExeName}');
 KillProcess('flutter_window.exe');
 KillProcessByPath(AppExePath);
@@ -366,6 +405,30 @@ begin
 if LoadStringFromFile(TmpFile, Content) then
 Result := Pos(LowerCase(ProcessName), LowerCase(Content)) > 0;
 end;
+
+function EnsureAppNotRunningNoUI(): Boolean;
+var
+  i: Integer;
+begin
+  { Non-interactive: keep trying to terminate the app before uninstall deletes files }
+  for i := 1 to 30 do
+  begin
+    if not IsProcessRunning('{#MyAppExeName}') then
+    begin
+      Result := True;
+      exit;
+    end;
+
+    Log(Format('EnsureAppNotRunningNoUI: attempt %d to terminate %s', [i, '{#MyAppExeName}']));
+    KillAllProcesses();
+    WaitProcessesExit();
+    Sleep(500);
+  end;
+
+  Result := not IsProcessRunning('{#MyAppExeName}');
+  if not Result then
+    Log('EnsureAppNotRunningNoUI: WARNING: app still running after repeated kill attempts');
+end;
 end;
 
 procedure WaitProcessesExit();
@@ -397,6 +460,7 @@ begin
 KillAllProcesses();
 
 WaitProcessesExit();
+EnsureAppNotRunningNoUI();
 CleanupWebView2Dirs();
 end;
 
@@ -415,5 +479,7 @@ begin
   KillAllProcesses();
   WaitProcessesExit();
   CleanupWebView2Dirs();
+  { No UI and do not block uninstall; just attempt aggressively }
+  EnsureAppNotRunningNoUI();
   Result := True;
 end;
