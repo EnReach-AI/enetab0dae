@@ -27,6 +27,63 @@ use std::os::unix::io::AsRawFd;
 
 static INSTANCE_LOCK_FILE: OnceLock<std::fs::File> = OnceLock::new();
 
+static LAST_PAGE_LOAD_ERROR_AT_MS: std::sync::atomic::AtomicI64 =
+  std::sync::atomic::AtomicI64::new(0);
+
+fn now_ms_i64() -> i64 {
+  (OffsetDateTime::now_utc().unix_timestamp_nanos() / 1_000_000) as i64
+}
+
+fn emit_no_internet_and_show_overlay(
+  app: &tauri::AppHandle,
+  main_window: Option<tauri::WebviewWindow>,
+  reason: &str,
+) {
+  LAST_PAGE_LOAD_ERROR_AT_MS.store(now_ms_i64(), std::sync::atomic::Ordering::Relaxed);
+  log::warn!("net: forcing offline overlay (no_internet): {reason}");
+
+  // Best-effort: broadcast a temporary NoInternet state so overlay text matches immediately.
+  let payload = NetStatusPayload {
+    state: NetState::NoInternet,
+    checked_at_ms: now_ms_i64() as i128,
+  };
+  let _ = app.emit("aro-net-status", payload);
+
+  // Prefer the provided main window handle; otherwise fetch by label.
+  let main = main_window.clone().or_else(|| app.get_webview_window("main"));
+
+  // Hide the main window to avoid showing an error/blank page.
+  if let Some(m) = main.clone() {
+    let _ = m.hide();
+  }
+
+  // Show the offline overlay.
+  if app.get_webview_window("offline").is_none() {
+    let _ = ensure_offline_overlay_window(app);
+  }
+
+  let Some(off) = app.get_webview_window("offline") else {
+    return;
+  };
+
+  // Keep the overlay above the main window and try to match bounds.
+  if let Some(m) = main {
+    let _ = m.set_always_on_top(false);
+    let _ = off.set_always_on_top(true);
+    if let Ok(pos) = m.outer_position() {
+      let _ = off.set_position(pos);
+    }
+    if let Ok(size) = m.outer_size() {
+      let _ = off.set_size(size);
+    }
+  } else {
+    let _ = off.set_always_on_top(true);
+  }
+
+  let _ = off.show();
+  let _ = off.set_focus();
+}
+
 fn acquire_single_instance_lock() -> bool {
   #[cfg(target_family = "unix")]
   {
@@ -82,6 +139,32 @@ const OFFLINE_LOGO_PNG: &[u8] = include_bytes!("../icons/gr-logo-desktop.png");
 
 static OFFLINE_OVERLAY_HTML: OnceLock<String> = OnceLock::new();
 static CRASH_LOG_DIR: OnceLock<PathBuf> = OnceLock::new();
+
+const PAGE_LOAD_ERROR_DETECTOR_JS: &str = r#"(function(){
+  try {
+    const w = window;
+    const invoke = (cmd, args) => {
+      const fn = (w.__TAURI__ && w.__TAURI__.core && w.__TAURI__.core.invoke)
+        || (w.__TAURI_INTERNALS__ && w.__TAURI_INTERNALS__.invoke);
+      if (typeof fn !== 'function') return Promise.reject(new Error('invoke not available'));
+      return fn(cmd, args || {});
+    };
+
+    const text = String((document && document.body && document.body.innerText) || '');
+    const title = String((document && document.title) || '');
+    const href = String((location && location.href) || '');
+
+    // WebKit / Linux error pages typically include these.
+    const isDnsError = text.includes('Error resolving')
+      || text.includes('Name or service not known')
+      || text.includes('ERR_NAME_NOT_RESOLVED')
+      || text.includes('DNS_PROBE_FINISHED_NXDOMAIN');
+
+    if (!isDnsError) return;
+    const snippet = (title + ' | ' + href + ' | ' + text).slice(0, 800);
+    invoke('report_page_load_error', { error: snippet });
+  } catch (_) {}
+})();"#;
 
 const DEFAULT_MAX_LOG_FILE_SIZE_BYTES: u128 = 10 * 1024 * 1024; // 10 MiB
 const DEFAULT_MAX_CRASH_FILE_SIZE_BYTES: u64 = 2 * 1024 * 1024; // 2 MiB
@@ -720,7 +803,16 @@ fn start_network_monitor(app: tauri::AppHandle) {
     };
 
     loop {
-      let raw_state = check_remote_reachability(&remote_ui_url, timeout);
+      // If the webview has recently reported a page load error, treat it as
+      // temporarily offline/no-internet to avoid flicker/blank pages.
+      let now_ms = now_ms_i64();
+      let last_err_ms = LAST_PAGE_LOAD_ERROR_AT_MS.load(std::sync::atomic::Ordering::Relaxed);
+      let page_error_recent = last_err_ms > 0 && now_ms.saturating_sub(last_err_ms) <= 5_000;
+
+      let mut raw_state = check_remote_reachability(&remote_ui_url, timeout);
+      if page_error_recent && raw_state == NetState::Online {
+        raw_state = NetState::NoInternet;
+      }
       
       if raw_state == NetState::Online {
         fail_count = 0;
@@ -825,9 +917,25 @@ fn start_network_monitor(app: tauri::AppHandle) {
         log::info!("net: state -> {:?}", state);
       }
 
+      // If there was a recent page-load error, ensure we will attempt to
+      // navigate again after recovery.
+      if page_error_recent {
+        remote_loaded = false;
+      }
+
       std::thread::sleep(poll_interval);
     }
   });
+}
+
+// Called by injected JS when the webview loads a native error page (e.g. DNS failure).
+#[tauri::command]
+fn report_page_load_error(app: tauri::AppHandle, window: tauri::WebviewWindow, error: String) {
+  log::warn!("report_page_load_error: {error} (window={})", window.label());
+  if window.label() != "main" {
+    return;
+  }
+  emit_no_internet_and_show_overlay(&app, Some(window), &error);
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -872,6 +980,11 @@ pub fn run() {
 
       if let Err(e) = window.eval(FLUTTER_COMPAT_BRIDGE_JS) {
         log::warn!("failed to inject compat bridge (page load): {e}");
+      }
+
+      // Detect native error pages (DNS/resolve failures) and switch to offline overlay.
+      if let Err(e) = window.eval(PAGE_LOAD_ERROR_DETECTOR_JS) {
+        log::warn!("failed to inject page-load error detector: {e}");
       }
     });
 
@@ -1068,6 +1181,7 @@ pub fn run() {
     .invoke_handler(tauri::generate_handler![
       bridge_log,
       bridge_crash_log,
+      report_page_load_error,
       set_libstudy_override_path,
       init_libstudy,
       init_libstudy_with_params,
@@ -1399,7 +1513,7 @@ async fn node_sign_up() -> Result<String, String> {
 
 
 #[tauri::command]
-async fn get_node_stat() -> Result<String, String> {
+async fn get_node_stat(app: tauri::AppHandle) -> Result<String, String> {
   let resp = tauri::async_runtime::spawn_blocking(|| {
     libstudy::with_lib(|lib, _path| lib.get_node_stat()).map_err(|e| e.to_string())
   })
@@ -1407,6 +1521,36 @@ async fn get_node_stat() -> Result<String, String> {
   .map_err(|e| format!("get_node_stat task join error: {e}"))??;
   println!("[get_node_stat] response={resp}");
   log::info!("get_node_stat response={resp}");
+
+  // If the API call failed in a network-y way, switch to the offline overlay.
+  // libstudy tends to wrap transport errors into { code: 500, message: "request failed: ..." }.
+  if let Ok(v) = serde_json::from_str::<serde_json::Value>(&resp) {
+    let code_500 = v.get("code").and_then(|c| c.as_i64()) == Some(500);
+    if code_500 {
+      let msg = v
+        .get("message")
+        .and_then(|m| m.as_str())
+        .unwrap_or("");
+      let msg_lc = msg.to_ascii_lowercase();
+
+      let looks_like_network = msg_lc.contains("request failed")
+        || msg_lc.contains("unexpected eof")
+        || msg_lc.contains("connection")
+        || msg_lc.contains("timed out")
+        || msg_lc.contains("timeout")
+        || msg_lc.contains("dns")
+        || msg_lc.contains("resolve")
+        || msg_lc.contains("name or service not known");
+
+      if looks_like_network {
+        emit_no_internet_and_show_overlay(
+          &app,
+          app.get_webview_window("main"),
+          &format!("libstudy get_node_stat code=500: {msg}"),
+        );
+      }
+    }
+  }
   Ok(resp)
 }
 
