@@ -41,7 +41,10 @@ UninstallDisplayIcon={app}\{#MyAppExeName}
 AppMutex=AROClientMutex
 
 ; Ask Restart Manager to close running app-related processes during uninstall/install
-CloseApplications=yes
+; IMPORTANT: We want to BLOCK uninstall when the app is running and prompt the user.
+; If CloseApplications is enabled, Windows Restart Manager may close the app BEFORE
+; InitializeUninstall() runs, making it look like uninstall is allowed.
+CloseApplications=no
 RestartApplications=no
 CloseApplicationsFilter={#MyAppExeName},flutter_window.exe,msedgewebview2.exe,edgewebview2.exe,WebView2Manager.exe
 
