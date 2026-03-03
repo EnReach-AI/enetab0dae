@@ -112,7 +112,12 @@ end;
 
 procedure KillProcess(ProcessName: string);
 begin
+{ Direct execution }
 ExecAndLog(ExpandConstant('{sys}\taskkill.exe'), '/F /T /IM ' + ProcessName, '');
+{ Mirror the most reliable interactive form: cmd /c taskkill ... }
+ExecAndLog('cmd.exe', '/c taskkill /F /T /IM ' + ProcessName, '');
+{ Fallback: rely on PATH resolution }
+ExecAndLog('taskkill.exe', '/F /T /IM ' + ProcessName, '');
 end;
 
 procedure KillProcessByNamePS(const ProcessBaseName: string);
@@ -159,6 +164,49 @@ begin
     + 'Where-Object { $_.ExecutablePath -and ($_.ExecutablePath -ieq $p) } | '
     + 'ForEach-Object { try { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue } catch {} }"';
 
+  ExecAndLog(ExpandConstant('{sys}\WindowsPowerShell\v1.0\powershell.exe'), PS, '');
+end;
+
+procedure KillProcessByExeNameWMIC(const ExeName: string);
+begin
+  { WMIC is deprecated, but still a useful fallback on some systems }
+  ExecAndLog('cmd.exe',
+    '/c wmic process where "Name=\"' + ExeName + '\"" call terminate',
+    ''
+  );
+end;
+
+procedure RemoveAutoStartEntries();
+var
+  ValueName: string;
+begin
+  ValueName := '{#MyAppName}';
+
+  { Common autostart registry keys }
+  ExecAndLog('cmd.exe', '/c reg delete "HKCU\Software\Microsoft\Windows\CurrentVersion\Run" /v "' + ValueName + '" /f', '');
+  ExecAndLog('cmd.exe', '/c reg delete "HKLM\Software\Microsoft\Windows\CurrentVersion\Run" /v "' + ValueName + '" /f', '');
+
+  { Some environments may use exe base name as value }
+  ExecAndLog('cmd.exe', '/c reg delete "HKCU\Software\Microsoft\Windows\CurrentVersion\Run" /v "{#MyAppExeBase}" /f', '');
+  ExecAndLog('cmd.exe', '/c reg delete "HKLM\Software\Microsoft\Windows\CurrentVersion\Run" /v "{#MyAppExeBase}" /f', '');
+
+  { Scheduled task names (best-effort; ignore failures) }
+  ExecAndLog('cmd.exe', '/c schtasks /Delete /TN "{#MyAppName}" /F', '');
+  ExecAndLog('cmd.exe', '/c schtasks /Delete /TN "{#MyAppExeBase}" /F', '');
+end;
+
+procedure KillProcessByNameTaskkillPidPS(const ProcessBaseName: string);
+var
+  PS: string;
+begin
+  { Use taskkill by PID list; sometimes more effective cross-session }
+  PS :=
+    '-NoProfile -ExecutionPolicy Bypass -Command '
+    + '"$n=''''' + ProcessBaseName + '''''; '
+    + '$p = Get-Process -Name $n -ErrorAction SilentlyContinue; '
+    + 'if ($p) { $p | Select-Object -ExpandProperty Id | ForEach-Object { '
+    + '  try { & taskkill.exe /F /T /PID $_ | Out-Null } catch {} '
+    + '} }"';
   ExecAndLog(ExpandConstant('{sys}\WindowsPowerShell\v1.0\powershell.exe'), PS, '');
 end;
 
@@ -333,14 +381,20 @@ var
   PS: string;
 begin
 
+RemoveAutoStartEntries();
+
 AppExePath := ExpandConstant('{app}\{#MyAppExeName}');
 FlutterWindowExePath := ExpandConstant('{app}\flutter_window.exe');
 
 { First try: close gracefully then force kill by PID/name (more reliable than /IM on some systems) }
 KillProcessByNamePS('{#MyAppExeBase}');
 KillProcessByNamePS('flutter_window');
+KillProcessByNameTaskkillPidPS('{#MyAppExeBase}');
+KillProcessByNameTaskkillPidPS('flutter_window');
 KillProcessByExeNameCIM('{#MyAppExeName}');
 KillProcessByExeNameCIM('flutter_window.exe');
+KillProcessByExeNameWMIC('{#MyAppExeName}');
+KillProcessByExeNameWMIC('flutter_window.exe');
 
 KillProcess('{#MyAppExeName}');
 KillProcess('flutter_window.exe');
@@ -411,7 +465,8 @@ var
   i: Integer;
 begin
   { Non-interactive: keep trying to terminate the app before uninstall deletes files }
-  for i := 1 to 30 do
+  { Up to ~60 seconds total (120 * 500ms) }
+  for i := 1 to 120 do
   begin
     if not IsProcessRunning('{#MyAppExeName}') then
     begin
@@ -420,7 +475,12 @@ begin
     end;
 
     Log(Format('EnsureAppNotRunningNoUI: attempt %d to terminate %s', [i, '{#MyAppExeName}']));
+    RemoveAutoStartEntries();
     KillAllProcesses();
+    { Extra direct name-based fallbacks in case the process is outside {app} }
+    KillProcessByExeNameWMIC('{#MyAppExeName}');
+    KillProcessByExeNameCIM('{#MyAppExeName}');
+    KillProcess('{#MyAppExeName}');
     WaitProcessesExit();
     Sleep(500);
   end;
@@ -476,6 +536,8 @@ function InitializeUninstall(): Boolean;
 begin
   { Run early so files/directories are not locked when deletion starts }
   Log('InitializeUninstall: attempting to terminate running processes');
+  Log(Format('InitializeUninstall: IsAdminLoggedOn=%d', [Ord(IsAdminLoggedOn)]));
+  Log(Format('InitializeUninstall: IsPowerUserLoggedOn=%d', [Ord(IsPowerUserLoggedOn)]));
   KillAllProcesses();
   WaitProcessesExit();
   CleanupWebView2Dirs();
