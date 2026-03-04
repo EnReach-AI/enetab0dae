@@ -448,26 +448,67 @@ end;
 
 function IsProcessRunning(ProcessName: string): Boolean;
 var
-ResultCode: Integer;
-TmpFile, Content, Cmd: string;
+  ResultCode: Integer;
+  TmpFile, Content, Cmd: string;
 begin
-Result := False;
+  Result := False;
 
-TmpFile := ExpandConstant('{tmp}\tasklist.txt');
-DeleteFile(TmpFile);
+  TmpFile := ExpandConstant('{tmp}\tasklist.txt');
+  DeleteFile(TmpFile);
 
-Cmd := 'tasklist /FI "IMAGENAME eq ' + ProcessName + '" /NH > "' + TmpFile + '"';
+  Cmd := 'tasklist /FI "IMAGENAME eq ' + ProcessName + '" /NH > "' + TmpFile + '"';
 
-if Exec('cmd.exe', '/c ' + Cmd, '', SW_HIDE, ewWaitUntilTerminated, ResultCode) then
+  if Exec('cmd.exe', '/c ' + Cmd, '', SW_HIDE, ewWaitUntilTerminated, ResultCode) then
+  begin
+    if LoadStringFromFile(TmpFile, Content) then
+      Result := Pos(LowerCase(ProcessName), LowerCase(Content)) > 0;
+  end;
+end;
+
+function IsProcessRunningPS(const ProcessBaseName: string): Boolean;
+var
+  ResultCode: Integer;
+  Params: string;
 begin
-if LoadStringFromFile(TmpFile, Content) then
-Result := Pos(LowerCase(ProcessName), LowerCase(Content)) > 0;
+  { Returns True if a process with the given base name exists (e.g. "aro_desktop").
+    Uses exit code only (no output parsing), so it's locale-independent. }
+  Result := False;
+
+  Params :=
+    '-NoProfile -ExecutionPolicy Bypass -Command '
+    + '"if (Get-Process -Name ''' + ProcessBaseName + ''' -ErrorAction SilentlyContinue) { exit 1 } else { exit 0 }"';
+
+  if Exec(ExpandConstant('{sys}\WindowsPowerShell\v1.0\powershell.exe'), Params, '', SW_HIDE, ewWaitUntilTerminated, ResultCode) then
+    Result := ResultCode = 1;
 end;
 
 function IsAppRunning(): Boolean;
 begin
   { Prefer mutex check (fast, reliable) and also fall back to tasklist }
-  Result := CheckForMutexes('{#MyAppMutexName}') or IsProcessRunning('{#MyAppExeName}');
+  Result :=
+    CheckForMutexes('{#MyAppMutexName}') or
+    IsProcessRunning('{#MyAppExeName}') or
+    IsProcessRunningPS('{#MyAppExeBase}');
+end;
+
+function InitializeSetup(): Boolean;
+begin
+  { Block setup/upgrade/remove flows while the app is running.
+    This catches the case where the user starts the installer EXE to remove
+    an existing installation (or to upgrade) and expects an immediate check. }
+  if IsAppRunning() then
+  begin
+    MsgBox(
+      '{#MyAppName} is currently running.' + #13#10 + #13#10 +
+      'Please quit/close {#MyAppName} (including the system tray icon), then run the installer/uninstaller again.',
+      mbInformation,
+      MB_OK
+    );
+    Result := False;
+    exit;
+  end;
+
+  Result := True;
 end;
 
 function EnsureAppNotRunningNoUI(): Boolean;
@@ -499,7 +540,6 @@ begin
   if not Result then
     Log('EnsureAppNotRunningNoUI: WARNING: app still running after repeated kill attempts');
 end;
-end;
 
 procedure WaitProcessesExit();
 var
@@ -527,6 +567,17 @@ begin
 
 if CurUninstallStep = usUninstall then
 begin
+  { Double-check right when uninstall starts (covers edge cases) }
+  if IsAppRunning() then
+  begin
+    MsgBox(
+      '{#MyAppName} is currently running.\r\n\r\nPlease quit/close {#MyAppName} (including the system tray icon), then run the uninstaller again.',
+      mbInformation,
+      MB_OK
+    );
+    Abort();
+  end;
+
 KillAllProcesses();
 
 WaitProcessesExit();
