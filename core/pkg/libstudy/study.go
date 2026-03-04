@@ -87,8 +87,7 @@ func InitLibstudy(initParamsJSON *C.char) *C.char {
 		}
 		// 验证并更新服务器配置
 		if initParams.Config.BaseAPIURL != "" {
-			serverConfig.BaseAPIURL = initParams.Config.BaseAPIURL
-			cfg.SetAndSave(config.KeyAPIURL, serverConfig.BaseAPIURL)
+			cfg.SetAndSave(config.KeyAPIURL, initParams.Config.BaseAPIURL)
 			agentConstant.HTTP_SERVER_ENDPOINT = initParams.Config.BaseAPIURL
 		}
 		allConfig := cfg.GetAll()
@@ -186,9 +185,6 @@ var (
 	apiClient    *api_client.APIClient
 	keyPair      *crypto.KeyPair
 	clientID     string
-	serverConfig = &ServerConfig{
-		BaseAPIURL: constant.HTTP_SERVER_ENDPOINT,
-	}
 	storageApi *storage.Storage
 )
 

@@ -77,7 +77,7 @@ func PublicEncrypt(publicKeyBase64 string, message string) (string, error) {
 
 func getAuthToken(deviceInfo model.DeviceInfo) (string, error) {
 	msg := fmt.Sprintf("enreach:%s:%s", deviceInfo.DeviceType, deviceInfo.SerialNumber)
-	return PublicEncrypt(constant.BACKEND_ENCODE_PUBLIC_KEY, msg)
+	return PublicEncrypt(agentConstant.BACKEND_ENCODE_PUBLIC_KEY, msg)
 }
 
 func NewBackendService(deviceInfo model.DeviceInfo) *BackendService {
@@ -94,7 +94,7 @@ func (b *BackendService) GetNodeBindStatus() (model.BindResult, error) {
 	var data = model.BindResult{}
 
 	// log.Println("GetNodeBindStatus authToken:" + b.authToken)
-	client := httputil.NewClient(constant.HTTP_SERVER_ENDPOINT, b.authToken)
+	client := httputil.NewClient(agentConstant.HTTP_SERVER_ENDPOINT, b.authToken)
 	if b.deviceInfo.SerialNumber == "" {
 		return data, fmt.Errorf("device info issure :%+v", b)
 	}

@@ -2,7 +2,6 @@ package main
 
 import (
 	"aro-ext-app/core/internal/api_client"
-	"aro-ext-app/core/internal/constant"
 	"aro-ext-app/core/internal/crypto"
 	"aro-ext-app/core/internal/storage"
 	"fmt"
@@ -14,8 +13,6 @@ var (
 	apiClient  *api_client.APIClient
 	keyPair    *crypto.KeyPair
 	clientID   string
-	baseAPIURL = constant.HTTP_SERVER_ENDPOINT
-	baseWSURL  = constant.WS_SERVER_ENDPOINT
 	storageApi *storage.Storage
 )
 

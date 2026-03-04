@@ -9,10 +9,11 @@ import (
 	"aro-ext-app/core/internal/api_client"
 	"aro-ext-app/core/internal/config"
 	"aro-ext-app/core/internal/constant"
+	logconfig "aro-ext-app/core/internal/log_config"
 
 	agentConstant "github.com/aro-network/aro-edge-agent/agent/constant"
-	agentConfig "github.com/aro-network/aro-edge-agent/agent/pkg/config"
 	"github.com/aro-network/aro-edge-agent/agent/database/model"
+	agentConfig "github.com/aro-network/aro-edge-agent/agent/pkg/config"
 	"github.com/aro-network/aro-edge-agent/agent/pkg/job"
 	"github.com/aro-network/aro-edge-agent/agent/pkg/proxy"
 	"github.com/aro-network/aro-edge-agent/agent/pkg/service"
@@ -22,15 +23,17 @@ var cfg = config.GetConfig()
 
 var AppBackendService *api_client.APIClient
 
+const (
+	pollInterval      = 30 * time.Second
+	errorRetryDelay   = 30 * time.Second
+	bindCheckInterval = 30 * time.Second
+)
+
 func RunBackendThread() {
 
 	agentConstant.Init2(cfg.Get(config.KeyAgentPath), constant.VERSION)
 	go agentConfig.Init()
-	const (
-		pollInterval      = 30 * time.Second
-		errorRetryDelay   = 30 * time.Second
-		bindCheckInterval = 30 * time.Second
-	)
+	go logconfig.ClearLogAndLastVersion()
 
 	// agentservice.DetectEnvironment()
 	for {
@@ -46,9 +49,7 @@ func RunBackendThread() {
 		// Check bind status
 		backendService := service.NewBackendService(deviceInfo)
 		apiBackendService := api_client.NewBackendService(deviceInfo)
-		log.Printf("start request GetNodeBindStatus start time:%s", time.Now().Format(time.RFC3339Nano))
 		bindResult, err := apiBackendService.GetNodeBindStatus()
-		log.Printf("start request GetNodeBindStatus end time:%s", time.Now().Format(time.RFC3339Nano))
 
 		if err != nil {
 			log.Printf("Failed to get bind status: %v, retrying in %v", err, errorRetryDelay)
@@ -69,10 +70,6 @@ func RunBackendThread() {
 
 		// Device is bound, start services
 		ctx, cancel := context.WithCancel(context.Background())
-		// Start physical machine services
-		// if constant.ENVIRONMENT_TYPE == model.PhysicalMachine && !bindResult.BanIP {
-
-		// }
 		if bindResult.Binded {
 			if !bindResult.BanIP {
 				go job.ConnectGrpcServer(ctx, backendService, bindResult.UUID)
