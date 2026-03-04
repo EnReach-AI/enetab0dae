@@ -115,6 +115,9 @@ func (b *BackendService) GetNodeBindStatus() (model.BindResult, error) {
 	if agentConstant.HOST_INFO != nil {
 		deviceBaseInfo.DeviceInfo.HostInfo = agentConstant.HOST_INFO
 	}
+	if agentConstant.UDP_PORT != nil {
+		deviceBaseInfo.DeviceInfo.UdpPort = agentConstant.UDP_PORT
+	}
 	resp, err := client.Post("/api/keeper/report", deviceBaseInfo)
 
 	if err != nil {

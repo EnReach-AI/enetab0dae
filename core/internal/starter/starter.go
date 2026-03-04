@@ -5,12 +5,13 @@ import (
 	"log"
 	"time"
 
-	internalService "aro-ext-app/core/internal/agentservice"
+	internalService "aro-ext-app/core/internal/agent_service"
 	"aro-ext-app/core/internal/api_client"
 	"aro-ext-app/core/internal/config"
 	"aro-ext-app/core/internal/constant"
 
 	agentConstant "github.com/aro-network/aro-edge-agent/agent/constant"
+	agentConfig "github.com/aro-network/aro-edge-agent/agent/pkg/config"
 	"github.com/aro-network/aro-edge-agent/agent/database/model"
 	"github.com/aro-network/aro-edge-agent/agent/pkg/job"
 	"github.com/aro-network/aro-edge-agent/agent/pkg/proxy"
@@ -24,7 +25,7 @@ var AppBackendService *api_client.APIClient
 func RunBackendThread() {
 
 	agentConstant.Init2(cfg.Get(config.KeyAgentPath), constant.VERSION)
-
+	go agentConfig.Init()
 	const (
 		pollInterval      = 30 * time.Second
 		errorRetryDelay   = 30 * time.Second

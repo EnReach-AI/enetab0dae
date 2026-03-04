@@ -9,7 +9,7 @@ replace github.com/go-gost/x => ./vendor-x
 // replace github.com/aro-network/aro-edge-agent/devpage => ../../aro-edge-agent/devpage
 
 require (
-	github.com/aro-network/aro-edge-agent/agent v0.0.0-20260227073011-2218033cb1d4
+	github.com/aro-network/aro-edge-agent/agent v0.0.0-20260304055628-ddc01e2f5597
 	github.com/go-gost/core v0.3.3
 	github.com/go-gost/x v0.8.1
 	github.com/google/uuid v1.6.0
@@ -18,6 +18,8 @@ require (
 
 // github.com/aro-network/aro-edge-agent/agent v0.0.0-20260224072445-617c58b783eb
 require github.com/shirou/gopsutil/v4 v4.25.5
+
+// require github.com/aro-network/aro-edge-agent/agent v0.0.0-00010101000000-000000000000
 
 require (
 	github.com/BGrewell/go-conversions v0.0.0-20201203155646-5e189e4ca087 // indirect
