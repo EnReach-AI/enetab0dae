@@ -438,6 +438,7 @@ jobs:
           #define MyAppName "ARO Desktop"
           #define MyAppVersion "1.0.0"
           #define MyAppExeName "aro_desktop.exe"
+          #define MyAppMutexName "AROClientMutex"
           #define SourcePath ".\build\windows\x64\runner\Release\"
 
           [Setup]
@@ -460,6 +461,13 @@ jobs:
           UninstallFilesDir={app}\uninstall
           CreateUninstallRegKey=yes
           Uninstallable=yes
+
+          ; IMPORTANT: We want to BLOCK uninstall when the app is running.
+          ; If CloseApplications is enabled, Windows Restart Manager may close
+          ; the app before InitializeUninstall() runs, making it look like
+          ; uninstall is allowed.
+          CloseApplications=no
+          RestartApplications=no
 
           [Languages]
           Name: "english"; MessagesFile: "compiler:Default.isl"
@@ -500,6 +508,63 @@ jobs:
            Type: dirifempty; Name: "{userappdata}\com.aro"
            Type: dirifempty; Name: "{localappdata}\com.aro"
           Type: dirifempty; Name: "{app}"
+
+          [Code]
+
+          const
+            MB_TOPMOST_FLAG = 262144;
+            MB_ICONINFORMATION_FLAG = 64;
+
+          function MessageBoxW(hWnd: Integer; lpText, lpCaption: string; uType: Cardinal): Integer;
+            external 'MessageBoxW@user32.dll stdcall';
+
+          procedure ShowAppRunningCannotUninstall();
+          var
+            Text: string;
+          begin
+            Text :=
+              '{#MyAppName} is currently running and cannot be uninstalled.' + #13#10 + #13#10 +
+              'Please quit/close {#MyAppName} (including the system tray icon), then run the uninstaller again.';
+
+            { Use Win32 MessageBoxW so the message still appears even when the
+              uninstaller is launched with /SUPPRESSMSGBOXES (quiet uninstall flows). }
+            MessageBoxW(0, Text, '{#MyAppName}', MB_OK or MB_ICONINFORMATION_FLAG or MB_TOPMOST_FLAG);
+          end;
+
+          function IsProcessRunning(ProcessName: string): Boolean;
+          var
+            ResultCode: Integer;
+            Cmd: string;
+          begin
+            Result := False;
+
+            { Locale/encoding-independent check: rely on exit code only }
+            Cmd :=
+              'tasklist /FI "IMAGENAME eq ' + ProcessName + '" /NH '
+              + '| find /I "' + ProcessName + '" >nul';
+
+            if Exec('cmd.exe', '/c ' + Cmd, '', SW_HIDE, ewWaitUntilTerminated, ResultCode) then
+              Result := ResultCode = 0;
+          end;
+
+          function IsAppRunning(): Boolean;
+          begin
+            Result :=
+              CheckForMutexes('{#MyAppMutexName}') or
+              IsProcessRunning('{#MyAppExeName}');
+          end;
+
+          function InitializeUninstall(): Boolean;
+          begin
+            if IsAppRunning() then
+            begin
+              ShowAppRunningCannotUninstall();
+              Result := False;
+              exit;
+            end;
+
+            Result := True;
+          end;
           "@
 
           Set-Content -Path "aro_installer.iss" -Value $installerScript
