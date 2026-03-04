@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 import 'package:logger/logger.dart';
 import 'package:path_provider/path_provider.dart';
@@ -8,6 +9,9 @@ class LoggerService {
   String? _logFilePath;
   File? _logFile;
 
+  static const String _primaryLogFileName = 'AroApp.log';
+  static const String _secondaryLogFileName = 'AroApp.1.log';
+
   LoggerService._internal();
 
   factory LoggerService() {
@@ -16,7 +20,7 @@ class LoggerService {
 
   Future<void> initialize({
     int maxFileSizeBytes = 10 * 1024 * 1024,
-    int maxLogFiles = 20,
+    int maxLogFiles = 2,
   }) async {
     try {
       final appDir = await getApplicationSupportDirectory();
@@ -26,11 +30,11 @@ class LoggerService {
         await logDir.create(recursive: true);
       }
 
-      final timestamp =
-          DateTime.now().toString().replaceAll(':', '-').split('.')[0];
-      _logFilePath = '${logDir.path}/app_$timestamp.log';
-      _logFile = File(_logFilePath!);
+      final primaryPath = '${logDir.path}/$_primaryLogFileName';
+      final secondaryPath = '${logDir.path}/$_secondaryLogFileName';
 
+      _logFilePath = primaryPath;
+      _logFile = File(primaryPath);
       await _logFile!.create(recursive: true);
 
       _logger = Logger(
@@ -43,16 +47,21 @@ class LoggerService {
           printEmojis: false,
         ),
         output: _FileOutput(
-          initialFile: _logFile!,
-          directoryPath: logDir.path,
+          primaryFile: _logFile!,
+          secondaryFile: File(secondaryPath),
           maxFileSizeBytes: maxFileSizeBytes,
-          maxLogFiles: maxLogFiles,
+          useSecondaryFile: maxLogFiles >= 2,
         ),
       );
 
       print('Logger initialized on ${_getPlatformName()}');
       print('Log file: $_logFilePath');
-      _logger?.i('Logger initialized. Log file: $_logFilePath');
+      if (maxLogFiles >= 2) {
+        print('Secondary log file: $secondaryPath');
+      }
+      _logger?.i(
+        'Logger initialized. Log file: $_logFilePath (secondary: $secondaryPath)',
+      );
     } catch (e) {
       print('Failed to initialize logger: $e');
       print('Platform: ${_getPlatformName()}');
@@ -146,75 +155,98 @@ class LoggerService {
 }
 
 class _FileOutput extends LogOutput {
-  File _file;
-  final String directoryPath;
+  final File _primaryFile;
+  final File _secondaryFile;
   final int maxFileSizeBytes;
-  final int maxLogFiles;
+  final bool useSecondaryFile;
+
+  File _activeFile;
 
   _FileOutput({
-    required File initialFile,
-    required this.directoryPath,
+    required File primaryFile,
+    required File secondaryFile,
     required this.maxFileSizeBytes,
-    required this.maxLogFiles,
-  }) : _file = initialFile;
+    this.useSecondaryFile = true,
+  })  : _primaryFile = primaryFile,
+        _secondaryFile = secondaryFile,
+        _activeFile = primaryFile {
+    _activeFile = _selectInitialActiveFile();
+  }
 
-  static String _newLogFileName() {
-    final timestamp = DateTime.now().toIso8601String().replaceAll(':', '-');
-    return 'app_$timestamp.log';
+  File _selectInitialActiveFile() {
+    if (!useSecondaryFile) return _primaryFile;
+
+    try {
+      final primaryExists = _primaryFile.existsSync();
+      final secondaryExists = _secondaryFile.existsSync();
+
+      if (!primaryExists && !secondaryExists) return _primaryFile;
+      if (!primaryExists && secondaryExists) return _secondaryFile;
+      if (primaryExists && !secondaryExists) return _primaryFile;
+
+      final primaryModified = _primaryFile.statSync().modified;
+      final secondaryModified = _secondaryFile.statSync().modified;
+
+      return secondaryModified.isAfter(primaryModified)
+          ? _secondaryFile
+          : _primaryFile;
+    } catch (_) {
+      return _primaryFile;
+    }
+  }
+
+  void _ensureParentDirExists(File file) {
+    final parent = file.parent;
+    if (parent.existsSync()) return;
+    parent.createSync(recursive: true);
+  }
+
+  void _ensureFileExists(File file) {
+    _ensureParentDirExists(file);
+    if (file.existsSync()) return;
+    file.createSync(recursive: true);
+  }
+
+  void _truncateFile(File file) {
+    _ensureParentDirExists(file);
+    file.writeAsBytesSync(const [], mode: FileMode.write);
+  }
+
+  File _otherFile() {
+    if (!useSecondaryFile) return _primaryFile;
+    return identical(_activeFile, _primaryFile) ? _secondaryFile : _primaryFile;
+  }
+
+  void _rotateToOtherFile() {
+    try {
+      final nextFile = _otherFile();
+      _ensureFileExists(nextFile);
+
+      // Start fresh each time we switch, so each file is bounded by maxFileSizeBytes.
+      _truncateFile(nextFile);
+      _activeFile = nextFile;
+    } catch (_) {
+      // Ignore rotation failures.
+    }
   }
 
   void _maybeRotate(int additionalBytes) {
     if (maxFileSizeBytes <= 0) return;
 
     try {
-      if (!_file.existsSync()) {
-        _file.createSync(recursive: true);
-      }
+      _ensureFileExists(_activeFile);
 
-      final currentBytes = _file.lengthSync();
+      final currentBytes = _activeFile.lengthSync();
       if (currentBytes + additionalBytes <= maxFileSizeBytes) return;
 
-      final dir = Directory(directoryPath);
-      if (!dir.existsSync()) {
-        dir.createSync(recursive: true);
+      if (!useSecondaryFile) {
+        _truncateFile(_activeFile);
+        return;
       }
 
-      final nextPath = '${dir.path}/${_newLogFileName()}';
-      _file = File(nextPath)..createSync(recursive: true);
-
-      _cleanupOldLogsSync(dir);
+      _rotateToOtherFile();
     } catch (_) {
-      // If rotation fails for any reason, continue writing to the current file.
-    }
-  }
-
-  void _cleanupOldLogsSync(Directory dir) {
-    if (maxLogFiles <= 0) return;
-
-    try {
-      final files = dir
-          .listSync()
-          .whereType<File>()
-          .where((f) => f.path.endsWith('.log'))
-          .toList();
-
-      files.sort((a, b) {
-        final am = a.statSync().modified;
-        final bm = b.statSync().modified;
-        return bm.compareTo(am);
-      });
-
-      if (files.length <= maxLogFiles) return;
-
-      for (final f in files.skip(maxLogFiles)) {
-        try {
-          f.deleteSync();
-        } catch (_) {
-          // Ignore individual delete failures.
-        }
-      }
-    } catch (_) {
-      // Ignore cleanup failures.
+      // Ignore rotation failures.
     }
   }
 
@@ -222,8 +254,8 @@ class _FileOutput extends LogOutput {
   void output(OutputEvent event) {
     for (var line in event.lines) {
       final data = '$line\n';
-      _maybeRotate(data.length);
-      _file.writeAsStringSync(data, mode: FileMode.append);
+      _maybeRotate(utf8.encode(data).length);
+      _activeFile.writeAsStringSync(data, mode: FileMode.append);
     }
   }
 }

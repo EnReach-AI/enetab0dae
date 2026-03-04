@@ -9,8 +9,6 @@ import 'package:aro_client/services/AppServiceStarter.dart';
 import 'package:aro_client/services/logger_service.dart';
 import 'package:aro_client/services/lib_update_service.dart';
 import 'package:aro_client/services/connectivity_service.dart';
-import 'package:aro_client/utils/native_dialog.dart';
-import 'package:logger/logger.dart';
 import 'package:window_manager/window_manager.dart';
 import 'dart:io';
 import 'package:webview_flutter/webview_flutter.dart';
@@ -66,6 +64,9 @@ class MyHomePage extends StatefulWidget {
 class _MyHomePageState extends State<MyHomePage>
     with TrayListener, WindowListener {
   WebViewController? _controller;
+  String? _mobileWebViewCurrentUrl;
+  int _mobileWebViewTimeoutRetryCount = 0;
+  static const int _maxMobileWebViewTimeoutRetries = 2;
   // win.WebviewController? _winController;
   inapp.InAppWebViewController? _desktopController;
   // bool _isWindowsInit = false;
@@ -77,6 +78,7 @@ class _MyHomePageState extends State<MyHomePage>
   String? _initError;
   String? _desktopWebViewError;
   bool _isConnected = true;
+  bool _webViewNetworkIssue = false;
 
   bool _trayMenuOpening = false;
   bool _isShuttingDown = false;
@@ -411,7 +413,6 @@ class _MyHomePageState extends State<MyHomePage>
         });
       });
     }
-    // 自动触发初始化流程
     unawaited(_asyncInit());
   }
 
@@ -500,7 +501,6 @@ class _MyHomePageState extends State<MyHomePage>
         _isInitializing = false;
         _isAppInitialized = true;
       });
-      print('[DEBUG] _asyncInit 完成，已调用 setState');
     } catch (e) {
       LoggerService().error('Failed _asyncInit', e);
 
@@ -688,9 +688,45 @@ class _MyHomePageState extends State<MyHomePage>
 
       _controller!.setNavigationDelegate(
         NavigationDelegate(
-          onWebResourceError: (error) => LoggerService().error(
-            'WebView error: ${error.description} (${error.errorCode}) url=$error',
-          ),
+          onWebResourceError: (error) {
+            final url = _mobileWebViewCurrentUrl ?? 'unknown';
+            final isMainFrame = error.isForMainFrame != false;
+            final message =
+                'WebView error: ${error.description} (${error.errorCode}) '
+                'type=${error.errorType} mainFrame=$isMainFrame url=$url';
+
+            if (isMainFrame) {
+              LoggerService().error(message);
+
+              if (mounted) {
+                setState(() {
+                  _webViewNetworkIssue = true;
+                });
+              }
+
+              // -1001 is NSURLErrorTimedOut on WKWebView.
+              if (error.errorCode == -1001 &&
+                  _mobileWebViewTimeoutRetryCount <
+                      _maxMobileWebViewTimeoutRetries) {
+                _mobileWebViewTimeoutRetryCount += 1;
+                final attempt = _mobileWebViewTimeoutRetryCount;
+
+                LoggerService()
+                    .warning('WebView main-frame request timed out (-1001). ');
+
+                Future.delayed(Duration(milliseconds: 600 * attempt), () {
+                  if (!mounted) return;
+                  final controller = _controller;
+                  if (controller == null) return;
+                  controller.reload();
+                });
+              }
+              return;
+            }
+
+            // Subresource errors are often non-fatal (image/js/etc).
+            LoggerService().warning(message);
+          },
           onProgress: (progress) {
             if (progress == 100) {
               if (_isWebViewLoading) {
@@ -707,7 +743,11 @@ class _MyHomePageState extends State<MyHomePage>
             setState(() {
               print('[DEBUG] setState: _isWebViewLoading = false');
               _isWebViewLoading = false;
+              _webViewNetworkIssue = false;
             });
+
+            _mobileWebViewTimeoutRetryCount = 0;
+
             // Disable context menu and right-click on mobile
             _controller?.runJavaScript('''
               document.addEventListener('contextmenu', function(e) {
@@ -729,6 +769,12 @@ class _MyHomePageState extends State<MyHomePage>
           onPageStarted: (url) {
             print('[DEBUG] onPageStarted $url');
 
+            final previousUrl = _mobileWebViewCurrentUrl;
+            _mobileWebViewCurrentUrl = url;
+            if (previousUrl != url) {
+              _mobileWebViewTimeoutRetryCount = 0;
+            }
+
             setState(() {
               _isWebViewLoading = true;
             });
@@ -749,6 +795,8 @@ class _MyHomePageState extends State<MyHomePage>
           ? AllConfig.mobileURL
           : AllConfig.deskTopURL;
       print('[DEBUG] WebView loading url: $url');
+      _mobileWebViewCurrentUrl = url;
+      _mobileWebViewTimeoutRetryCount = 0;
       _controller!.loadRequest(Uri.parse(url));
     } catch (e) {
       print('[DEBUG] Error initializing webview: $e');
@@ -811,7 +859,8 @@ class _MyHomePageState extends State<MyHomePage>
                 ),
               ),
             ),
-            if (!_isConnected) _buildNetworkOfflineOverlay(),
+            if (!_isConnected || _webViewNetworkIssue)
+              _buildNetworkOfflineOverlay(),
           ],
         ),
       );
@@ -874,7 +923,7 @@ class _MyHomePageState extends State<MyHomePage>
         ),
       );
     }
-    String errorMessage = 'Failed to load page';
+    // String errorMessage = 'Failed to load page';
 
     print('[DEBUG] build() _isWebViewLoading=$_isWebViewLoading');
     return Scaffold(
@@ -892,16 +941,12 @@ class _MyHomePageState extends State<MyHomePage>
                       color: Colors.white,
                     ),
                     const SizedBox(height: 16),
-                    Text(
-                      errorMessage,
-                      textAlign: TextAlign.center,
-                      style: const TextStyle(fontSize: 12),
-                    ),
                   ],
                 ),
               ),
             ),
-          if (!_isConnected) _buildNetworkOfflineOverlay(),
+          if (!_isConnected || _webViewNetworkIssue)
+            _buildNetworkOfflineOverlay(),
         ],
       ),
     );
@@ -909,7 +954,25 @@ class _MyHomePageState extends State<MyHomePage>
 
   Widget _buildNetworkOfflineOverlay() {
     return Container(
-      color: Colors.black,
+      decoration: const BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.centerLeft,
+          end: Alignment.centerRight,
+          transform: GradientRotation(0.3403392041388943),
+          colors: [
+            Color(0xFF000000),
+            Color(0xFF3A3A3A),
+            Color(0xFF3A3A3A),
+            Color(0xFF000000),
+          ],
+          stops: [
+            0.2909,
+            0.7228,
+            0.7665,
+            0.95,
+          ],
+        ),
+      ),
       child: Stack(
         children: [
           // Top header image
@@ -997,13 +1060,29 @@ One-click start and forget it.
                 ),
                 child: const Center(
                   child: Padding(
-                    padding: EdgeInsets.symmetric(horizontal: 20.0),
-                    child: Text(
-                      'There seems to be a network issue, please check your internet connectivity.',
+                    padding: EdgeInsets.symmetric(horizontal: 10.0),
+                    child: Text.rich(
+                      TextSpan(
+                        children: [
+                          WidgetSpan(
+                            alignment: PlaceholderAlignment.middle,
+                            child: Icon(
+                              Icons.info_outline,
+                              size: 18,
+                              color: Colors.white,
+                            ),
+                          ),
+                          WidgetSpan(child: SizedBox(width: 8)),
+                          TextSpan(
+                            text:
+                                'There seems to be a network issue, please check your internet connectivity.',
+                          ),
+                        ],
+                      ),
                       style: TextStyle(
-                        fontSize: 14,
+                        fontSize: 12,
                         color: Colors.white,
-                        fontWeight: FontWeight.w600,
+                        fontWeight: FontWeight.w400,
                       ),
                       textAlign: TextAlign.center,
                     ),
@@ -1043,6 +1122,11 @@ One-click start and forget it.
           if (mounted && _desktopWebViewError != null) {
             setState(() {
               _desktopWebViewError = null;
+            });
+          }
+          if (mounted && _webViewNetworkIssue) {
+            setState(() {
+              _webViewNetworkIssue = false;
             });
           }
           try {
@@ -1096,16 +1180,29 @@ One-click start and forget it.
           } catch (e) {
             LoggerService().error('Failed to evaluate JavaScript', e);
           }
+
+          if (!mounted) return;
+          if (!_webViewNetworkIssue) return;
+          setState(() {
+            _webViewNetworkIssue = false;
+          });
         },
         onReceivedError: (controller, request, error) {
-          LoggerService().error(
-            'WebView error: ${error.description} (${error.type}) url=${request.url}',
-            error,
-          );
-          if (!mounted) return;
-          setState(() {
-            _desktopWebViewError = 'Failed to load page.';
-          });
+          final isMainFrame = request.isForMainFrame == true;
+          final msg =
+              'WebView error: ${error.description} (${error.type}) mainFrame=$isMainFrame url=${request.url}';
+
+          if (isMainFrame) {
+            LoggerService().error(msg, error);
+            if (!mounted) return;
+            setState(() {
+              _webViewNetworkIssue = true;
+              _desktopWebViewError = null;
+            });
+            return;
+          }
+
+          LoggerService().warning(msg, error);
         },
         onCreateWindow: (controller, action) async {
           final uri = action.request.url;
@@ -1121,7 +1218,7 @@ One-click start and forget it.
       LoggerService().error('Failed to create desktop webview', e, s);
 
       // Provide helpful error message for Linux
-      String errorMessage = 'Failed to load page';
+      // String errorMessage = 'Failed to load page';
 
       return Scaffold(
         body: Center(
@@ -1132,11 +1229,6 @@ One-click start and forget it.
               children: [
                 const Icon(Icons.error_outline, size: 48, color: Colors.red),
                 const SizedBox(height: 16),
-                Text(
-                  errorMessage,
-                  textAlign: TextAlign.center,
-                  style: const TextStyle(fontSize: 12),
-                ),
               ],
             ),
           ),

@@ -101,6 +101,26 @@ Type: filesandordirs; Name: "{appdata}\{#MyAppName}"
 
 [Code]
 
+const
+  MB_TOPMOST_FLAG = $00040000;
+  MB_ICONINFORMATION_FLAG = $00000040;
+
+function MessageBoxW(hWnd: Integer; lpText, lpCaption: string; uType: Cardinal): Integer;
+  external 'MessageBoxW@user32.dll stdcall';
+
+procedure ShowAppRunningCannotUninstall();
+var
+  Text: string;
+begin
+  Text :=
+    '{#MyAppName} is currently running and cannot be uninstalled.' + #13#10 + #13#10 +
+    'Please quit/close {#MyAppName} (including the system tray icon), then run the uninstaller again.';
+
+  { Use Win32 MessageBoxW so the message still appears even when the uninstaller
+    is launched with /SUPPRESSMSGBOXES (e.g. some shell/quiet uninstall flows). }
+  MessageBoxW(0, Text, '{#MyAppName}', MB_OK or MB_ICONINFORMATION_FLAG or MB_TOPMOST_FLAG);
+end;
+
 function ExecAndLog(const Filename, Params, WorkingDir: string): Integer;
 var
   ResultCode: Integer;
@@ -567,11 +587,7 @@ begin
   { Double-check right when uninstall starts (covers edge cases) }
   if IsAppRunning() then
   begin
-    MsgBox(
-      '{#MyAppName} is currently running.\r\n\r\nPlease quit/close {#MyAppName} (including the system tray icon), then run the uninstaller again.',
-      mbInformation,
-      MB_OK
-    );
+    ShowAppRunningCannotUninstall();
     Abort();
   end;
 
@@ -595,11 +611,7 @@ begin
   { Block uninstall while app is running }
   if IsAppRunning() then
   begin
-    MsgBox(
-      '{#MyAppName} is currently running.\r\n\r\nPlease quit/close {#MyAppName} (including the system tray icon), then run the uninstaller again.',
-      mbInformation,
-      MB_OK
-    );
+    ShowAppRunningCannotUninstall();
     Result := False;
     exit;
   end;
