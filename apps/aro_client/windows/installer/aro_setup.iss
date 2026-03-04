@@ -449,20 +449,17 @@ end;
 function IsProcessRunning(ProcessName: string): Boolean;
 var
   ResultCode: Integer;
-  TmpFile, Content, Cmd: string;
+  Cmd: string;
 begin
   Result := False;
 
-  TmpFile := ExpandConstant('{tmp}\tasklist.txt');
-  DeleteFile(TmpFile);
-
-  Cmd := 'tasklist /FI "IMAGENAME eq ' + ProcessName + '" /NH > "' + TmpFile + '"';
+  { Locale/encoding-independent check: rely on exit code only }
+  Cmd :=
+    'tasklist /FI "IMAGENAME eq ' + ProcessName + '" /NH '
+    + '| find /I "' + ProcessName + '" >nul';
 
   if Exec('cmd.exe', '/c ' + Cmd, '', SW_HIDE, ewWaitUntilTerminated, ResultCode) then
-  begin
-    if LoadStringFromFile(TmpFile, Content) then
-      Result := Pos(LowerCase(ProcessName), LowerCase(Content)) > 0;
-  end;
+    Result := ResultCode = 0;
 end;
 
 function IsProcessRunningPS(const ProcessBaseName: string): Boolean;
