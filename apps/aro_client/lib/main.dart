@@ -22,7 +22,13 @@ import 'package:url_launcher/url_launcher.dart';
 
 void main(List<String> args) async {
   if (Platform.isMacOS && !bool.fromEnvironment('dart.vm.product')) {
-    StudyLibrary.setOverridePath('lib/ffi/macos/libstudy-arm.dylib');
+    final abi = Abi.current();
+    final debugFileName = abi == Abi.macosArm64
+        ? 'libstudy-arm.dylib'
+        : (abi == Abi.macosX64)
+            ? 'libstudy-amd.dylib'
+            : 'libstudy.dylib';
+    StudyLibrary.setOverridePath(p.join('lib', 'ffi', 'macos', debugFileName));
   }
   WidgetsFlutterBinding.ensureInitialized();
   // await ConnectivityService().initialize();

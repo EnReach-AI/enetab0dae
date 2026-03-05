@@ -43,7 +43,21 @@ class StudyLibrary {
   }
 
   static DynamicLibrary _open() {
-    // macOS: 本地开发优先 ABI 匹配的 debug 路径
+    if (_overridePath != null) {
+      final file = File(_overridePath!);
+      final exists = file.existsSync();
+      if (exists) {
+        try {
+          final lib = DynamicLibrary.open(file.path);
+          print('[StudyLib] Loaded from override path: ${file.path}');
+          return lib;
+        } catch (e) {
+          print('[StudyLib] Failed to load override path: $e');
+        }
+      }
+    }
+
+    // macOS: 本地开发回退 ABI 匹配的 debug 路径
     if (Platform.isMacOS) {
       final projectRoot = Directory.current.path;
       final abi = Abi.current();
@@ -68,19 +82,6 @@ class StudyLibrary {
         } else {
           print(
               '[StudyLib] [DEBUG] Local debug dylib not found: $localDebugPath');
-        }
-      }
-    }
-    if (_overridePath != null) {
-      final file = File(_overridePath!);
-      final exists = file.existsSync();
-      if (exists) {
-        try {
-          final lib = DynamicLibrary.open(file.path);
-          print('[StudyLib] Loaded from override path: ${file.path}');
-          return lib;
-        } catch (e) {
-          print('[StudyLib] Failed to load override path: $e');
         }
       }
     }
