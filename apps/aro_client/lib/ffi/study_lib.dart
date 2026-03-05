@@ -1,5 +1,6 @@
 import 'dart:ffi';
 import 'dart:io';
+import 'package:aro_client/components/path_provider.dart';
 import 'package:aro_client/services/logger_service.dart';
 import 'package:ffi/ffi.dart';
 
@@ -53,35 +54,6 @@ class StudyLibrary {
           return lib;
         } catch (e) {
           print('[StudyLib] Failed to load override path: $e');
-        }
-      }
-    }
-
-    // macOS: 本地开发回退 ABI 匹配的 debug 路径
-    if (Platform.isMacOS) {
-      final projectRoot = Directory.current.path;
-      final abi = Abi.current();
-      final debugCandidates = <String>[];
-      if (abi == Abi.macosArm64) {
-        debugCandidates.add('$projectRoot/lib/ffi/macos/libstudy-arm.dylib');
-      } else if (abi == Abi.macosX64) {
-        debugCandidates.add('$projectRoot/lib/ffi/macos/libstudy-amd.dylib');
-      }
-      debugCandidates.add('$projectRoot/lib/ffi/macos/libstudy.dylib');
-      for (final localDebugPath in debugCandidates) {
-        print('[StudyLib] [DEBUG] Try local debug dylib: $localDebugPath');
-        final file = File(localDebugPath);
-        if (file.existsSync()) {
-          try {
-            final lib = DynamicLibrary.open(file.path);
-            print('[StudyLib] Loaded from local debug path: $localDebugPath');
-            return lib;
-          } catch (e) {
-            print('[StudyLib] Failed to load from local debug path: $e');
-          }
-        } else {
-          print(
-              '[StudyLib] [DEBUG] Local debug dylib not found: $localDebugPath');
         }
       }
     }
@@ -202,31 +174,34 @@ class StudyLibrary {
     final exePath = Platform.resolvedExecutable;
     final exeDir = Directory(exePath).parent;
     final abi = Abi.current();
-    final dylibNames = <String>[];
-    if (abi == Abi.macosArm64) {
-      dylibNames.add('libstudy-arm.dylib');
-    } else if (abi == Abi.macosX64) {
-      dylibNames.add('libstudy-amd.dylib');
-    }
-    dylibNames.add('libstudy.dylib');
 
-    // Try multiple possible dylib locations for each name
-    final candidates = <String>[];
-    for (final name in dylibNames) {
-      candidates.add('${exeDir.path}/../../Frameworks/$name');
-      candidates.add('${exeDir.path}/../Frameworks/$name');
-      candidates.add('${exeDir.path}/$name');
-      candidates.add('./$name');
-      candidates.add('/usr/local/lib/$name');
-    }
+    // Try multiple possible dylib locations
+
+    final candidates = [
+      // Standard macOS app bundle: MyApp.app/Contents/MacOS/myapp -> MyApp.app/Contents/Frameworks/
+      '${exeDir.path}/../../Frameworks/libstudy-arm.dylib',
+      '${exeDir.path}/../../Frameworks/libstudy-amd.dylib',
+
+      // Direct relative path from executable
+      '${exeDir.path}/../Frameworks/libstudy-arm.dylib',
+      '${exeDir.path}/../Frameworks/libstudy-amd.dylib',
+
+      // Near executable
+      '${exeDir.path}/libstudy-arm.dylib',
+      '${exeDir.path}/libstudy-amd.dylib',
+    ];
 
     print('StudyLib: macOS dylib candidates: $candidates');
+    LoggerService().info('StudyLib: macOS dylib candidates: $candidates');
 
     for (final dylibPath in candidates) {
       final file = File(dylibPath);
       final exists = file.existsSync();
       final pathToOpen = exists ? file.resolveSymbolicLinksSync() : dylibPath;
       print('[StudyLib] Trying dylib at: $pathToOpen (exists: $exists)');
+      LoggerService()
+          .info('[StudyLib] Trying dylib at: $pathToOpen (exists: $exists)');
+
       if (exists) {
         try {
           final lib = DynamicLibrary.open(pathToOpen);
@@ -236,14 +211,18 @@ class StudyLibrary {
           print('[StudyLib] Failed to load from $pathToOpen: $e');
           continue;
         }
+      } else {
+        final lib = DynamicLibrary.open(abi == Abi.macosArm64
+            ? 'libstudy-arm.dylib'
+            : 'libstudy-amd.dylib');
+        print('[StudyLib] Successfully loaded from dev: $pathToOpen');
+        return lib;
       }
     }
 
     // If no candidates work, throw with helpful error
     throw UnsupportedError(
-        'macOS core library not found. Tried:\n${candidates.join('\n')}\n'
-        'Names: ${dylibNames.join(', ')}\n'
-        'ABI: $abi\n'
+        'libstudy.dylib not found. Tried:\n${candidates.join('\n')}\n'
         'Executable path: $exePath\n'
         'Executable dir: ${exeDir.path}');
   }

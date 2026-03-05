@@ -21,15 +21,12 @@ import 'package:flutter_inappwebview/flutter_inappwebview.dart' as inapp;
 import 'package:url_launcher/url_launcher.dart';
 
 void main(List<String> args) async {
-  if (Platform.isMacOS && !bool.fromEnvironment('dart.vm.product')) {
-    final abi = Abi.current();
-    final debugFileName = abi == Abi.macosArm64
-        ? 'libstudy-arm.dylib'
-        : (abi == Abi.macosX64)
-            ? 'libstudy-amd.dylib'
-            : 'libstudy.dylib';
-    StudyLibrary.setOverridePath(p.join('lib', 'ffi', 'macos', debugFileName));
-  }
+  // if (Platform.isMacOS && !bool.fromEnvironment('dart.vm.product')) {
+  //   final abi = Abi.current();
+  //   final debugFileName =
+  //       abi == Abi.macosArm64 ? 'libstudy-arm.dylib' : 'libstudy-amd.dylib';
+  //   StudyLibrary.setOverridePath(p.join('lib', 'ffi', 'macos', debugFileName));
+  // }
   WidgetsFlutterBinding.ensureInitialized();
   // await ConnectivityService().initialize();
 
