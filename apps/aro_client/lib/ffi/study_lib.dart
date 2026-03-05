@@ -173,47 +173,78 @@ class StudyLibrary {
     final exePath = Platform.resolvedExecutable;
     final exeDir = Directory(exePath).parent;
 
+    final abi = Abi.current();
+    final primaryName = (abi == Abi.macosArm64)
+        ? 'libstudy-arm.dylib'
+        : (abi == Abi.macosX64)
+            ? 'libstudy-amd.dylib'
+            : 'libstudy.dylib';
+
+    final dylibNames = <String>[];
+    void addName(String name) {
+      if (!dylibNames.contains(name)) dylibNames.add(name);
+    }
+
+    addName(primaryName);
+    addName('libstudy.dylib');
+    // Backward-compat with older builds.
+    addName('libstudy_arm64.dylib');
+    addName('libstudy_x86_64.dylib');
+
     // Try multiple possible dylib locations
-    final candidates = [
+    final candidates = <String>[];
+    for (final name in dylibNames) {
       // Standard macOS app bundle: MyApp.app/Contents/MacOS/myapp -> MyApp.app/Contents/Frameworks/
-      '${exeDir.path}/../../Frameworks/libstudy.dylib',
+      candidates.add('${exeDir.path}/../../Frameworks/$name');
       // Direct relative path from executable
-      '${exeDir.path}/../Frameworks/libstudy.dylib',
+      candidates.add('${exeDir.path}/../Frameworks/$name');
       // Near executable
-      '${exeDir.path}/libstudy.dylib',
+      candidates.add('${exeDir.path}/$name');
       // Fallback: current directory
-      './libstudy.dylib',
+      candidates.add('./$name');
       // Absolute path in common location
-      '/usr/local/lib/libstudy.dylib',
-    ];
+      candidates.add('/usr/local/lib/$name');
+    }
 
     print('StudyLib: macOS dylib candidates: $candidates');
 
     for (final dylibPath in candidates) {
       final file = File(dylibPath);
-      final exists = file.existsSync();
-      final pathToOpen = exists ? file.resolveSymbolicLinksSync() : dylibPath;
-      print('[StudyLib] Trying dylib at: $pathToOpen (exists: $exists)');
+      if (!file.existsSync()) continue;
 
-      if (exists) {
-        try {
-          final lib = DynamicLibrary.open(pathToOpen);
-          print('[StudyLib] Successfully loaded from: $pathToOpen');
-          return lib;
-        } catch (e) {
-          print('[StudyLib] Failed to load from $pathToOpen: $e');
-          continue;
-        }
-      } else {
-        final lib = DynamicLibrary.open('libstudy.dylib');
-        print('[StudyLib] Successfully loaded from dev: $pathToOpen');
-        return lib;
+      String pathToOpen;
+      try {
+        pathToOpen = file.resolveSymbolicLinksSync();
+      } catch (_) {
+        pathToOpen = dylibPath;
       }
+
+      print('[StudyLib] Trying dylib at: $pathToOpen (exists: true)');
+
+      try {
+        final lib = DynamicLibrary.open(pathToOpen);
+        print('[StudyLib] Successfully loaded from: $pathToOpen');
+        return lib;
+      } catch (e) {
+        print('[StudyLib] Failed to load from $pathToOpen: $e');
+        continue;
+      }
+    }
+
+    // Last resort: let dyld search by name.
+    for (final name in dylibNames) {
+      try {
+        final lib = DynamicLibrary.open(name);
+        print('[StudyLib] Successfully loaded by name: $name');
+        return lib;
+      } catch (_) {}
     }
 
     // If no candidates work, throw with helpful error
     throw UnsupportedError(
-        'libstudy.dylib not found. Tried:\n${candidates.join('\n')}\n'
+        'macOS core library not found. Tried:\n${candidates.join('\n')}\n'
+        'Names: ${dylibNames.join(', ')}\n'
+        'ABI: $abi\n'
         'Executable path: $exePath\n'
         'Executable dir: ${exeDir.path}');
   }

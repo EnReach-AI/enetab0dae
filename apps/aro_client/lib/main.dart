@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:ffi' show Abi;
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
@@ -440,7 +441,14 @@ class _MyHomePageState extends State<MyHomePage>
         final appSupportDir = await getAppSupportDir();
         String overrideFile;
         if (Platform.isMacOS) {
-          overrideFile = 'libstudy.dylib';
+          final abi = Abi.current();
+          if (abi == Abi.macosArm64) {
+            overrideFile = 'libstudy-arm.dylib';
+          } else if (abi == Abi.macosX64) {
+            overrideFile = 'libstudy-amd.dylib';
+          } else {
+            overrideFile = 'libstudy.dylib';
+          }
         } else if (Platform.isWindows) {
           overrideFile = 'libstudy.dll';
         } else {

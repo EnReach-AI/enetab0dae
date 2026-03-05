@@ -236,10 +236,10 @@ jobs:
           name: libstudy-windows
           path: plugins/windows/
 
-  build-core-macos:
+  build-core-macos-arm64:
     needs: prepare
     if: needs.prepare.outputs.build_core == 'true'
-    name: Build Core macOS
+    name: Build Core macOS - arm64
     runs-on: macos-latest
 
     steps:
@@ -263,23 +263,71 @@ jobs:
       - name: Build macOS ARM64
         run: |
           cd core
-          CGO_ENABLED=1 GOOS=darwin GOARCH=arm64 go build \
-            -buildmode=c-shared -trimpath -ldflags="-s -w -buildid=" \
-            -o ../plugins/macos/libstudy.dylib ./pkg/libstudy
-          ls -lh ../plugins/macos/libstudy.dylib
+          CGO_ENABLED=1 GOOS=darwin GOARCH=arm64 \
+            CGO_CFLAGS="-arch arm64" CGO_LDFLAGS="-arch arm64" \
+            go build \
+              -buildmode=c-shared -trimpath -ldflags="-s -w -buildid=" \
+              -o ../plugins/macos/libstudy-arm.dylib ./pkg/libstudy
+          ls -lh ../plugins/macos/libstudy-arm.dylib
 
       - name: Copy library to Flutter FFI directory
         run: |
           mkdir -p apps/aro_client/lib/ffi/macos
-          cp plugins/macos/libstudy.dylib apps/aro_client/lib/ffi/macos/
-          ls -lh apps/aro_client/lib/ffi/macos/libstudy.dylib
+          cp plugins/macos/libstudy-arm.dylib apps/aro_client/lib/ffi/macos/
+          ls -lh apps/aro_client/lib/ffi/macos/libstudy-arm.dylib
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: libstudy-macos
+          name: libstudy-macos-arm64
           path: plugins/macos/
 
+  build-core-macos-amd64:
+    needs: prepare
+    if: needs.prepare.outputs.build_core == 'true'
+    name: Build Core macOS - amd64
+    runs-on: macos-latest
+
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Set up SSH key for private repos
+        uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
+
+      - name: Set up Go
+        uses: actions/setup-go@v4
+        with:
+          go-version: "1.25"
+
+      - name: Configure private repository access
+        run: |
+          go env -w GOPRIVATE=github.com/aro-network/*
+          git config --global url."git@github.com:".insteadOf "https://github.com/"
+
+      - name: Build macOS AMD64
+        run: |
+          cd core
+          CGO_ENABLED=1 GOOS=darwin GOARCH=amd64 \
+            CGO_CFLAGS="-arch x86_64" CGO_LDFLAGS="-arch x86_64" \
+            go build \
+              -buildmode=c-shared -trimpath -ldflags="-s -w -buildid=" \
+              -o ../plugins/macos/libstudy-amd.dylib ./pkg/libstudy
+          ls -lh ../plugins/macos/libstudy-amd.dylib
+
+      - name: Copy library to Flutter FFI directory
+        run: |
+          mkdir -p apps/aro_client/lib/ffi/macos
+          cp plugins/macos/libstudy-amd.dylib apps/aro_client/lib/ffi/macos/
+          ls -lh apps/aro_client/lib/ffi/macos/libstudy-amd.dylib
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: libstudy-macos-amd64
+          path: plugins/macos/
+          
   build-core-android:
     needs: prepare
     if: needs.prepare.outputs.build_core == 'true'

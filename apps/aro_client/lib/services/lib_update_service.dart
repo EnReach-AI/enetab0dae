@@ -1,3 +1,4 @@
+import 'dart:ffi';
 import 'dart:io';
 
 import 'package:archive/archive.dart';
@@ -9,6 +10,30 @@ import 'package:path/path.dart' as p;
 class LibUpdateService {
   LibUpdateService._internal();
   static final LibUpdateService instance = LibUpdateService._internal();
+
+  String _macosTargetDylibFileName() {
+    final abi = Abi.current();
+    if (abi == Abi.macosArm64) return 'libstudy-arm.dylib';
+    if (abi == Abi.macosX64) return 'libstudy-amd.dylib';
+    return 'libstudy.dylib';
+  }
+
+  List<String> _macosArchiveDylibCandidates(String targetFileName) {
+    final abi = Abi.current();
+    final candidates = <String>[
+      targetFileName,
+      'libstudy.dylib',
+    ];
+
+    // Backward-compat with older archives.
+    if (abi == Abi.macosArm64) {
+      candidates.add('libstudy_arm64.dylib');
+    } else if (abi == Abi.macosX64) {
+      candidates.add('libstudy_x86_64.dylib');
+    }
+
+    return candidates;
+  }
 
   Future<Map<String, dynamic>> checkAndUpdateMacOS({
     required Map<String, dynamic> currentVersionMap,
@@ -80,11 +105,13 @@ class LibUpdateService {
       };
     }
 
+    final targetFileName = _macosTargetDylibFileName();
     return _downloadAndInstall(
       url: url,
       checksum: checksum,
       version: latestVersion,
-      fileName: 'libstudy.dylib',
+      fileName: targetFileName,
+      archiveFileNames: _macosArchiveDylibCandidates(targetFileName),
       chmod: true,
       releaseNotes: releaseNotes,
     );
@@ -333,6 +360,7 @@ class LibUpdateService {
     required String checksum,
     required String version,
     required String fileName,
+    List<String>? archiveFileNames,
     bool chmod = false,
     String? releaseNotes,
   }) async {
@@ -354,12 +382,28 @@ class LibUpdateService {
         }
       }
 
-      final libBytes = await _extractFile(zipPath, fileName);
+      final archiveCandidates =
+          (archiveFileNames == null || archiveFileNames.isEmpty)
+              ? <String>[fileName]
+              : archiveFileNames;
+
+      List<int>? libBytes;
+      String? extractedFrom;
+      for (final candidate in archiveCandidates) {
+        libBytes = await _extractFile(zipPath, candidate);
+        if (libBytes != null) {
+          extractedFrom = candidate;
+          break;
+        }
+      }
+
       if (libBytes == null) {
         return {
           'code': 500,
           'updated': false,
-          'message': '$fileName not found in archive',
+          'message': 'lib not found in archive',
+          'fileName': fileName,
+          'archiveFileNamesTried': archiveCandidates,
           'version': version,
         };
       }
@@ -381,6 +425,7 @@ class LibUpdateService {
       LoggerService().info('libstudy updated', {
         'path': targetPath,
         'version': version,
+        'extractedFrom': extractedFrom,
         'releaseNotes': releaseNotes,
       });
 
