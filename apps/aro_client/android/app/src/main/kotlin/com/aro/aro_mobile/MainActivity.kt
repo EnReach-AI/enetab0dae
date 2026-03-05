@@ -1,6 +1,7 @@
 package com.aro.aro_mobile
 
 import android.content.Intent
+import android.os.Build
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.plugin.common.MethodChannel
 
@@ -14,7 +15,11 @@ class MainActivity: FlutterActivity() {
             when (call.method) {
                 "startService" -> {
                     val intent = Intent(this, ForegroundService::class.java)
-                    startService(intent)
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                        startForegroundService(intent)
+                    } else {
+                        startService(intent)
+                    }
                     result.success("Service Started")
                 }
                 "stopService" -> {
