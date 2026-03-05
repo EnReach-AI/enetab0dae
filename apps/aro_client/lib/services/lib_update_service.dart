@@ -27,9 +27,9 @@ class LibUpdateService {
 
     // Backward-compat with older archives.
     if (abi == Abi.macosArm64) {
-      candidates.add('libstudy_arm64.dylib');
+      candidates.add('libstudy-arm.dylib');
     } else if (abi == Abi.macosX64) {
-      candidates.add('libstudy_x86_64.dylib');
+      candidates.add('libstudy-amd.dylib');
     }
 
     return candidates;

@@ -21,6 +21,9 @@ import 'package:flutter_inappwebview/flutter_inappwebview.dart' as inapp;
 import 'package:url_launcher/url_launcher.dart';
 
 void main(List<String> args) async {
+  if (Platform.isMacOS && !bool.fromEnvironment('dart.vm.product')) {
+    StudyLibrary.setOverridePath('lib/ffi/macos/libstudy-arm.dylib');
+  }
   WidgetsFlutterBinding.ensureInitialized();
   // await ConnectivityService().initialize();
 
@@ -955,7 +958,7 @@ class _MyHomePageState extends State<MyHomePage>
               children: [
                 SizedBox(height: 24),
                 Text('Initializing, please wait...',
-                    style: TextStyle(fontSize: 18)),
+                    style: TextStyle(fontSize: 18, color: Colors.white)),
               ],
             ),
           ),

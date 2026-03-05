@@ -43,6 +43,34 @@ class StudyLibrary {
   }
 
   static DynamicLibrary _open() {
+    // macOS: 本地开发优先 ABI 匹配的 debug 路径
+    if (Platform.isMacOS) {
+      final projectRoot = Directory.current.path;
+      final abi = Abi.current();
+      final debugCandidates = <String>[];
+      if (abi == Abi.macosArm64) {
+        debugCandidates.add('$projectRoot/lib/ffi/macos/libstudy-arm.dylib');
+      } else if (abi == Abi.macosX64) {
+        debugCandidates.add('$projectRoot/lib/ffi/macos/libstudy-amd.dylib');
+      }
+      debugCandidates.add('$projectRoot/lib/ffi/macos/libstudy.dylib');
+      for (final localDebugPath in debugCandidates) {
+        print('[StudyLib] [DEBUG] Try local debug dylib: $localDebugPath');
+        final file = File(localDebugPath);
+        if (file.existsSync()) {
+          try {
+            final lib = DynamicLibrary.open(file.path);
+            print('[StudyLib] Loaded from local debug path: $localDebugPath');
+            return lib;
+          } catch (e) {
+            print('[StudyLib] Failed to load from local debug path: $e');
+          }
+        } else {
+          print(
+              '[StudyLib] [DEBUG] Local debug dylib not found: $localDebugPath');
+        }
+      }
+    }
     if (_overridePath != null) {
       final file = File(_overridePath!);
       final exists = file.existsSync();
@@ -172,37 +200,22 @@ class StudyLibrary {
 
     final exePath = Platform.resolvedExecutable;
     final exeDir = Directory(exePath).parent;
-
     final abi = Abi.current();
-    final primaryName = (abi == Abi.macosArm64)
-        ? 'libstudy-arm.dylib'
-        : (abi == Abi.macosX64)
-            ? 'libstudy-amd.dylib'
-            : 'libstudy.dylib';
-
     final dylibNames = <String>[];
-    void addName(String name) {
-      if (!dylibNames.contains(name)) dylibNames.add(name);
+    if (abi == Abi.macosArm64) {
+      dylibNames.add('libstudy-arm.dylib');
+    } else if (abi == Abi.macosX64) {
+      dylibNames.add('libstudy-amd.dylib');
     }
+    dylibNames.add('libstudy.dylib');
 
-    addName(primaryName);
-    addName('libstudy.dylib');
-    // Backward-compat with older builds.
-    addName('libstudy_arm64.dylib');
-    addName('libstudy_x86_64.dylib');
-
-    // Try multiple possible dylib locations
+    // Try multiple possible dylib locations for each name
     final candidates = <String>[];
     for (final name in dylibNames) {
-      // Standard macOS app bundle: MyApp.app/Contents/MacOS/myapp -> MyApp.app/Contents/Frameworks/
       candidates.add('${exeDir.path}/../../Frameworks/$name');
-      // Direct relative path from executable
       candidates.add('${exeDir.path}/../Frameworks/$name');
-      // Near executable
       candidates.add('${exeDir.path}/$name');
-      // Fallback: current directory
       candidates.add('./$name');
-      // Absolute path in common location
       candidates.add('/usr/local/lib/$name');
     }
 
@@ -210,34 +223,19 @@ class StudyLibrary {
 
     for (final dylibPath in candidates) {
       final file = File(dylibPath);
-      if (!file.existsSync()) continue;
-
-      String pathToOpen;
-      try {
-        pathToOpen = file.resolveSymbolicLinksSync();
-      } catch (_) {
-        pathToOpen = dylibPath;
+      final exists = file.existsSync();
+      final pathToOpen = exists ? file.resolveSymbolicLinksSync() : dylibPath;
+      print('[StudyLib] Trying dylib at: $pathToOpen (exists: $exists)');
+      if (exists) {
+        try {
+          final lib = DynamicLibrary.open(pathToOpen);
+          print('[StudyLib] Successfully loaded from: $pathToOpen');
+          return lib;
+        } catch (e) {
+          print('[StudyLib] Failed to load from $pathToOpen: $e');
+          continue;
+        }
       }
-
-      print('[StudyLib] Trying dylib at: $pathToOpen (exists: true)');
-
-      try {
-        final lib = DynamicLibrary.open(pathToOpen);
-        print('[StudyLib] Successfully loaded from: $pathToOpen');
-        return lib;
-      } catch (e) {
-        print('[StudyLib] Failed to load from $pathToOpen: $e');
-        continue;
-      }
-    }
-
-    // Last resort: let dyld search by name.
-    for (final name in dylibNames) {
-      try {
-        final lib = DynamicLibrary.open(name);
-        print('[StudyLib] Successfully loaded by name: $name');
-        return lib;
-      } catch (_) {}
     }
 
     // If no candidates work, throw with helpful error
