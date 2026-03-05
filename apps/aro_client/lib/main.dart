@@ -35,7 +35,7 @@ class MyApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MaterialApp(
       debugShowCheckedModeBanner: false,
-      title: 'ARO Desktop',
+      title: Platform.isAndroid ? 'ARO Mobile' : 'ARO Desktop',
       theme: ThemeData(
         useMaterial3: true,
         colorScheme: ColorScheme.fromSeed(seedColor: Colors.deepOrange),
@@ -67,6 +67,7 @@ class _MyHomePageState extends State<MyHomePage>
   String? _mobileWebViewCurrentUrl;
   int _mobileWebViewTimeoutRetryCount = 0;
   static const int _maxMobileWebViewTimeoutRetries = 2;
+  Timer? _webViewRecoveryTimer;
   // win.WebviewController? _winController;
   inapp.InAppWebViewController? _desktopController;
   // bool _isWindowsInit = false;
@@ -643,11 +644,51 @@ class _MyHomePageState extends State<MyHomePage>
     final connectivityService = ConnectivityService();
     _isConnected = connectivityService.isConnected;
 
+    var lastConnected = _isConnected;
+
     connectivityService.addListener((isConnected) {
-      if (mounted) {
-        setState(() {
-          _isConnected = isConnected;
-        });
+      final connectionRestored = !lastConnected && isConnected;
+      lastConnected = isConnected;
+
+      if (!mounted) return;
+
+      setState(() {
+        _isConnected = isConnected;
+      });
+
+      // If we were showing the offline overlay due to a main-frame load error,
+      // try a single reload when connectivity comes back (common after macOS
+      // sleep/wake).
+      if (connectionRestored && _webViewNetworkIssue) {
+        _scheduleWebViewRecovery(
+          reason: 'connectivity restored',
+          delay: const Duration(milliseconds: 400),
+        );
+      }
+    });
+  }
+
+  void _scheduleWebViewRecovery({
+    required String reason,
+    Duration delay = const Duration(milliseconds: 600),
+  }) {
+    if (_isShuttingDown) return;
+    final existingTimer = _webViewRecoveryTimer;
+    if (existingTimer != null && existingTimer.isActive) return;
+
+    _webViewRecoveryTimer = Timer(delay, () {
+      _webViewRecoveryTimer = null;
+      if (!mounted) return;
+
+      try {
+        if (Platform.isWindows || Platform.isLinux) {
+          _desktopController?.reload();
+        } else {
+          _controller?.reload();
+        }
+        LoggerService().info('WebView reload triggered ($reason)');
+      } catch (e, s) {
+        LoggerService().error('WebView reload failed ($reason)', e, s);
       }
     });
   }
@@ -665,6 +706,12 @@ class _MyHomePageState extends State<MyHomePage>
         trayManager.destroy();
       } catch (_) {}
     }
+
+    try {
+      _webViewRecoveryTimer?.cancel();
+    } catch (_) {}
+    _webViewRecoveryTimer = null;
+
     _desktopController = null;
     _controller = null;
     ConnectivityService().dispose();
@@ -704,22 +751,26 @@ class _MyHomePageState extends State<MyHomePage>
                 });
               }
 
-              // -1001 is NSURLErrorTimedOut on WKWebView.
-              if (error.errorCode == -1001 &&
+              // WKWebView network errors that commonly happen after macOS sleep/wake.
+              const retryableMainFrameErrorCodes = <int>{
+                -1001, // NSURLErrorTimedOut
+                -1005, // NSURLErrorNetworkConnectionLost
+                -1009, // NSURLErrorNotConnectedToInternet
+              };
+              if (retryableMainFrameErrorCodes.contains(error.errorCode) &&
                   _mobileWebViewTimeoutRetryCount <
                       _maxMobileWebViewTimeoutRetries) {
                 _mobileWebViewTimeoutRetryCount += 1;
                 final attempt = _mobileWebViewTimeoutRetryCount;
 
-                LoggerService()
-                    .warning('WebView main-frame request timed out (-1001). ');
+                LoggerService().warning(
+                    'WebView main-frame request failed (${error.errorCode}). ');
 
-                Future.delayed(Duration(milliseconds: 600 * attempt), () {
-                  if (!mounted) return;
-                  final controller = _controller;
-                  if (controller == null) return;
-                  controller.reload();
-                });
+                _scheduleWebViewRecovery(
+                  reason:
+                      'main-frame error ${error.errorCode} (retry $attempt)',
+                  delay: Duration(milliseconds: 600 * attempt),
+                );
               }
               return;
             }
