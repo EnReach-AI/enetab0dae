@@ -33,15 +33,15 @@ func GetDeviceInfo() (model.DeviceInfo, error) {
 	keySn := cfg.Get(config.KeySN)
 	clientId := cfg.Get(config.KeyClientId)
 	if keySn != "" && clientId != "" {
-		
+
 		deviceInfo := model.DeviceInfo{
-		HSerialNumber: clientId,
-		SerialNumber:  keySn,
-		DeviceType:    model.DeviceType(runtime.GOOS),
-		AgentVersion:  constant.VERSION,
-	}
-	agentConstant.DEVICE_INFO = deviceInfo
-	return deviceInfo, nil
+			HSerialNumber: clientId,
+			SerialNumber:  keySn,
+			DeviceType:    model.DeviceType(runtime.GOOS),
+			AgentVersion:  constant.VERSION,
+		}
+		agentConstant.DEVICE_INFO = deviceInfo
+		return deviceInfo, nil
 	}
 	clientId = crypto.GenerateClientID()
 	device := model.DeviceInfo{

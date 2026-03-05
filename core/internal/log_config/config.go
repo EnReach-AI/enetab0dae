@@ -8,7 +8,6 @@ import (
 	"io/ioutil"
 	"log"
 	"os"
-	"path"
 	"path/filepath"
 	"runtime"
 	"strings"
@@ -16,8 +15,6 @@ import (
 )
 
 var cfg = config.GetConfig()
-
-
 
 func GetLogFilePath() string {
 	// 尝试在当前工作目录的 log 子目录中创建日志
@@ -56,22 +53,19 @@ func GetLogFilePath() string {
 	return filepath.Join(logDir, "libstudy.log")
 }
 
-
 func ClearLogAndLastVersion() {
 	logPath := GetLogFilePath()
+	log.Printf("start clearing logs and last version: logPath=%s", logPath)
 	ticker := time.NewTicker(constant.LOG_CHECK_INTERVAL)
 	defer ticker.Stop()
 
 	for range ticker.C {
-		if err := truncateOversizedLogs(logPath); err != nil {
+		if err := truncateOversizedLogs(filepath.Dir(logPath)); err != nil {
 			log.Printf("Error truncating log files: %v", err)
 		}
-		if err := truncateOversizedLogs(filepath.Join(path.Dir(logPath), "proxy-worker.log")); err != nil {
-			log.Printf("Error cleaning proxy-worker log: %v", err)
-		}
+		
 	}
 }
-
 
 // TruncateOversizedLogs  truncate log files that exceed their size
 func truncateOversizedLogs(dir string) error {
@@ -79,7 +73,6 @@ func truncateOversizedLogs(dir string) error {
 	if err != nil {
 		return fmt.Errorf("failed to read directory: %v", err)
 	}
-
 	for _, file := range files {
 		if file.IsDir() {
 			continue
