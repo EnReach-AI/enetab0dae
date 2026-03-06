@@ -175,26 +175,80 @@ class StudyLibrary {
     final exeDir = Directory(exePath).parent;
     final abi = Abi.current();
 
-    // Try multiple possible dylib locations
+    Directory? findContentsDir(Directory start) {
+      var current = start;
+      for (var i = 0; i < 6; i++) {
+        final name = current.path.split(Platform.pathSeparator).last;
+        if (name == 'Contents') return current;
 
-    final candidates = [
-      // Standard macOS app bundle: MyApp.app/Contents/MacOS/myapp -> MyApp.app/Contents/Frameworks/
-      '${exeDir.path}/../../Frameworks/libstudy-arm.dylib',
-      '${exeDir.path}/../../Frameworks/libstudy-amd.dylib',
+        final parent = current.parent;
+        if (parent.path == current.path) break;
+        current = parent;
+      }
 
-      // Direct relative path from executable
-      '${exeDir.path}/../Frameworks/libstudy-arm.dylib',
-      '${exeDir.path}/../Frameworks/libstudy-amd.dylib',
+      return null;
+    }
 
-      // Near executable
-      '${exeDir.path}/libstudy-arm.dylib',
-      '${exeDir.path}/libstudy-amd.dylib',
+    final contentsDir = findContentsDir(exeDir);
+    final frameworksDir = contentsDir != null
+        ? Directory('${contentsDir.path}/Frameworks')
+        : exeDir.parent;
+    final dylibNames = ['libstudy-arm.dylib', 'libstudy-amd.dylib'];
+    final home = Platform.environment['HOME'];
+    final appSupportCandidates = <String>[];
+    if (home != null && home.isNotEmpty) {
+      final appSupportDir =
+          '$home/Library/Application Support/com.aro.aroApp/MyApp';
+      for (final name in dylibNames) {
+        appSupportCandidates.add('$appSupportDir/$name');
+      }
+    }
+
+    // Prefer user-updated dylib in Application Support. If found and loadable, stop here.
+    for (final dylibPath in appSupportCandidates) {
+      final file = File(dylibPath);
+      final exists = file.existsSync();
+      if (!exists) continue;
+
+      final pathToOpen = file.resolveSymbolicLinksSync();
+      print('[StudyLib] Trying user Application Support dylib at: $pathToOpen');
+      try {
+        final lib = DynamicLibrary.open(pathToOpen);
+        print('[StudyLib] Loaded from Application Support: $pathToOpen');
+        return lib;
+      } catch (e) {
+        print(
+            '[StudyLib] Failed to load Application Support dylib at $pathToOpen: $e');
+      }
+    }
+
+    // Try bundled/adjacent locations
+    final candidates = <String>[
+      for (final name in dylibNames) '${frameworksDir.path}/$name',
+      for (final name in dylibNames) '${exeDir.path}/$name',
+      if (contentsDir != null)
+        for (final name in dylibNames) '${contentsDir.path}/MacOS/$name',
     ];
 
-    print('StudyLib: macOS dylib candidates: $candidates');
-    LoggerService().info('StudyLib: macOS dylib candidates: $candidates');
+    final uniqueCandidates = <String>[];
+    final seen = <String>{};
+    for (final path in candidates) {
+      if (seen.add(path)) {
+        uniqueCandidates.add(path);
+      }
+    }
 
-    for (final dylibPath in candidates) {
+    final appSupportLog = appSupportCandidates.isNotEmpty
+        ? appSupportCandidates.first.replaceAll(RegExp('libstudy-.*'), '')
+        : 'n/a';
+
+    print(
+        'StudyLib: macOS exePath: $exePath, exeDir: ${exeDir.path}, contentsDir: ${contentsDir?.path}, frameworksDir: ${frameworksDir.path}, appSupport: $appSupportLog');
+    print('StudyLib: macOS dylib candidates (bundled): $uniqueCandidates');
+    LoggerService()
+        .info('StudyLib: macOS dylib candidates (bundled): $uniqueCandidates');
+
+    for (final dylibPath in uniqueCandidates) {
       final file = File(dylibPath);
       final exists = file.existsSync();
       final pathToOpen = exists ? file.resolveSymbolicLinksSync() : dylibPath;
@@ -211,20 +265,28 @@ class StudyLibrary {
           print('[StudyLib] Failed to load from $pathToOpen: $e');
           continue;
         }
-      } else {
-        final lib = DynamicLibrary.open(abi == Abi.macosArm64
-            ? 'libstudy-arm.dylib'
-            : 'libstudy-amd.dylib');
-        print('[StudyLib] Successfully loaded from dev: $pathToOpen');
-        return lib;
       }
     }
 
-    // If no candidates work, throw with helpful error
-    throw UnsupportedError(
-        'libstudy.dylib not found. Tried:\n${candidates.join('\n')}\n'
-        'Executable path: $exePath\n'
-        'Executable dir: ${exeDir.path}');
+    final fallbackName =
+        abi == Abi.macosArm64 ? 'libstudy-arm.dylib' : 'libstudy-amd.dylib';
+
+    try {
+      print('[StudyLib] Trying fallback dylib by name: $fallbackName');
+      final lib = DynamicLibrary.open(fallbackName);
+      print('[StudyLib] Successfully loaded fallback: $fallbackName');
+      return lib;
+    } catch (e) {
+      throw UnsupportedError(
+          'libstudy-amd/arm.dylib not found. Tried (bundled):\n${uniqueCandidates.join('\n')}\n'
+          'Fallback name: $fallbackName\n'
+          'Executable path: $exePath\n'
+          'Executable dir: ${exeDir.path}\n'
+          'Contents dir: ${contentsDir?.path ?? 'n/a'}\n'
+          'Frameworks dir: ${frameworksDir.path}\n'
+          'App Support dir: $appSupportLog\n'
+          'Error: $e');
+    }
   }
 
   static void _showWindowsErrorDialog(String message) {

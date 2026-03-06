@@ -305,7 +305,8 @@ class _MyHomePageState extends State<MyHomePage>
             if (updateResult != null) {
               print('updateResult getVersion $updateResult');
               LoggerService().info('Library update result: $updateResult');
-              if (updateResult['updated'] == true) {
+              if (updateResult['updated'] == true ||
+                  updateResult['restartRequired'] == true) {
                 await _showRestartDialog();
               }
             }
@@ -445,23 +446,34 @@ class _MyHomePageState extends State<MyHomePage>
           Platform.isWindows ||
           Platform.isLinux) {
         final appSupportDir = await getAppSupportDir();
-        String overrideFile;
+
         if (Platform.isMacOS) {
           final abi = Abi.current();
-          if (abi == Abi.macosArm64) {
-            overrideFile = 'libstudy-arm.dylib';
-          } else if (abi == Abi.macosX64) {
-            overrideFile = 'libstudy-amd.dylib';
-          } else {
-            overrideFile = 'libstudy.dylib';
+          const currentFile = 'libstudy.current.dylib';
+          final preferredFile = abi == Abi.macosArm64
+              ? 'libstudy-arm.dylib'
+              : 'libstudy-amd.dylib';
+
+          final currentPath = p.join(appSupportDir, currentFile);
+          final preferredPath = p.join(appSupportDir, preferredFile);
+
+          String? overridePath;
+          if (File(currentPath).existsSync()) {
+            overridePath = currentPath;
+          } else if (File(preferredPath).existsSync()) {
+            overridePath = preferredPath;
           }
-        } else if (Platform.isWindows) {
-          overrideFile = 'libstudy.dll';
+
+          StudyLibrary.setOverridePath(overridePath);
+          LoggerService().info(
+            'StudyLibrary macOS override path: ${overridePath ?? '(none)'}',
+          );
         } else {
-          overrideFile = 'libstudy.so';
+          final overrideFile =
+              Platform.isWindows ? 'libstudy.dll' : 'libstudy.so';
+          final overridePath = p.join(appSupportDir, overrideFile);
+          StudyLibrary.setOverridePath(overridePath);
         }
-        final overridePath = p.join(appSupportDir, overrideFile);
-        StudyLibrary.setOverridePath(overridePath);
       }
       StudyLibrary.ensureInitialized();
 
