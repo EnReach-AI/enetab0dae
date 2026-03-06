@@ -9,7 +9,7 @@ const (
 )
 
 const (
-	VERSION string = "0.0.12"
+	VERSION string = "0.0.13"
 )
 const (
 	ENV                       = "dev"
