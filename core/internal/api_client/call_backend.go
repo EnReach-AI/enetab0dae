@@ -104,6 +104,7 @@ func (b *BackendService) GetNodeBindStatus() (model.BindResult, error) {
 	}
 	if agentConstant.HOST_INFO == nil {
 		info, _ := host.Info()
+		log.Printf("host info: %+v", info)
 		agentConstant.HOST_INFO = &model.HostInfo{
 			OS:              runtime.GOOS,
 			Platform:        info.Platform,

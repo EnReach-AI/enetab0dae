@@ -5,6 +5,7 @@
 #   1. 编译五个平台的库（带完整版本注入）
 #   2. 生成版本清单
 #   3. 支持 Git action 集成
+#   4. 生成压缩包（源文件保持不变）
 #
 # 用法：
 #   ./scripts/build_go_libs.sh build          # 构建所有平台
@@ -12,6 +13,7 @@
 #   ./scripts/build_go_libs.sh version        # 显示版本信息
 #   ./scripts/build_go_libs.sh clean          # 清理构建产物
 #   ./scripts/build_go_libs.sh ci             # GitHub Actions 构建
+#   ./scripts/build_go_libs.sh archive        # 仅生成压缩包（不重新构建）
 
 set -e
 
@@ -24,6 +26,7 @@ PROJECT_ROOT="$SCRIPT_DIR/.."
 CORE_DIR="$PROJECT_ROOT/core"
 BUILD_DIR="$PROJECT_ROOT/core/pkg/libstudy"
 PLUGINS_DIR="$PROJECT_ROOT/plugins"
+ARCHIVES_DIR="$PROJECT_ROOT/plugins/archives"
 VERSION_FILE="$PROJECT_ROOT/core/version/version.go"
 
 # 基础版本号
@@ -359,6 +362,65 @@ show_version_info() {
     echo ""
 }
 
+# 生成压缩包（源文件保持不变）
+generate_archives() {
+    local platform_filter="${1:-}"   # 可选：指定平台，例如 "linux"
+    local archive_date=$(date +%Y%m%d_%H%M%S)
+
+    log_info "生成压缩包（源文件保持不变）"
+    mkdir -p "$ARCHIVES_DIR"
+
+    local generated=0
+
+    for platform_dir in "$PLUGINS_DIR"/*/; do
+        [ -d "$platform_dir" ] || continue
+        local platform_name
+        platform_name=$(basename "$platform_dir")
+
+        # 跳过 archives 目录本身
+        [ "$platform_name" = "archives" ] && continue
+
+        # 如果指定了平台过滤，则跳过不匹配的平台
+        if [ -n "$platform_filter" ] && [ "$platform_name" != "$platform_filter" ]; then
+            continue
+        fi
+
+        # 查找该平台目录下的库文件（so / dll / dylib），排除 .h 头文件
+        local lib_files=()
+        while IFS= read -r -d '' f; do
+            lib_files+=("$f")
+        done < <(find "$platform_dir" -maxdepth 1 -type f \
+            \( -name "*.so" -o -name "*.dll" -o -name "*.dylib" \) -print0)
+
+        if [ ${#lib_files[@]} -eq 0 ]; then
+            log_warning "  $platform_name: 未找到库文件，跳过"
+            continue
+        fi
+
+        for lib_file in "${lib_files[@]}"; do
+            local lib_basename
+            lib_basename=$(basename "$lib_file")
+            local lib_stem="${lib_basename%.*}"
+            local archive_name="${lib_stem}_${archive_date}.zip"
+            local archive_path="$ARCHIVES_DIR/$archive_name"
+
+            # -j 只存文件名，不含路径——源文件不动
+            zip -j "$archive_path" "$lib_file"
+
+            local size
+            size=$(ls -lh "$archive_path" | awk '{print $5}')
+            log_success "  压缩包: $archive_path ($size)"
+            (( generated++ )) || true
+        done
+    done
+
+    if [ "$generated" -eq 0 ]; then
+        log_warning "没有找到可打包的库文件（请先执行 build）"
+    else
+        log_success "共生成 $generated 个压缩包 → $ARCHIVES_DIR"
+    fi
+}
+
 # 显示已生成的文件
 show_build_output() {
     echo ""
@@ -443,6 +505,7 @@ main() {
             build_for_platform "android" "arm64" "libstudy_${BASE_VERSION}_android_arm64"
             
             generate_manifest
+            generate_archives
             show_build_output
             show_version_info
             
@@ -452,12 +515,14 @@ main() {
         build-linux)
             log_info "构建 Linux 平台"
             build_for_platform "linux" "amd64" "libstudy_${BASE_VERSION}_linux_amd64"
+            generate_archives "linux"
             log_success "Linux 构建完成"
             ;;
             
         build-windows)
             log_info "构建 Windows 平台"
             build_for_platform "windows" "amd64" "libstudy_${BASE_VERSION}_windows_amd64"
+            generate_archives "windows"
             log_success "Windows 构建完成"
             ;;
             
@@ -465,18 +530,25 @@ main() {
             log_info "构建 macOS 平台"
             build_for_platform "darwin" "arm64" "libstudy_${BASE_VERSION}_darwin_arm64"
             build_for_platform "darwin" "amd64" "libstudy_${BASE_VERSION}_darwin_amd64"
+            generate_archives "macos"
             log_success "macOS 构建完成"
             ;;
             
         build-android)
             log_info "构建 Android 平台"
             build_for_platform "android" "arm64" "libstudy_${BASE_VERSION}_android_arm64"
+            generate_archives "android"
             log_success "Android 构建完成"
             ;;
             
         ci)
             build_ci
+            generate_archives
             log_success "CI 构建完成"
+            ;;
+            
+        archive)
+            generate_archives "${2:-}"
             ;;
             
         version)
@@ -493,14 +565,18 @@ main() {
 用法: $0 <command>
 
 命令:
-  build           构建所有五个平台
-  build-linux     仅构建 Linux (amd64)
-  build-windows   仅构建 Windows (amd64)
-  build-macos     构建 macOS (arm64 + amd64)
-  build-android   仅构建 Android (arm64)
-  ci              GitHub Actions CI 构建（检测环境自动选择平台）
+  build           构建所有五个平台并生成 zip 压缩包
+  build-linux     仅构建 Linux (amd64) 并生成 zip 压缩包
+  build-windows   仅构建 Windows (amd64) 并生成 zip 压缩包
+  build-macos     构建 macOS (arm64 + amd64) 并生成 zip 压缩包
+  build-android   仅构建 Android (arm64) 并生成 zip 压缩包
+  ci              GitHub Actions CI 构建（检测环境自动选择平台）并生成 zip 压缩包
+  archive [平台]  仅对已有库文件生成 zip 压缩包（源文件不动），可指定平台
   version         显示版本信息
   clean           清理构建产物
+
+压缩包输出目录:
+  plugins/archives/
 
 环境变量:
   ANDROID_NDK_ROOT    Android NDK 路径（Android 构建必需）
@@ -510,6 +586,8 @@ main() {
 示例:
   $0 build
   $0 build-linux
+  $0 archive              # 对所有平台已有库文件打包
+  $0 archive linux        # 仅打包 linux 平台
   $0 version
   ANDROID_NDK_ROOT=/path/to/ndk $0 build-android
   OSXCROSS_ROOT=/path/to/osxcross $0 build-macos
