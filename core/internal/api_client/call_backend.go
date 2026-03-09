@@ -86,8 +86,10 @@ func getAuthToken(deviceInfo model.DeviceInfo) (string, error) {
 func readAndroidSystemProp(key string) string {
 	out, err := exec.Command("getprop", key).Output()
 	if err != nil {
+		log.Printf("Failed to read system property %s: %v", key, err)
 		return ""
 	}
+	log.Printf("System property %s: %s", key, strings.TrimSpace(string(out)))
 	return strings.TrimSpace(string(out))
 }
 
