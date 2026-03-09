@@ -61,6 +61,21 @@ func GetDeviceInfo() (model.DeviceInfo, error) {
 	return device, nil
 }
 
+// readAndroidRelease 从 /system/build.prop 读取 Android 系统版本号，失败时返回空字符串
+func readAndroidRelease() string {
+	data, err := os.ReadFile("/system/build.prop")
+	if err != nil {
+		return ""
+	}
+	for _, line := range strings.Split(string(data), "\n") {
+		line = strings.TrimSpace(line)
+		if strings.HasPrefix(line, "ro.build.version.release=") {
+			return strings.TrimPrefix(line, "ro.build.version.release=")
+		}
+	}
+	return ""
+}
+
 func DetectEnvironment() {
 
 	DetectEnvironmentReliable()
@@ -89,10 +104,24 @@ func DetectEnvironmentReliable() {
 	// 2. 检查 CPU 标志 (跨平台，但 Linux 特定的标志检查应该在 Linux 上)
 	cpuInfos, err := cpu.Info()
 	log.Printf("cpu Infos:%+v;err:%+v", cpuInfos, err)
+
+	platform := info.Platform
+	platformVersion := info.PlatformVersion
+
+	// gopsutil 在 Android 上无法读取 /etc/os-release，platform 等字段为空，手动补全
+	if runtime.GOOS == "android" {
+		if platform == "" {
+			platform = "android"
+		}
+		if platformVersion == "" {
+			platformVersion = readAndroidRelease()
+		}
+	}
+
 	agentConstant.HOST_INFO = &model.HostInfo{
-		Platform:        info.Platform,
+		Platform:        platform,
 		KernelArch:      info.KernelArch,
-		PlatformVersion: info.PlatformVersion,
+		PlatformVersion: platformVersion,
 	}
 	// 仅在 Linux 系统上执行 systemd-detect-virt
 	if runtime.GOOS == "linux" {
