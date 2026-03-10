@@ -9,8 +9,8 @@
       "rpm": {
         "depends": [
           "gtk3",
-          "webkit2gtk4.0",
-          "libappindicator-gtk3",
+          "webkit2gtk4.1",
+          "libayatana-appindicator-gtk3",
           "librsvg2"
         ]
       }
