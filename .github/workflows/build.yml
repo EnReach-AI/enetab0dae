@@ -362,7 +362,7 @@ jobs:
           cd core
           CC="$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android21-clang" \
           CGO_ENABLED=1 GOOS=android GOARCH=arm64 go build \
-            -buildmode=c-shared -trimpath -ldflags="-s -w -buildid=" \
+            -buildmode=c-shared -trimpath -ldflags="-s -w -buildid= -extldflags '-Wl,-z,max-page-size=16384'" \
             -o ../plugins/android/libstudy.so ./pkg/libstudy
           ls -lh ../plugins/android/libstudy.so
 
