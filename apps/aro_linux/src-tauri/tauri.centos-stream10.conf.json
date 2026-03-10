@@ -8,8 +8,8 @@
     "linux": {
       "rpm": {
         "depends": [
-          "gtk4",
-          "webkitgtk6.0",
+          "gtk3",
+          "webkit2gtk4.1",
           "libayatana-appindicator-gtk3",
           "librsvg2"
         ]
