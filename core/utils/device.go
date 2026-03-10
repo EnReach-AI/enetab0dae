@@ -29,8 +29,8 @@ func GetDeviceBaseInfo() util.DeviceInfoRequest {
 	memUse := 0
 	if vm, err := mem.VirtualMemory(); err == nil {
 		// Use bits (not MB): bytes * 8
-		memTotal = int(vm.Total * 8)
-		memAvailable = int(vm.Available * 8)
+		memTotal = int(vm.Total)
+		memAvailable = int(vm.Available)
 		memUse = memTotal - memAvailable
 	} else {
 		log.Println("Error retrieving memory info:", err)
