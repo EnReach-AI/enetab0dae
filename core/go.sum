@@ -16,6 +16,8 @@ github.com/aro-network/aro-edge-agent/agent v0.0.0-20260304053456-371a80279475 h
 github.com/aro-network/aro-edge-agent/agent v0.0.0-20260304053456-371a80279475/go.mod h1:V8ywMCP0pL9qdiEEhCsPyHhXfMLXokYcEovPKTkfApk=
 github.com/aro-network/aro-edge-agent/agent v0.0.0-20260304055628-ddc01e2f5597 h1:iPuC9sUX6DodZ1ngrSQ5TjTy7VntrUW8a7Gn2admei0=
 github.com/aro-network/aro-edge-agent/agent v0.0.0-20260304055628-ddc01e2f5597/go.mod h1:V8ywMCP0pL9qdiEEhCsPyHhXfMLXokYcEovPKTkfApk=
+github.com/aro-network/aro-edge-agent/agent v0.0.0-20260305102601-aa3d301972be h1:Aaw9rqx8eqWOb28HmeK4WcIuZ1A9w2ASzDfX4v0ZT54=
+github.com/aro-network/aro-edge-agent/agent v0.0.0-20260305102601-aa3d301972be/go.mod h1:V8ywMCP0pL9qdiEEhCsPyHhXfMLXokYcEovPKTkfApk=
 github.com/aro-network/aro-proxy-worker/x v0.0.0-20260129021610-a2e00bd80c78 h1:O4K1YW7S0mAIfRBWq3ZtlqSb/sZ64eR8V53/nbsw+oQ=
 github.com/aro-network/aro-proxy-worker/x v0.0.0-20260129021610-a2e00bd80c78/go.mod h1:rkO8ZjNlpmWuAlv2GUU606stlXAFfl+AtxD866vrN8I=
 github.com/asaskevich/govalidator v0.0.0-20210307081110-f21760c49a8d h1:Byv0BzEl3/e6D5CLfI0j/7hiIEtvGVFPCZ7Ei2oq8iQ=

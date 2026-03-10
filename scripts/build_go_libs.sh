@@ -262,7 +262,7 @@ build_for_platform() {
             CC="$ANDROID_NDK_ROOT/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android21-clang" \
             go build \
                 -buildmode=c-shared \
-                -ldflags "$ldflags" \
+                -ldflags "$ldflags -extldflags \"-Wl,-z,max-page-size=16384\"" \
                 -o "$output_dir/$output_name.$output_ext" \
                 .
             ;;
