@@ -10,6 +10,8 @@ import 'package:aro_client/services/AppServiceStarter.dart';
 import 'package:aro_client/services/logger_service.dart';
 import 'package:aro_client/services/lib_update_service.dart';
 import 'package:aro_client/services/connectivity_service.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:permission_handler/permission_handler.dart';
 import 'package:window_manager/window_manager.dart';
 import 'dart:io';
 import 'package:webview_flutter/webview_flutter.dart';
@@ -187,6 +189,72 @@ class _MyHomePageState extends State<MyHomePage>
       }
     } catch (e) {
       LoggerService().error('Restart failed', e);
+    }
+  }
+
+  Future<void> _showAndroidAppSettingsDialog() async {
+    if (!mounted) return;
+    try {
+      // Only show on first launch after install
+      final prefs = await SharedPreferences.getInstance();
+      final hasShownFirstLaunchDialog =
+          prefs.getBool('has_shown_first_launch_dialog') ?? false;
+      if (hasShownFirstLaunchDialog) return;
+
+      // Mark as shown so it never shows again
+      await prefs.setBool('has_shown_first_launch_dialog', true);
+
+      if (!mounted) return;
+
+      // 1) Request notification permission (first install won't have it enabled)
+      try {
+        final notificationStatus = await Permission.notification.status;
+        if (notificationStatus.isDenied || notificationStatus.isRestricted) {
+          await Permission.notification.request();
+        }
+      } catch (e) {
+        LoggerService().error('Failed to request notification permission', e);
+      }
+
+      if (!mounted) return;
+
+      // 2) Show app settings dialog
+      await showDialog<void>(
+        context: context,
+        barrierDismissible: true,
+        builder: (context) {
+          return AlertDialog(
+            title: const Text('Optimize App Performance'),
+            content: const Text(
+              'To ensure ARO Mobile runs reliably, please go to App Settings and enable the following:\n\n'
+              '1. Notifications — Allow notifications so the background service can run properly.\n\n'
+              '2. Background running — Allow the app to run in the background to keep your node online.\n\n'
+              '3. Auto-start — Enable auto-start so the app can restart automatically after a reboot.',
+            ),
+            actions: [
+              TextButton(
+                onPressed: () {
+                  Navigator.of(context).pop();
+                },
+                child: const Text('Later'),
+              ),
+              TextButton(
+                onPressed: () async {
+                  Navigator.of(context).pop();
+                  try {
+                    await MyApp.platform.invokeMethod('openAppSettings');
+                  } catch (e) {
+                    LoggerService().error('Failed to open app settings', e);
+                  }
+                },
+                child: const Text('Go to Settings'),
+              ),
+            ],
+          );
+        },
+      );
+    } catch (e) {
+      LoggerService().error('Show app settings dialog failed', e);
     }
   }
 
@@ -569,6 +637,13 @@ class _MyHomePageState extends State<MyHomePage>
         _isInitializing = false;
         _isAppInitialized = true;
       });
+
+      // Show app-settings prompt on Android after initialization completes
+      if (Platform.isAndroid) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          _showAndroidAppSettingsDialog();
+        });
+      }
     } catch (e) {
       LoggerService().error('Failed _asyncInit', e);
 
