@@ -639,11 +639,13 @@ jobs:
             artifact_suffix: "ubuntu"
             bundle_target: "deb"
             tauri_config: "src-tauri/tauri.ubuntu.conf.json"
+            tauri_features: ""
 
           - distro: "debian:12"
             artifact_suffix: "debian-12"
             bundle_target: "deb"
             tauri_config: "src-tauri/tauri.debian.conf.json"
+            tauri_features: ""
           # NOTE: Tauri (gtk-rs/glib-sys 0.18.x) requires GLib >= 2.70.
           # Rocky Linux 8/9 ship GLib < 2.70, so compiling inside those containers fails.
           # `rockylinux:10` is not (currently) published on Docker Hub, so use an EL10-compatible base.
@@ -651,6 +653,7 @@ jobs:
             artifact_suffix: "centos-stream-10"
             bundle_target: "rpm"
             tauri_config: "src-tauri/tauri.centos-stream10.conf.json"
+            tauri_features: "webkitgtk-6-0"
 
     runs-on: ubuntu-latest
     container:
@@ -739,7 +742,7 @@ jobs:
             # pkg-config binary is provided by pkgconf-pkg-config on RHEL/Rocky.
             dnf install -y --allowerasing git curl jq which ca-certificates \
               clang gcc gcc-c++ make pkgconf-pkg-config \
-              openssl-devel gtk3-devel glib2 glib2-devel \
+              openssl-devel glib2 glib2-devel \
               rpm-build
 
             # Diagnostics: ensure glib-2.0.pc is present and visible to pkg-config.
@@ -759,9 +762,15 @@ jobs:
               fi
             fi
 
-            # Prefer WebKitGTK 4.1 when available; fall back to 4.0 (webkit2gtk3) for older distros.
-            if ! dnf install -y webkit2gtk4.1-devel; then
-              dnf install -y webkit2gtk3-devel
+            # WebKitGTK: if building with webkitgtk-6.0 (GTK4), install those; otherwise use GTK3 webkit.
+            if [[ "${{ matrix.tauri_features }}" == *"webkitgtk-6-0"* ]]; then
+              dnf install -y gtk4-devel webkitgtk6.0-devel
+            else
+              dnf install -y gtk3-devel
+              # Prefer WebKitGTK 4.1 when available; fall back to 4.0 (webkit2gtk3) for older distros.
+              if ! dnf install -y webkit2gtk4.1-devel; then
+                dnf install -y webkit2gtk3-devel
+              fi
             fi
 
             # Set PKG_CONFIG_PATH for Rocky/RHEL-based systems
@@ -821,7 +830,12 @@ jobs:
             "${{ matrix.tauri_config }}" \
             > src-tauri/tauri.merged.conf.json
 
-          cargo tauri build --ci --config src-tauri/tauri.merged.conf.json
+          FEATURES_ARG=""
+          if [ -n "${{ matrix.tauri_features }}" ]; then
+            FEATURES_ARG="--features ${{ matrix.tauri_features }}"
+          fi
+
+          cargo tauri build --ci --config src-tauri/tauri.merged.conf.json $FEATURES_ARG
           ls -lah "src-tauri/target/release/bundle/${BUNDLE_TARGET}" || true
 
       - name: Upload Package

@@ -10,13 +10,18 @@ rust-version = "1.77.2"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
+[features]
+default = []
+# Enable webkitgtk 6.0 (GTK4) for distros that don't ship webkit2gtk 4.1 (e.g. CentOS Stream 10)
+webkitgtk-6-0 = ["tauri/webkitgtk-6.0"]
+
 [lib]
 name = "app_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
 
 [build-dependencies]
 anyhow = "1.0"
-tauri-build = { version = "~2.0.0", features = [] }
+tauri-build = { version = "^2.1", features = [] }
 
 [dependencies]
 anyhow = "1.0"
@@ -25,10 +30,10 @@ libloading = "0.8"
 serde_json = "1.0"
 serde = { version = "1.0", features = ["derive"] }
 log = "0.4"
-tauri = { version = "~2.0.0", features = ["tray-icon"] }
-tauri-utils = "=2.0.2"
-tauri-plugin-log = "~2.0.0"
-tauri-plugin-shell = "~2.0.0"
+tauri = { version = "^2.1", features = ["tray-icon"] }
+tauri-utils = "^2.1"
+tauri-plugin-log = "^2"
+tauri-plugin-shell = "^2"
 time = { version = "0.3", features = ["formatting", "local-offset"] }
 reqwest = { version = "0.11", features = ["blocking"] }
 bytes = "1"
@@ -38,4 +43,4 @@ url = "2"
 base64 = "0.22"
 
 [target.'cfg(target_os = "linux")'.dependencies]
-tauri-plugin-dialog = "~2.0.0"
+tauri-plugin-dialog = "^2"
