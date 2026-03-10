@@ -19,6 +19,7 @@ import 'dart:convert';
 import 'package:aro_client/utils/config.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart' as inapp;
 import 'package:url_launcher/url_launcher.dart';
+import 'package:aro_client/services/webview_memory_manager.dart';
 
 void main(List<String> args) async {
   // if (Platform.isMacOS && !bool.fromEnvironment('dart.vm.product')) {
@@ -31,6 +32,43 @@ void main(List<String> args) async {
   // await ConnectivityService().initialize();
 
   runApp(const MyApp());
+}
+
+// Headless entrypoint for background init (invoked from ForegroundService).
+@pragma('vm:entry-point')
+void backgroundMain() async {
+  print('[backgroundMain] starting');
+  WidgetsFlutterBinding.ensureInitialized();
+  await _runBackgroundInit();
+}
+
+Future<void> _runBackgroundInit() async {
+  try {
+    if (!Platform.isAndroid) {
+      print('Background init skipped: not Android');
+      return;
+    }
+    await LoggerService().initialize();
+    await ConnectivityService().initialize();
+
+    final appDir = await getAppSupportDir();
+    LoggerService().info('Background init appDir: $appDir');
+
+    final initResult = StudyService.instance.nodeInit({
+      "appDir": appDir,
+      "config": {"BaseAPIURL": AllConfig.apiBase},
+    });
+    LoggerService().info('Background init result: $initResult');
+  } catch (e, s) {
+    // Use Logger if ready; otherwise print.
+    try {
+      LoggerService().error('Background init failed', e, s);
+    } catch (_) {
+      // ignore logger errors
+    }
+    print('Background init failed: $e');
+    print(s);
+  }
 }
 
 class MyApp extends StatelessWidget {
@@ -69,7 +107,7 @@ class MyHomePage extends StatefulWidget {
 }
 
 class _MyHomePageState extends State<MyHomePage>
-    with TrayListener, WindowListener {
+    with TrayListener, WindowListener, WidgetsBindingObserver {
   WebViewController? _controller;
   String? _mobileWebViewCurrentUrl;
   int _mobileWebViewTimeoutRetryCount = 0;
@@ -90,6 +128,8 @@ class _MyHomePageState extends State<MyHomePage>
 
   bool _trayMenuOpening = false;
   bool _isShuttingDown = false;
+
+  final _memoryManager = WebViewMemoryManager();
 
   final service = StudyService.instance;
 
@@ -394,6 +434,7 @@ class _MyHomePageState extends State<MyHomePage>
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _isWebViewLoading = true;
 
     _setupConnectivityListener();
@@ -596,6 +637,8 @@ class _MyHomePageState extends State<MyHomePage>
     }
 
     try {
+      _memoryManager.dispose();
+      _desktopController?.dispose();
       _desktopController = null;
       _controller = null;
     } catch (_) {}
@@ -720,7 +763,22 @@ class _MyHomePageState extends State<MyHomePage>
   }
 
   @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    super.didChangeAppLifecycleState(state);
+    // When the app is resumed after being paused (e.g. macOS sleep/wake),
+    // proactively clean up WebView memory to reduce OOM risk.
+    if (state == AppLifecycleState.resumed) {
+      LoggerService()
+          .info('[Lifecycle] App resumed — triggering memory cleanup');
+      _memoryManager.manualCleanup();
+    }
+  }
+
+  @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    _memoryManager.dispose();
+
     if (Platform.isWindows) {
       try {
         trayManager.removeListener(this);
@@ -738,6 +796,10 @@ class _MyHomePageState extends State<MyHomePage>
     } catch (_) {}
     _webViewRecoveryTimer = null;
 
+    // Properly dispose WebView controllers instead of just nulling them
+    try {
+      _desktopController?.dispose();
+    } catch (_) {}
     _desktopController = null;
     _controller = null;
     ConnectivityService().dispose();
@@ -841,6 +903,31 @@ class _MyHomePageState extends State<MyHomePage>
                 e.preventDefault();
                 return false;
               }, false);
+
+              // Memory leak prevention: clean up detached DOM nodes and
+              // event listeners that may accumulate over long sessions.
+              (function() {
+                // Limit console history to prevent memory buildup from logging
+                if (window.console && window.console.clear) {
+                  setInterval(function() { console.clear(); }, 1800000); // every 30 min
+                }
+                // Periodically nullify stale references in global scope caches
+                // that frameworks may create
+                setInterval(function() {
+                  try {
+                    if (window.gc) { window.gc(); }
+                    // Release image bitmap caches
+                    if (window.createImageBitmap) {
+                      var imgs = document.querySelectorAll('img[src^="blob:"]');
+                      imgs.forEach(function(img) {
+                        if (img.src && img.src.startsWith('blob:')) {
+                          URL.revokeObjectURL(img.src);
+                        }
+                      });
+                    }
+                  } catch(e) {}
+                }, 3600000); // every 60 min
+              })();
             ''');
           },
           onPageStarted: (url) {
@@ -875,6 +962,9 @@ class _MyHomePageState extends State<MyHomePage>
       _mobileWebViewCurrentUrl = url;
       _mobileWebViewTimeoutRetryCount = 0;
       _controller!.loadRequest(Uri.parse(url));
+
+      // Start memory management for mobile/macOS WebView
+      _memoryManager.start(mobileController: _controller);
     } catch (e) {
       print('[DEBUG] Error initializing webview: $e');
       LoggerService().error('Error initializing webview', e);
@@ -1223,6 +1313,9 @@ One-click start and forget it.
           } catch (e) {
             LoggerService().error('Failed to add JavaScript handler', e);
           }
+
+          // Start memory management for desktop WebView
+          _memoryManager.start(desktopController: controller);
         },
         shouldOverrideUrlLoading: (controller, action) async {
           return inapp.NavigationActionPolicy.ALLOW;
@@ -1253,6 +1346,24 @@ One-click start and forget it.
                   }
                 };
               }
+
+              // Memory leak prevention for long-running sessions
+              (function() {
+                if (window.console && window.console.clear) {
+                  setInterval(function() { console.clear(); }, 1800000);
+                }
+                setInterval(function() {
+                  try {
+                    if (window.gc) { window.gc(); }
+                    var imgs = document.querySelectorAll('img[src^="blob:"]');
+                    imgs.forEach(function(img) {
+                      if (img.src && img.src.startsWith('blob:')) {
+                        URL.revokeObjectURL(img.src);
+                      }
+                    });
+                  } catch(e) {}
+                }, 3600000);
+              })();
             ''');
           } catch (e) {
             LoggerService().error('Failed to evaluate JavaScript', e);
