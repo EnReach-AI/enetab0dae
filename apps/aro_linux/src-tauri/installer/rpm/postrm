@@ -22,6 +22,15 @@ pgrep -f ARO | xargs -r kill -KILL || true
 # Remove system desktop entry
 rm -f "/usr/share/applications/${APP_ID}.desktop" || true
 
+# Remove binary/symlink installed by postinst
+rm -f "/usr/bin/ARO" || true
+
+# Remove user-level data (all users)
+rm -rf /home/*/.config/com.aro.ARONetwork || true
+rm -rf /home/*/.local/share/com.aro.ARONetwork || true
+rm -rf /root/.config/com.aro.ARONetwork || true
+rm -rf /root/.local/share/com.aro.ARONetwork || true
+
 
 
 exit 0
