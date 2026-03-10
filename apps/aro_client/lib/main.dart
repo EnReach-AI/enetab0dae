@@ -509,9 +509,11 @@ class _MyHomePageState extends State<MyHomePage>
 
     if (Platform.isWindows) {
       trayManager.addListener(this);
-      unawaited(_setupWindowsTrayMenu());
       windowManager.addListener(this);
-      unawaited(windowManager.setPreventClose(true));
+      // NOTE: setPreventClose and tray menu setup are deferred to _asyncInit
+      // AFTER windowManager.ensureInitialized() and trayManager.setIcon().
+      // Calling them here (before initialization) caused explorer.exe to hang,
+      // making desktop icons unclickable.
     }
 
     if (Platform.isWindows || Platform.isLinux) {
