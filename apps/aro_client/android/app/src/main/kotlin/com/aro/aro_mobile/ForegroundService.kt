@@ -5,13 +5,25 @@ import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
 import android.app.Service
+import android.content.Context
 import android.content.Intent
+import android.content.IntentFilter
 import android.os.Build
 import android.os.IBinder
+import android.os.UserManager
 import android.util.Log
 import androidx.core.app.NotificationCompat
+import io.flutter.FlutterInjector
+import io.flutter.embedding.engine.FlutterEngine
+import io.flutter.embedding.engine.dart.DartExecutor
+import io.flutter.plugins.GeneratedPluginRegistrant
 
 class ForegroundService : Service() {
+
+    companion object {
+        @Volatile
+        private var flutterEngine: FlutterEngine? = null
+    }
 
     private val CHANNEL_ID = "foreground_service_channel"
 
@@ -19,12 +31,18 @@ class ForegroundService : Service() {
     private var workerRunning = false
 
     private var workerThread: Thread? = null
+    private var unlockReceiver: android.content.BroadcastReceiver? = null
 
     override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onCreate() {
         super.onCreate()
         createNotificationChannel()
+        if (isUserUnlocked()) {
+            ensureBackgroundEngine()
+        } else {
+            registerUnlockReceiver()
+        }
     }
 
     private fun createNotificationChannel() {
@@ -87,6 +105,60 @@ class ForegroundService : Service() {
         return START_STICKY
     }
 
+    private fun ensureBackgroundEngine() {
+        if (flutterEngine != null) return
+
+        if (!isUserUnlocked()) {
+            Log.w("ForegroundService", "User locked; postponing  engine start")
+            return
+        }
+
+        try {
+            Log.i("ForegroundService", "Starting headless engine (backgroundMain)")
+            val loader = FlutterInjector.instance().flutterLoader()
+            loader.startInitialization(applicationContext)
+            loader.ensureInitializationComplete(applicationContext, null)
+
+            val engine = FlutterEngine(applicationContext)
+            GeneratedPluginRegistrant.registerWith(engine)
+
+            val entrypoint = DartExecutor.DartEntrypoint(loader.findAppBundlePath(), "backgroundMain")
+            engine.dartExecutor.executeDartEntrypoint(entrypoint)
+
+            flutterEngine = engine
+        } catch (t: Throwable) {
+            Log.e("ForegroundService", "Failed to start headless engine", t)
+        }
+    }
+
+    private fun registerUnlockReceiver() {
+        if (unlockReceiver != null) return
+        val receiver = object : android.content.BroadcastReceiver() {
+            override fun onReceive(ctx: Context?, intent: Intent?) {
+                if (Intent.ACTION_USER_UNLOCKED == intent?.action && isUserUnlocked()) {
+                    try {
+                        applicationContext.unregisterReceiver(this)
+                    } catch (_: Throwable) {
+                        // ignore
+                    }
+                    unlockReceiver = null
+                    ensureBackgroundEngine()
+                }
+            }
+        }
+        unlockReceiver = receiver
+        applicationContext.registerReceiver(receiver, IntentFilter(Intent.ACTION_USER_UNLOCKED))
+    }
+
+    private fun isUserUnlocked(): Boolean {
+        return try {
+            val um = getSystemService(UserManager::class.java)
+            um?.isUserUnlocked ?: true
+        } catch (_: Throwable) {
+            true
+        }
+    }
+
     override fun onTaskRemoved(rootIntent: Intent?) {
         val restartServiceIntent = Intent(applicationContext, ForegroundService::class.java)
         try {
@@ -105,6 +177,15 @@ class ForegroundService : Service() {
         workerRunning = false
         workerThread?.interrupt()
         workerThread = null
+        unlockReceiver?.let {
+            try {
+                applicationContext.unregisterReceiver(it)
+            } catch (_: Throwable) {
+                // ignore
+            }
+            unlockReceiver = null
+        }
+        // Keep engine alive across service restarts; do not destroy here.
         super.onDestroy()
     }
 }

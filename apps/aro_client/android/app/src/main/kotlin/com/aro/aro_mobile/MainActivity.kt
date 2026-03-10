@@ -6,6 +6,10 @@ import io.flutter.embedding.android.FlutterActivity
 import io.flutter.plugin.common.MethodChannel
 
 class MainActivity: FlutterActivity() {
+    companion object {
+        const val EXTRA_STARTED_FROM_BOOT = "started_from_boot"
+    }
+
     private val CHANNEL = "com.aro.aro_app/foreground"
 
     override fun configureFlutterEngine(flutterEngine: io.flutter.embedding.engine.FlutterEngine) {
@@ -43,5 +47,13 @@ class MainActivity: FlutterActivity() {
         startActivity(intent)
         finish()
         Runtime.getRuntime().exit(0)
+    }
+
+    override fun onResume() {
+        super.onResume()
+        // If launched automatically from boot, put the task to background to avoid flashing UI.
+        if (intent?.getBooleanExtra(EXTRA_STARTED_FROM_BOOT, false) == true) {
+            moveTaskToBack(true)
+        }
     }
 }
