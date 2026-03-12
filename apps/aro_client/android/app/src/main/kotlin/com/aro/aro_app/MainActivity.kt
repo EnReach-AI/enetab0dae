@@ -23,11 +23,20 @@ class MainActivity : FlutterActivity() {
 	}
 
 	private fun restartApp() {
-		val context = applicationContext
-		val intent = context.packageManager.getLaunchIntentForPackage(context.packageName)
-		intent?.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
-		startActivity(intent)
-		finish()
-		Runtime.getRuntime().exit(0)
+		// ForegroundService is in :bg process. Send restart action via IPC.
+		try {
+			val serviceIntent = Intent(this, com.aro.aro_mobile.ForegroundService::class.java).apply {
+				action = com.aro.aro_mobile.ForegroundService.ACTION_RESTART_APP
+			}
+			if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
+				startForegroundService(serviceIntent)
+			} else {
+				startService(serviceIntent)
+			}
+		} catch (t: Throwable) {
+			android.util.Log.e("MainActivity", "Failed to send restart to service", t)
+		}
+		// Kill main process; Service in :bg is unaffected and will relaunch Activity.
+		System.exit(0)
 	}
 }

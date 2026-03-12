@@ -21,6 +21,9 @@ import io.flutter.plugins.GeneratedPluginRegistrant
 class ForegroundService : Service() {
 
     companion object {
+        const val ACTION_RESTART_APP = "com.aro.aro_mobile.ACTION_RESTART_APP"
+        const val ACTION_STOP_FOR_UPDATE = "com.aro.aro_mobile.ACTION_STOP_FOR_UPDATE"
+
         @Volatile
         private var flutterEngine: FlutterEngine? = null
     }
@@ -38,11 +41,6 @@ class ForegroundService : Service() {
     override fun onCreate() {
         super.onCreate()
         createNotificationChannel()
-        if (isUserUnlocked()) {
-            ensureBackgroundEngine()
-        } else {
-            registerUnlockReceiver()
-        }
     }
 
     private fun createNotificationChannel() {
@@ -58,6 +56,22 @@ class ForegroundService : Service() {
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        if (intent?.action == ACTION_STOP_FOR_UPDATE) {
+            Log.i("ForegroundService", "Received STOP_FOR_UPDATE action, destroying engine and stopping service")
+            destroyBackgroundEngine()
+            stopForegroundCompat()
+            stopSelf()
+            return START_NOT_STICKY
+        }
+
+        ensureBackgroundEngineIfNeeded()
+
+        // Handle restart request: just keep the Service running in background.
+        // User will reopen the app manually and get the updated library.
+        if (intent?.action == ACTION_RESTART_APP) {
+            Log.i("ForegroundService", "Received RESTART_APP action, staying in background")
+        }
+
         val openAppIntent = packageManager.getLaunchIntentForPackage(packageName)
             ?.apply {
                 addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED)
@@ -105,6 +119,14 @@ class ForegroundService : Service() {
         return START_STICKY
     }
 
+    private fun ensureBackgroundEngineIfNeeded() {
+        if (isUserUnlocked()) {
+            ensureBackgroundEngine()
+        } else {
+            registerUnlockReceiver()
+        }
+    }
+
     private fun ensureBackgroundEngine() {
         if (flutterEngine != null) return
 
@@ -128,6 +150,26 @@ class ForegroundService : Service() {
             flutterEngine = engine
         } catch (t: Throwable) {
             Log.e("ForegroundService", "Failed to start headless engine", t)
+        }
+    }
+
+    private fun destroyBackgroundEngine() {
+        try {
+            flutterEngine?.destroy()
+            Log.i("ForegroundService", "Background engine destroyed for update")
+        } catch (t: Throwable) {
+            Log.e("ForegroundService", "Failed to destroy background engine", t)
+        } finally {
+            flutterEngine = null
+        }
+    }
+
+    private fun stopForegroundCompat() {
+        try {
+            @Suppress("DEPRECATION")
+            stopForeground(true)
+        } catch (t: Throwable) {
+            Log.w("ForegroundService", "Failed to stop foreground cleanly", t)
         }
     }
 
@@ -171,6 +213,31 @@ class ForegroundService : Service() {
             Log.e("ForegroundService", "Failed to restart service after task removed", t)
         }
         super.onTaskRemoved(rootIntent)
+    }
+
+    /**
+     * Launch the main Activity from the Service context.
+     * Used after library update to restart the UI.
+     */
+    private fun launchMainActivity() {
+        try {
+            val launchIntent = packageManager
+                .getLaunchIntentForPackage(packageName)
+                ?.apply {
+                    addFlags(
+                        Intent.FLAG_ACTIVITY_NEW_TASK or
+                        Intent.FLAG_ACTIVITY_CLEAR_TASK
+                    )
+                }
+            if (launchIntent != null) {
+                startActivity(launchIntent)
+                Log.i("ForegroundService", "Activity launched successfully")
+            } else {
+                Log.w("ForegroundService", "No launch intent found")
+            }
+        } catch (t: Throwable) {
+            Log.e("ForegroundService", "Failed to launch Activity", t)
+        }
     }
 
     override fun onDestroy() {

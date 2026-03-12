@@ -11,6 +11,31 @@ class LibUpdateService {
   LibUpdateService._internal();
   static final LibUpdateService instance = LibUpdateService._internal();
 
+  static const String currentLibraryPathFileName = 'libstudy.current.path';
+
+  Future<String?> readPinnedLibraryPath() async {
+    try {
+      final appDir = await getAppSupportDir();
+      final pointerFile = File(p.join(appDir, currentLibraryPathFileName));
+      if (!pointerFile.existsSync()) return null;
+
+      final pinnedPath = (await pointerFile.readAsString()).trim();
+      if (pinnedPath.isEmpty) return null;
+
+      if (!File(pinnedPath).existsSync()) {
+        LoggerService().info('Pinned library path no longer exists', {
+          'path': pinnedPath,
+        });
+        return null;
+      }
+
+      return pinnedPath;
+    } catch (e) {
+      LoggerService().info('Failed to read pinned library path', e);
+      return null;
+    }
+  }
+
   Future<Map<String, dynamic>> checkAndUpdateMacOS({
     required Map<String, dynamic> currentVersionMap,
     required Map<String, dynamic> latestVersionMap,
@@ -368,12 +393,17 @@ class LibUpdateService {
       }
 
       final appDir = await getAppSupportDir();
-      final targetPath = p.join(appDir, fileName);
+
+      // Use versioned filename so dlopen sees a new path (enables hot-reload
+      // without restarting the process).
+      final ext = p.extension(fileName); // .so / .dll / .dylib
+      final base =
+          p.basenameWithoutExtension(fileName); // libstudy / libstudy-arm
+      final versionedName = '${base}_$version$ext';
+      final targetPath = p.join(appDir, versionedName);
       LoggerService()
           .info('Extracted $fileName from archive, saving to $targetPath');
       await File(targetPath).writeAsBytes(libBytes, flush: true);
-      await File(p.join(appDir, 'libstudy.version'))
-          .writeAsString(version, flush: true);
 
       if (chmod) {
         try {
@@ -382,6 +412,11 @@ class LibUpdateService {
           LoggerService().info('chmod failed for $targetPath', e);
         }
       }
+
+      await File(p.join(appDir, currentLibraryPathFileName))
+          .writeAsString(targetPath, flush: true);
+      await File(p.join(appDir, 'libstudy.version'))
+          .writeAsString(version, flush: true);
 
       LoggerService().info('libstudy updated', {
         'path': targetPath,

@@ -43,6 +43,17 @@ class StudyLibrary {
     _overridePath = path;
   }
 
+  /// Hot-reload: open a NEW library from [newPath] (must be a different
+  /// filesystem path from the previously loaded one so that dlopen returns
+  /// a fresh handle instead of the cached one).
+  static void reload(String newPath) {
+    LoggerService().info('[StudyLib] Hot-reloading from: $newPath');
+    final lib = DynamicLibrary.open(newPath);
+    _lib = lib;
+    _overridePath = newPath;
+    LoggerService().info('[StudyLib] Hot-reload successful');
+  }
+
   static DynamicLibrary _open() {
     if (_overridePath != null) {
       final file = File(_overridePath!);

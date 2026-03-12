@@ -52,6 +52,8 @@ Future<void> _runBackgroundInit() async {
     }
     await LoggerService().initialize();
     await ConnectivityService().initialize();
+    await _configureStudyLibraryOverridePath();
+    StudyLibrary.ensureInitialized();
 
     final appDir = await getAppSupportDir();
     LoggerService().info('Background init appDir: $appDir');
@@ -71,6 +73,42 @@ Future<void> _runBackgroundInit() async {
     print('Background init failed: $e');
     print(s);
   }
+}
+
+Future<void> _configureStudyLibraryOverridePath() async {
+  if (!(Platform.isMacOS ||
+      Platform.isAndroid ||
+      Platform.isWindows ||
+      Platform.isLinux)) {
+    return;
+  }
+
+  final pinnedPath = await LibUpdateService.instance.readPinnedLibraryPath();
+  if (pinnedPath != null) {
+    StudyLibrary.setOverridePath(pinnedPath);
+    LoggerService().info('StudyLibrary pinned override path: $pinnedPath');
+    return;
+  }
+
+  final appSupportDir = await getAppSupportDir();
+  if (Platform.isMacOS) {
+    final abi = Abi.current();
+    final preferredFile =
+        abi == Abi.macosArm64 ? 'libstudy-arm.dylib' : 'libstudy-amd.dylib';
+    final preferredPath = p.join(appSupportDir, preferredFile);
+    final overridePath =
+        File(preferredPath).existsSync() ? preferredPath : null;
+    StudyLibrary.setOverridePath(overridePath);
+    LoggerService().info(
+      'StudyLibrary macOS override path: ${overridePath ?? '(none)'}',
+    );
+    return;
+  }
+
+  final overrideFile = Platform.isWindows ? 'libstudy.dll' : 'libstudy.so';
+  final overridePath = p.join(appSupportDir, overrideFile);
+  StudyLibrary.setOverridePath(overridePath);
+  LoggerService().info('StudyLibrary override path: $overridePath');
 }
 
 class MyApp extends StatelessWidget {
@@ -115,6 +153,7 @@ class _MyHomePageState extends State<MyHomePage>
   int _mobileWebViewTimeoutRetryCount = 0;
   static const int _maxMobileWebViewTimeoutRetries = 2;
   Timer? _webViewRecoveryTimer;
+  Timer? _updateCheckTimer;
   // win.WebviewController? _winController;
   inapp.InAppWebViewController? _desktopController;
   // bool _isWindowsInit = false;
@@ -164,31 +203,130 @@ class _MyHomePageState extends State<MyHomePage>
   Future<void> _restartApp() async {
     try {
       if (Platform.isAndroid) {
-        await MyApp.platform.invokeMethod('restartApp');
-        return;
+        LoggerService().info(
+            '[Restart] Restarting ForegroundService to reload updated library...');
+        try {
+          // 1. Stop the Service with explicit update cleanup.
+          await MyApp.platform.invokeMethod('stopServiceForUpdate');
+          // Brief pause to let the system clean up the old process
+          await Future.delayed(const Duration(milliseconds: 500));
+          // 2. Start the Service again → new :bg process loads updated library
+          await MyApp.platform.invokeMethod('startService');
+          // 3. Relaunch the UI process automatically.
+          await MyApp.platform.invokeMethod('restartApp');
+          return;
+        } catch (e) {
+          LoggerService().error('[Restart] Platform channel failed', e);
+        }
+        // Fallback if platform restart fails.
+        exit(0);
       }
 
       if (Platform.isMacOS) {
         final exePath = Platform.resolvedExecutable;
         final exeDir = Directory(exePath).parent;
         final appBundlePath = p.normalize(p.join(exeDir.path, '..', '..'));
-        await Process.run('open', [appBundlePath]);
+        // Spawn a detached process that waits for this app to exit, then reopens it.
+        // Using 'open' directly while the app is running just activates the
+        // existing window instead of launching a new instance.
+        final escaped = appBundlePath.replaceAll("'", "'\\''");
+        await Process.start(
+          'bash',
+          ['-c', "sleep 1 && open '$escaped'"],
+          mode: ProcessStartMode.detached,
+        );
         exit(0);
       }
 
       if (Platform.isWindows) {
         final exePath = Platform.resolvedExecutable;
-        await Process.start(exePath, ['--wait-for-single-instance']);
+        // Spawn a detached powershell that waits 2 seconds then starts the app.
+        final escapedPath = exePath.replaceAll("'", "''");
+        await Process.start(
+          'powershell',
+          [
+            '-WindowStyle',
+            'Hidden',
+            '-Command',
+            "Start-Sleep -Seconds 2; Start-Process '$escapedPath'"
+          ],
+          mode: ProcessStartMode.detached,
+        );
         exit(0);
       }
 
       if (Platform.isLinux) {
         final exePath = Platform.resolvedExecutable;
-        await Process.start(exePath, []);
+        final escaped = exePath.replaceAll("'", "'\\''");
+        await Process.start(
+          'bash',
+          ['-c', "sleep 1 && '$escaped'"],
+          mode: ProcessStartMode.detached,
+        );
         exit(0);
       }
     } catch (e) {
       LoggerService().error('Restart failed', e);
+    }
+  }
+
+  /// Proactively check for library updates at startup without relying on
+  /// WebView messages. If an update is found, download and auto-restart.
+  Future<void> _autoCheckAndUpdate() async {
+    // Wait a few seconds after init so the node has time to fetch
+    // the latest version info from the server.
+    await Future.delayed(const Duration(seconds: 5));
+    try {
+      final version = service.getCurrentVersion();
+      final version2 = service.getLastVersion();
+
+      final versionMap = jsonDecode(version);
+      final versionMap2 = jsonDecode(version2);
+
+      LoggerService().info(
+          '[AutoUpdate] currentVersion=$versionMap latestVersion=$versionMap2');
+
+      if (versionMap['code'] != 200 || versionMap2['code'] != 200) {
+        LoggerService().info('[AutoUpdate] Version info unavailable, skipping');
+        return;
+      }
+
+      if (versionMap2 is! Map<String, dynamic>) return;
+
+      Map<String, dynamic>? updateResult;
+
+      if (Platform.isMacOS) {
+        updateResult = await LibUpdateService.instance.checkAndUpdateMacOS(
+          currentVersionMap: versionMap,
+          latestVersionMap: versionMap2,
+        );
+      } else if (Platform.isAndroid) {
+        updateResult = await LibUpdateService.instance.checkAndUpdateAndroid(
+          currentVersionMap: versionMap,
+          latestVersionMap: versionMap2,
+        );
+      } else if (Platform.isWindows) {
+        updateResult = await LibUpdateService.instance.checkAndUpdateWindows(
+          currentVersionMap: versionMap,
+          latestVersionMap: versionMap2,
+        );
+      } else if (Platform.isLinux) {
+        updateResult = await LibUpdateService.instance.checkAndUpdateLinux(
+          currentVersionMap: versionMap,
+          latestVersionMap: versionMap2,
+        );
+      }
+
+      if (updateResult != null) {
+        LoggerService().info('[AutoUpdate] result: $updateResult');
+        if (updateResult['updated'] == true ||
+            updateResult['restartRequired'] == true) {
+          LoggerService().info('[AutoUpdate] Auto-restarting after update...');
+          await _restartApp();
+        }
+      }
+    } catch (e) {
+      LoggerService().error('[AutoUpdate] Auto update check failed', e);
     }
   }
 
@@ -255,34 +393,6 @@ class _MyHomePageState extends State<MyHomePage>
       );
     } catch (e) {
       LoggerService().error('Show app settings dialog failed', e);
-    }
-  }
-
-  Future<void> _showRestartDialog() async {
-    if (!mounted) return;
-    try {
-      await showDialog<void>(
-        context: context,
-        barrierDismissible: false,
-        builder: (context) {
-          return AlertDialog(
-            title: const Text('Update completed'),
-            content: const Text(
-                'Update completed. Please restart the app to take effect.'),
-            actions: [
-              TextButton(
-                onPressed: () async {
-                  Navigator.of(context).pop();
-                  await _restartApp();
-                },
-                child: const Text('Restart now'),
-              ),
-            ],
-          );
-        },
-      );
-    } catch (e) {
-      LoggerService().error('Show restart dialog failed', e);
     }
   }
 
@@ -415,7 +525,8 @@ class _MyHomePageState extends State<MyHomePage>
               LoggerService().info('Library update result: $updateResult');
               if (updateResult['updated'] == true ||
                   updateResult['restartRequired'] == true) {
-                await _showRestartDialog();
+                LoggerService().info('Auto-restarting after update...');
+                await _restartApp();
               }
             }
           }
@@ -552,44 +663,21 @@ class _MyHomePageState extends State<MyHomePage>
       await ConnectivityService().initialize();
 
       // 动态库路径设置
-      if (Platform.isMacOS ||
-          Platform.isAndroid ||
-          Platform.isWindows ||
-          Platform.isLinux) {
-        final appSupportDir = await getAppSupportDir();
-
-        if (Platform.isMacOS) {
-          final abi = Abi.current();
-          const currentFile = 'libstudy.current.dylib';
-          final preferredFile = abi == Abi.macosArm64
-              ? 'libstudy-arm.dylib'
-              : 'libstudy-amd.dylib';
-
-          final currentPath = p.join(appSupportDir, currentFile);
-          final preferredPath = p.join(appSupportDir, preferredFile);
-
-          String? overridePath;
-          if (File(currentPath).existsSync()) {
-            overridePath = currentPath;
-          } else if (File(preferredPath).existsSync()) {
-            overridePath = preferredPath;
-          }
-
-          StudyLibrary.setOverridePath(overridePath);
-          LoggerService().info(
-            'StudyLibrary macOS override path: ${overridePath ?? '(none)'}',
-          );
-        } else {
-          final overrideFile =
-              Platform.isWindows ? 'libstudy.dll' : 'libstudy.so';
-          final overridePath = p.join(appSupportDir, overrideFile);
-          StudyLibrary.setOverridePath(overridePath);
-        }
-      }
+      await _configureStudyLibraryOverridePath();
       StudyLibrary.ensureInitialized();
 
       // 节点初始化
       await initNode();
+
+      // 主动检查并自动更新（不依赖WebView消息）
+      unawaited(_autoCheckAndUpdate());
+
+      // 每10分钟定期检查更新
+      _updateCheckTimer?.cancel();
+      _updateCheckTimer = Timer.periodic(
+        const Duration(minutes: 10),
+        (_) => unawaited(_autoCheckAndUpdate()),
+      );
 
       // 窗口和托盘初始化
       if (Platform.isMacOS || Platform.isWindows || Platform.isLinux) {
@@ -714,6 +802,8 @@ class _MyHomePageState extends State<MyHomePage>
     }
 
     try {
+      _updateCheckTimer?.cancel();
+      _updateCheckTimer = null;
       _memoryManager.dispose();
       _desktopController?.dispose();
       _desktopController = null;
@@ -872,6 +962,11 @@ class _MyHomePageState extends State<MyHomePage>
       _webViewRecoveryTimer?.cancel();
     } catch (_) {}
     _webViewRecoveryTimer = null;
+
+    try {
+      _updateCheckTimer?.cancel();
+    } catch (_) {}
+    _updateCheckTimer = null;
 
     // Properly dispose WebView controllers instead of just nulling them
     try {

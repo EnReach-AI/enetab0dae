@@ -3,6 +3,8 @@ package com.aro.aro_mobile
 import android.content.Intent
 import android.net.Uri
 import android.os.Build
+import android.os.Handler
+import android.os.Looper
 import android.provider.Settings
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.plugin.common.MethodChannel
@@ -33,9 +35,22 @@ class MainActivity: FlutterActivity() {
                     stopService(intent)
                     result.success("Service Stopped")
                 }
+                "stopServiceForUpdate" -> {
+                    try {
+                        val intent = Intent(this, ForegroundService::class.java).apply {
+                            action = ForegroundService.ACTION_STOP_FOR_UPDATE
+                        }
+                        startService(intent)
+                        result.success("Service Stopping For Update")
+                    } catch (e: Exception) {
+                        result.error("SERVICE_UPDATE_STOP_ERROR", e.message, null)
+                    }
+                }
                 "restartApp" -> {
-                    restartApp()
                     result.success(true)
+                    Handler(Looper.getMainLooper()).post {
+                        restartApp()
+                    }
                 }
                 "openAppSettings" -> {
                     try {
@@ -55,11 +70,18 @@ class MainActivity: FlutterActivity() {
 
     private fun restartApp() {
         val context = applicationContext
-        val intent = context.packageManager.getLaunchIntentForPackage(context.packageName)
-        intent?.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
-        startActivity(intent)
-        finish()
-        Runtime.getRuntime().exit(0)
+        val packageManager = context.packageManager
+        val intent = packageManager.getLaunchIntentForPackage(context.packageName)
+        if (intent != null) {
+            val componentName = intent.component
+            val restartIntent = Intent.makeRestartActivityTask(componentName)
+            context.startActivity(restartIntent)
+        }
+        // Kill immediately. The intent is already queued in ActivityManagerService
+        // (system_server process), so the system will create a NEW process to
+        // host the restarted activity. Do NOT delay — a delayed kill would
+        // destroy the new activity that started in the same process.
+        System.exit(0)
     }
 
     override fun onResume() {

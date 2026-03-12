@@ -40,7 +40,13 @@ class BootReceiver : BroadcastReceiver() {
         }
 
         startForegroundServiceSafely(context)
-        launchActivityForInit(context)
+
+        // Only launch Activity for boot events, NOT for package replacement.
+        // MY_PACKAGE_REPLACED should only restart the background service;
+        // the library hot-reload handles the rest without opening the UI.
+        if (action != Intent.ACTION_MY_PACKAGE_REPLACED) {
+            launchActivityForInit(context)
+        }
     }
 
     private fun startForegroundServiceSafely(context: Context) {

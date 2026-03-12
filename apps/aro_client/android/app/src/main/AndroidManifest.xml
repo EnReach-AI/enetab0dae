@@ -17,6 +17,7 @@
         <service
             android:name=".ForegroundService"
             android:exported="false"
+            android:process=":bg"
             android:foregroundServiceType="dataSync" />
 
         <receiver
