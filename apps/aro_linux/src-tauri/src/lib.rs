@@ -30,6 +30,12 @@ static INSTANCE_LOCK_FILE: OnceLock<std::fs::File> = OnceLock::new();
 static LAST_PAGE_LOAD_ERROR_AT_MS: std::sync::atomic::AtomicI64 =
   std::sync::atomic::AtomicI64::new(0);
 
+#[cfg(target_os = "linux")]
+const LIBSTUDY_UPDATE_CHECK_INTERVAL: Duration = Duration::from_secs(10 * 60);
+
+#[cfg(target_os = "linux")]
+static LIBSTUDY_UPDATE_MONITOR_STARTED: OnceLock<()> = OnceLock::new();
+
 fn now_ms_i64() -> i64 {
   (OffsetDateTime::now_utc().unix_timestamp_nanos() / 1_000_000) as i64
 }
@@ -144,6 +150,109 @@ fn call_libstudy_sync(op: LibstudyOp) -> Result<String, String> {
   resp_rx
     .recv()
     .map_err(|e| format!("libstudy worker dropped response: {e}"))?
+}
+
+#[cfg(target_os = "linux")]
+fn libstudy_version_response_ok(value: &serde_json::Value) -> bool {
+  value.get("code").and_then(|c| c.as_i64()) == Some(200)
+}
+
+#[cfg(target_os = "linux")]
+async fn run_libstudy_update_check(
+  app: tauri::AppHandle,
+  app_data_dir: PathBuf,
+  source: &'static str,
+) {
+  log::info!("libstudy update: checking for updates ({source})...");
+
+  let (current_ver, latest_ver) = match (
+    call_libstudy_sync(LibstudyOp::GetCurrentVersion),
+    call_libstudy_sync(LibstudyOp::GetLastVersion),
+  ) {
+    (Ok(current_ver), Ok(latest_ver)) => (current_ver, latest_ver),
+    (Err(e), _) => {
+      log::warn!("libstudy update: failed to get current version ({source}): {e}");
+      return;
+    }
+    (_, Err(e)) => {
+      log::warn!("libstudy update: failed to get latest version ({source}): {e}");
+      return;
+    }
+  };
+
+  let (current_map, latest_map) = match (
+    serde_json::from_str::<serde_json::Value>(&current_ver),
+    serde_json::from_str::<serde_json::Value>(&latest_ver),
+  ) {
+    (Ok(current_map), Ok(latest_map)) => (current_map, latest_map),
+    _ => {
+      log::warn!(
+        "libstudy update: failed to parse version JSON ({source}). current={} latest={}",
+        current_ver,
+        latest_ver
+      );
+      return;
+    }
+  };
+
+  if !libstudy_version_response_ok(&current_map) || !libstudy_version_response_ok(&latest_map) {
+    log::warn!(
+      "libstudy update: version API returned non-success code ({source}). current={} latest={}",
+      current_ver,
+      latest_ver
+    );
+    return;
+  }
+
+  log::info!(
+    "libstudy update: current version: {}, latest version: {} ({source})",
+    current_ver,
+    latest_ver
+  );
+
+  match lib_check::check_and_update(current_map, latest_map, app_data_dir).await {
+    Ok(update_result) => {
+      log::info!("libstudy update result ({source}): {:?}", update_result);
+      if update_result.updated {
+        log::warn!(
+          "libstudy was updated. Restarting app automatically to apply changes. {}",
+          update_result.message
+        );
+        app.request_restart();
+      }
+    }
+    Err(e) => {
+      log::warn!("libstudy update check failed ({source}): {e}");
+    }
+  }
+}
+
+#[cfg(target_os = "linux")]
+fn start_libstudy_update_monitor(app: tauri::AppHandle, app_data_dir: PathBuf) {
+  if LIBSTUDY_UPDATE_MONITOR_STARTED.set(()).is_err() {
+    log::info!("libstudy update monitor already started; skipping duplicate start");
+    return;
+  }
+
+  if let Err(e) = std::thread::Builder::new()
+    .name("libstudy-update-monitor".to_string())
+    .spawn(move || loop {
+      std::thread::sleep(LIBSTUDY_UPDATE_CHECK_INTERVAL);
+
+      let app_for_check = app.clone();
+      let app_data_for_check = app_data_dir.clone();
+      tauri::async_runtime::spawn(async move {
+        run_libstudy_update_check(app_for_check, app_data_for_check, "scheduled").await;
+      });
+    })
+  {
+    log::error!("failed to start libstudy update monitor: {e}");
+  } else {
+    log::info!(
+      "libstudy update monitor started; interval={}s",
+      LIBSTUDY_UPDATE_CHECK_INTERVAL.as_secs()
+    );
+  }
 }
 
 fn emit_no_internet_and_show_overlay(
@@ -1511,45 +1620,13 @@ async fn init_libstudy_auto(app: tauri::AppHandle) -> Result<String, String> {
         // Check for libstudy updates (only on Linux)
         #[cfg(target_os = "linux")]
         {
-          log::info!("init_libstudy_auto: checking for libstudy updates (Linux)...");
-          let current_version_result = call_libstudy_sync(LibstudyOp::GetCurrentVersion);
-          let latest_version_result = call_libstudy_sync(LibstudyOp::GetLastVersion);
-          
-          if let (Ok(current_ver), Ok(latest_ver)) = (current_version_result, latest_version_result) {
-            match (serde_json::from_str::<serde_json::Value>(&current_ver), 
-                   serde_json::from_str::<serde_json::Value>(&latest_ver)) {
-              (Ok(current_map), Ok(latest_map)) => {
-                if current_map.get("code").and_then(|c| c.as_i64()) == Some(200) {
-                  log::info!("init_libstudy_auto: current version: {}, latest version: {}", 
-                            current_ver, latest_ver);
-                  
-                  // Spawn update check in background
-                  let app_data = app_data_dir2.clone();
-                  let app_for_update_restart2 = app_for_update_restart.clone();
-                  tauri::async_runtime::spawn(async move {
-                    match lib_check::check_and_update(current_map, latest_map, app_data).await {
-                      Ok(update_result) => {
-                        log::info!("libstudy update result: {:?}", update_result);
-                        if update_result.updated {
-                          log::warn!(
-                            "libstudy was updated. Restarting app automatically to apply changes. {}",
-                            update_result.message
-                          );
-                          app_for_update_restart2.restart();
-                        }
-                      }
-                      Err(e) => {
-                        log::warn!("libstudy update check failed: {}", e);
-                      }
-                    }
-                  });
-                }
-              }
-              _ => {
-                log::warn!("Failed to parse version JSON responses");
-              }
-            }
-          }
+          start_libstudy_update_monitor(app_for_update_restart.clone(), app_data_dir2.clone());
+
+          let app_data = app_data_dir2.clone();
+          let app_for_update_restart2 = app_for_update_restart.clone();
+          tauri::async_runtime::spawn(async move {
+            run_libstudy_update_check(app_for_update_restart2, app_data, "startup").await;
+          });
         }
         
         #[cfg(not(target_os = "linux"))]
