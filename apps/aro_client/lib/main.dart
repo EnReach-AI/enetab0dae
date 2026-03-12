@@ -240,22 +240,44 @@ class _MyHomePageState extends State<MyHomePage>
 
       if (Platform.isWindows) {
         final exePath = Platform.resolvedExecutable;
-        // Spawn a detached powershell that starts a new instance in
-        // single-instance wait mode. The Windows runner understands
-        // --wait-for-single-instance and will block until the current process
-        // releases its mutex before completing startup.
-        final escapedPath = exePath.replaceAll("'", "''");
-        await Process.start(
-          'powershell',
-          [
-            '-NoProfile',
-            '-WindowStyle',
-            'Hidden',
-            '-Command',
-            "Start-Process -FilePath '$escapedPath' -ArgumentList '--wait-for-single-instance'"
-          ],
-          mode: ProcessStartMode.detached,
-        );
+        LoggerService().info('[Restart] Windows relaunch requested', {
+          'exePath': exePath,
+        });
+
+        var relaunched = false;
+        try {
+          await Process.start(
+            exePath,
+            const ['--wait-for-single-instance'],
+            mode: ProcessStartMode.detached,
+          );
+          relaunched = true;
+          LoggerService().info('[Restart] Windows relaunch started directly');
+        } catch (e, s) {
+          LoggerService().error(
+            '[Restart] Direct Windows relaunch failed, trying cmd fallback',
+            e,
+            s,
+          );
+          try {
+            await Process.start(
+              'cmd',
+              ['/c', 'start', '', exePath, '--wait-for-single-instance'],
+              mode: ProcessStartMode.detached,
+            );
+            relaunched = true;
+            LoggerService().info('[Restart] Windows relaunch started via cmd');
+          } catch (e2, s2) {
+            LoggerService()
+                .error('[Restart] Windows cmd fallback failed', e2, s2);
+          }
+        }
+
+        if (relaunched) {
+          await _shutdownAndExit();
+          return;
+        }
+
         exit(0);
       }
 
@@ -877,6 +899,7 @@ class _MyHomePageState extends State<MyHomePage>
   @override
   Future<void> onWindowClose() async {
     if (!Platform.isWindows) return;
+    if (_isShuttingDown) return;
     await _trayHide();
   }
 

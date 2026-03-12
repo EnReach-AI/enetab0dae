@@ -1535,7 +1535,7 @@ async fn init_libstudy_auto(app: tauri::AppHandle) -> Result<String, String> {
                             "libstudy was updated. Restarting app automatically to apply changes. {}",
                             update_result.message
                           );
-                          app_for_update_restart2.request_restart();
+                          app_for_update_restart2.restart();
                         }
                       }
                       Err(e) => {
