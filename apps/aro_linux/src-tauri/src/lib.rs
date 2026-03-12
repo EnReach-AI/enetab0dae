@@ -363,9 +363,6 @@ fn append_crash_log(message: &str) {
   }
 }
 
-#[cfg(target_os = "linux")]
-use tauri_plugin_dialog::DialogExt;
-
 fn find_bundled_libstudy(app: &tauri::AppHandle) -> Result<std::path::PathBuf, String> {
   let lib_name = libstudy::Libstudy::platform_lib_filename();
 
@@ -1147,7 +1144,7 @@ pub fn run() {
       }
       log::info!("====================Net init ====================");
 
-      // Log system environment information
+      // Log system environment information 
       log::info!("==================== System Environment ====================");
       log::info!("OS: {}", std::env::consts::OS);
       log::info!("Architecture: {}", std::env::consts::ARCH);
@@ -1441,7 +1438,7 @@ async fn init_libstudy_auto(app: tauri::AppHandle) -> Result<String, String> {
   
 
   #[cfg(target_os = "linux")]
-  let app_for_update_prompt = app.clone();
+  let app_for_update_restart = app.clone();
 
   // Mirror Flutter behavior: set working dir to app support dir before init,
   // so libstudy can store keypair files in a writable location.
@@ -1528,38 +1525,17 @@ async fn init_libstudy_auto(app: tauri::AppHandle) -> Result<String, String> {
                   
                   // Spawn update check in background
                   let app_data = app_data_dir2.clone();
-                  let app_for_update_prompt2 = app_for_update_prompt.clone();
+                  let app_for_update_restart2 = app_for_update_restart.clone();
                   tauri::async_runtime::spawn(async move {
                     match lib_check::check_and_update(current_map, latest_map, app_data).await {
                       Ok(update_result) => {
                         log::info!("libstudy update result: {:?}", update_result);
                         if update_result.updated {
-                          log::warn!("libstudy was updated! Restart required to take effect.");
-
-                          // Native prompt (Tauri dialog) so the user sees it even without DevTools.
-                          let msg = format!(
-                            "Update completed. Please restart the app to take effect.\n{}",
+                          log::warn!(
+                            "libstudy was updated. Restarting app automatically to apply changes. {}",
                             update_result.message
                           );
-                          // Non-blocking. Ignore errors if dialog backend is unavailable.
-                          let _ = app_for_update_prompt2
-                            .dialog()
-                            .message(msg)
-                            .show(move |_| {
-                              // Close the app after user confirms the update
-                              // Use std::process::exit for stronger termination on Linux
-                              #[cfg(target_os = "linux")]
-                              {
-                                log::info!("Closing app after libstudy update on Linux");
-                                std::thread::sleep(std::time::Duration::from_millis(100));
-                                std::process::exit(0);
-                              }
-                              
-                              #[cfg(not(target_os = "linux"))]
-                              {
-                                let _ = app_for_update_prompt2.clone().exit(0);
-                              }
-                            });
+                          app_for_update_restart2.request_restart();
                         }
                       }
                       Err(e) => {

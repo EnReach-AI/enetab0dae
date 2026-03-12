@@ -240,15 +240,19 @@ class _MyHomePageState extends State<MyHomePage>
 
       if (Platform.isWindows) {
         final exePath = Platform.resolvedExecutable;
-        // Spawn a detached powershell that waits 2 seconds then starts the app.
+        // Spawn a detached powershell that starts a new instance in
+        // single-instance wait mode. The Windows runner understands
+        // --wait-for-single-instance and will block until the current process
+        // releases its mutex before completing startup.
         final escapedPath = exePath.replaceAll("'", "''");
         await Process.start(
           'powershell',
           [
+            '-NoProfile',
             '-WindowStyle',
             'Hidden',
             '-Command',
-            "Start-Sleep -Seconds 2; Start-Process '$escapedPath'"
+            "Start-Process -FilePath '$escapedPath' -ArgumentList '--wait-for-single-instance'"
           ],
           mode: ProcessStartMode.detached,
         );
