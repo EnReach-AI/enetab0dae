@@ -712,32 +712,26 @@ class _MyHomePageState extends State<MyHomePage>
       _initError = null;
     });
     try {
-      await Future.delayed(const Duration(milliseconds: 5)); // 极短延迟，保证UI渲染
+      await Future.delayed(const Duration(milliseconds: 5));
 
       await LoggerService().initialize();
       LoggerService().info('App starting...');
 
-      // // 网络服务初始化
       await ConnectivityService().initialize();
 
-      // 动态库路径设置
       await _configureStudyLibraryOverridePath();
       StudyLibrary.ensureInitialized();
 
-      // 节点初始化
       await initNode();
 
-      // 主动检查并自动更新（不依赖WebView消息）
       unawaited(_autoCheckAndUpdate());
 
-      // 每10分钟定期检查更新
       _updateCheckTimer?.cancel();
       _updateCheckTimer = Timer.periodic(
         const Duration(minutes: 10),
         (_) => unawaited(_autoCheckAndUpdate()),
       );
 
-      // 窗口启动阶段已在 main() 中完成，避免 Windows 固定停在左上角遮住桌面图标。
       if (Platform.isWindows) {
         var trayReady = false;
         try {
