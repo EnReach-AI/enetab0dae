@@ -31,9 +31,39 @@ void main(List<String> args) async {
   //   StudyLibrary.setOverridePath(p.join('lib', 'ffi', 'macos', debugFileName));
   // }
   WidgetsFlutterBinding.ensureInitialized();
+  await _prepareDesktopWindow();
   // await ConnectivityService().initialize();
 
   runApp(const MyApp());
+}
+
+Future<void> _prepareDesktopWindow() async {
+  if (!(Platform.isMacOS || Platform.isWindows || Platform.isLinux)) {
+    return;
+  }
+
+  await windowManager.ensureInitialized();
+
+  const windowOptions = WindowOptions(
+    size: Size(360, 640),
+    center: true,
+    minimumSize: Size(360, 640),
+    maximumSize: Size(360, 640),
+    title: 'ARO Desktop',
+  );
+
+  await windowManager.waitUntilReadyToShow(windowOptions);
+
+  try {
+    await windowManager.show();
+  } catch (_) {}
+
+  if (Platform.isWindows) {
+    try {
+      await windowManager.setMinimizable(false);
+      await windowManager.setMaximizable(false);
+    } catch (_) {}
+  }
 }
 
 // Headless entrypoint for background init (invoked from ForegroundService).
@@ -705,44 +735,17 @@ class _MyHomePageState extends State<MyHomePage>
         (_) => unawaited(_autoCheckAndUpdate()),
       );
 
-      // 窗口和托盘初始化
-      if (Platform.isMacOS || Platform.isWindows || Platform.isLinux) {
-        await windowManager.ensureInitialized();
-        WindowOptions windowOptions = const WindowOptions(
-          size: Size(360, 640),
-          minimumSize: Size(360, 640),
-          maximumSize: Size(360, 640),
-        );
-        windowManager.waitUntilReadyToShow(windowOptions, () async {
-          try {
-            await windowManager.show();
-
-            await windowManager.setTitle('ARO Desktop');
-          } catch (_) {}
-          if (Platform.isWindows) {
-            await windowManager.setMinimizable(false);
-            await windowManager.setMaximizable(false);
-            try {
-              final exeDir = p.dirname(Platform.resolvedExecutable);
-              final iconPath = p.join(exeDir, 'resources', 'app_icon.ico');
-              await trayManager.setIcon(iconPath);
-              await trayManager.setToolTip('ARO Desktop');
-            } catch (e) {
-              LoggerService().error('Failed to setup Windows tray icon', e);
-            }
-          }
-          // else if (Platform.isMacOS) {
-          //   try {
-          //     final exePath = Platform.resolvedExecutable;
-          //     final exeDir = p.dirname(exePath);
-          //     final resourcesPath = p.join(exeDir, '..', 'Resources');
-          //     final iconPath = p.join(resourcesPath, 'app_icon.png');
-          //     await trayManager.setIcon(iconPath);
-          //   } catch (e) {
-          //     LoggerService().error('Failed to setup macOS tray icon', e);
-          //   }
-          // }
-        });
+      // 窗口启动阶段已在 main() 中完成，避免 Windows 固定停在左上角遮住桌面图标。
+      if (Platform.isWindows) {
+        try {
+          final exeDir = p.dirname(Platform.resolvedExecutable);
+          final iconPath = p.join(exeDir, 'resources', 'app_icon.ico');
+          await trayManager.setIcon(iconPath);
+          await trayManager.setToolTip('ARO Desktop');
+          await _setupWindowsTrayMenu();
+        } catch (e) {
+          LoggerService().error('Failed to setup Windows tray icon', e);
+        }
       }
       if (Platform.isAndroid) {
         AppServiceStarter.startForegroundService();
