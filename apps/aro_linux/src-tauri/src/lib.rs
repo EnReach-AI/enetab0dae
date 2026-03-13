@@ -218,7 +218,7 @@ async fn run_libstudy_update_check(
           "libstudy was updated. Restarting app automatically to apply changes. {}",
           update_result.message
         );
-        app.request_restart();
+        app.restart();
       }
     }
     Err(e) => {
