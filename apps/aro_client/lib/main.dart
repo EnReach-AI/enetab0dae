@@ -143,6 +143,7 @@ Future<void> _configureStudyLibraryOverridePath() async {
 
 class MyApp extends StatelessWidget {
   static const platform = MethodChannel('com.aro.aro_app/foreground');
+  static const windowsPlatform = MethodChannel('com.aro.aro_app/windows');
 
   const MyApp({super.key});
 
@@ -198,6 +199,7 @@ class _MyHomePageState extends State<MyHomePage>
   bool _webViewNetworkIssue = false;
 
   bool _trayMenuOpening = false;
+  bool _hasShownWindowsBackgroundNotice = false;
   bool _isShuttingDown = false;
 
   final _memoryManager = WebViewMemoryManager();
@@ -737,14 +739,25 @@ class _MyHomePageState extends State<MyHomePage>
 
       // 窗口启动阶段已在 main() 中完成，避免 Windows 固定停在左上角遮住桌面图标。
       if (Platform.isWindows) {
+        var trayReady = false;
         try {
           final exeDir = p.dirname(Platform.resolvedExecutable);
           final iconPath = p.join(exeDir, 'resources', 'app_icon.ico');
           await trayManager.setIcon(iconPath);
           await trayManager.setToolTip('ARO Desktop');
           await _setupWindowsTrayMenu();
+          trayReady = true;
         } catch (e) {
           LoggerService().error('Failed to setup Windows tray icon', e);
+        }
+
+        if (trayReady) {
+          try {
+            await windowManager.setPreventClose(true);
+          } catch (e, s) {
+            LoggerService()
+                .error('Failed to enable Windows close intercept', e, s);
+          }
         }
       }
       if (Platform.isAndroid) {
@@ -804,6 +817,23 @@ class _MyHomePageState extends State<MyHomePage>
       await windowManager.hide();
     } catch (e, s) {
       LoggerService().error('Tray hide failed', e, s);
+    }
+  }
+
+  Future<void> _showWindowsBackgroundRunningNotice() async {
+    if (!Platform.isWindows) return;
+    if (_hasShownWindowsBackgroundNotice) return;
+
+    try {
+      await MyApp.windowsPlatform.invokeMethod('showBackgroundNotification', {
+        'title': 'ARO Desktop',
+        'body':
+            'ARO Desktop has been minimized to the system tray and is still running in the background.',
+      });
+      _hasShownWindowsBackgroundNotice = true;
+    } catch (e, s) {
+      LoggerService()
+          .error('Failed to show Windows background notification', e, s);
     }
   }
 
@@ -904,6 +934,7 @@ class _MyHomePageState extends State<MyHomePage>
     if (!Platform.isWindows) return;
     if (_isShuttingDown) return;
     await _trayHide();
+    await _showWindowsBackgroundRunningNotice();
   }
 
   void _setupConnectivityListener() {
