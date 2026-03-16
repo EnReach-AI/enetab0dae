@@ -548,8 +548,8 @@ jobs:
 
           [UninstallDelete]
            ; Remove app data stored under vendor folder (best-effort)
-           Type: filesandordirs; Name: "{userappdata}\com.aro\aro_desktop"
-           Type: filesandordirs; Name: "{localappdata}\com.aro\aro_desktop"
+           Type: filesandordirs; Name: "{userappdata}\com.aro\ARO Desktop"
+           Type: filesandordirs; Name: "{localappdata}\com.aro\ARO Desktop"
            Type: filesandordirs; Name: "{userappdata}\com.aro\aro_client"
            Type: filesandordirs; Name: "{localappdata}\com.aro\aro_client"
            ; Remove vendor folder only if empty (avoid deleting other apps' data)
