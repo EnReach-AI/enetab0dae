@@ -210,7 +210,6 @@ func GetLastVersion(program constant.OtaProgram, env string) (*APIResponse, erro
 
 	path := fmt.Sprintf("/api/keeper/ota/%s/%s/%d/%s/lastest", program, env, isa, runtime.GOOS)
 	backendService := NewBackendService(agentConstant.DEVICE_INFO)
-	log.Printf("backendService: %+v", backendService)
 	log.Printf("GetLastVersion params: program=%s, env=%s, isa=%d, os=%s, path=%s", program, env, isa, runtime.GOOS, path)
 	apiResponse, err := backendService.get(path)
 	if err != nil {
@@ -317,7 +316,9 @@ func (b *BackendService) get(path string) (*APIResponse, error) {
 
 	// Add auth header
 	req.Header.Set("Authorization", "Bearer "+b.authToken)
-	client := &http.Client{}
+	client := &http.Client{
+		Timeout:10 * time.Second,
+	}
 	resp, err := client.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("failed to send request: %v", err)

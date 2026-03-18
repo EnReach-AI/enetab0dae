@@ -40,7 +40,7 @@ func NewAPIClient(baseURL string, clientID string, serialNumber string,nodeId st
 		NodeId:     nodeId,
 		SerialNumber: serialNumber,
 		HttpClient: &http.Client{
-			Timeout: 30 * time.Second,
+			Timeout: 10 * time.Second,
 		},
 	}
 }

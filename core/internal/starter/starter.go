@@ -21,7 +21,7 @@ import (
 
 var cfg = config.GetConfig()
 
-var AppBackendService *api_client.APIClient
+// var AppBackendService *api_client.APIClient
 
 const (
 	pollInterval      = 30 * time.Second
@@ -59,7 +59,7 @@ func RunBackendThread() {
 
 		log.Printf("Bind result:%+v", bindResult)
 
-		AppBackendService = api_client.NewAPIClient(cfg.Get(config.KeyAPIURL), cfg.Get(config.KeyClientId), cfg.Get(config.KeySN), bindResult.UUID)
+		// AppBackendService = api_client.NewAPIClient(cfg.Get(config.KeyAPIURL), cfg.Get(config.KeyClientId), cfg.Get(config.KeySN), bindResult.UUID)
 
 		// 检查设备是否已绑定
 		if !bindResult.Binded {
