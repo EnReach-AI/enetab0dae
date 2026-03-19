@@ -230,7 +230,7 @@ func GetNodeStat() *C.char {
 	return toCStringJSON("GetNodeStat", apiResponse)
 }
 
-// GetRewards 获取奖励信息（/api/liteNode/rewards）
+// GetRewards 获取奖励信息
 // 返回：JSON formatted响应（包含最后网络点数、总奖励、7天数据等）
 //
 //export GetRewards

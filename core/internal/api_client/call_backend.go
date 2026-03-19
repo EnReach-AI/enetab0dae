@@ -164,7 +164,7 @@ func (b *BackendService) GetNodeBindStatus() (model.BindResult, error) {
 		if err := json.Unmarshal(body, &apiResponse); err != nil {
 			return data, fmt.Errorf("JSON parsing failed: %v", err)
 		}
-
+		agentConstant.NODE_INFO = apiResponse.Data
 		if apiResponse.Data.PublicKey == "" {
 			//1. Check whether there is a private key file in the local area
 			//2. Delete the file if there is a private key file
@@ -194,7 +194,7 @@ func (b *BackendService) GetNodeBindStatus() (model.BindResult, error) {
 				}
 			}
 		}
-		agentConstant.NODE_INFO = apiResponse.Data
+
 		return apiResponse.Data, nil
 	} else {
 		return data, fmt.Errorf("request failed with code: %d", resp.StatusCode)
@@ -317,7 +317,7 @@ func (b *BackendService) get(path string) (*APIResponse, error) {
 	// Add auth header
 	req.Header.Set("Authorization", "Bearer "+b.authToken)
 	client := &http.Client{
-		Timeout:10 * time.Second,
+		Timeout: 10 * time.Second,
 	}
 	resp, err := client.Do(req)
 	if err != nil {
