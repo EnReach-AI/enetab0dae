@@ -182,9 +182,9 @@ type InitParams struct {
 
 // Global variables
 var (
-	apiClient    *api_client.APIClient
-	keyPair      *crypto.KeyPair
-	clientID     string
+	apiClient  *api_client.APIClient
+	keyPair    *crypto.KeyPair
+	clientID   string
 	storageApi *storage.Storage
 )
 
@@ -205,20 +205,22 @@ func GetNodeStat() *C.char {
 	if agentConstant.GRPC_STATUS == 0 {
 		status = "disconnected"
 	}
-	if agentConstant.NODE_INFO.BanIP {
-		status = "Restricted ip"
-	}
 	NodeBindResponse := api_client.NodeBindResponse{
-		Bind: agentConstant.NODE_INFO.Binded,
-		BindUser: api_client.BindUserInfo{
+		Connect:      status,
+		Message:      nil,
+		SerialNumber: agentConstant.DEVICE_INFO.SerialNumber,
+	}
+	if agentConstant.NODE_INFO.UUID != "" {
+		if agentConstant.NODE_INFO.BanIP {
+			NodeBindResponse.Connect = "Restricted ip"
+		}
+		NodeBindResponse.Bind = &agentConstant.NODE_INFO.Binded
+		NodeBindResponse.BindUser = &api_client.BindUserInfo{
 			UUID:       agentConstant.NODE_INFO.UUID,
 			Email:      agentConstant.NODE_INFO.Email,
 			InviteCode: agentConstant.NODE_INFO.InviteCode,
 			PublicIP:   agentConstant.NODE_INFO.PublicIp,
-		},
-		Connect:      status,
-		Message:      nil,
-		SerialNumber: agentConstant.DEVICE_INFO.SerialNumber,
+		}
 	}
 	var apiResponse = api_client.APIResponse{
 		Code:    200,

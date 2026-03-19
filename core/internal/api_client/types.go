@@ -62,8 +62,8 @@ type NoteMessageInfo struct {
 // NodeBindResponse Node bind/sign up response
 type NodeBindResponse struct {
 	SerialNumber string       `json:"serialNumber"`
-	Bind         bool         `json:"bind"`
+	Bind         *bool         `json:"bind"`
 	Connect      string       `json:"connect"`
 	Message      *NoteMessageInfo  `json:"message"`
-	BindUser     BindUserInfo `json:"bindUser"`
+	BindUser     *BindUserInfo `json:"bindUser"`
 }
