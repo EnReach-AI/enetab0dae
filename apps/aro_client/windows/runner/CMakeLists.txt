@@ -40,6 +40,7 @@ target_include_directories(${BINARY_NAME} PRIVATE "${CMAKE_SOURCE_DIR}")
 # Copy tray icon to the build output so Dart code can load it from
 # <exeDir>/resources/app_icon.ico.
 set(APP_TRAY_ICON "${CMAKE_CURRENT_SOURCE_DIR}/resources/app_icon.ico")
+set(APP_TRAY_ICON_OFFLINE "${CMAKE_CURRENT_SOURCE_DIR}/resources/app_icon_offline.ico")
 add_custom_command(
   TARGET ${BINARY_NAME} POST_BUILD
   COMMAND ${CMAKE_COMMAND} -E make_directory
@@ -47,6 +48,9 @@ add_custom_command(
   COMMAND ${CMAKE_COMMAND} -E copy_if_different
     "${APP_TRAY_ICON}"
     "$<TARGET_FILE_DIR:${BINARY_NAME}>/resources/app_icon.ico"
+  COMMAND ${CMAKE_COMMAND} -E copy_if_different
+    "${APP_TRAY_ICON_OFFLINE}"
+    "$<TARGET_FILE_DIR:${BINARY_NAME}>/resources/app_icon_offline.ico"
 )
 
 # Copy libstudy.dll to the build output directory

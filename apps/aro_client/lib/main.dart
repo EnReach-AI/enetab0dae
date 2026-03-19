@@ -162,6 +162,7 @@ Future<void> _configureStudyLibraryOverridePath() async {
 class MyApp extends StatelessWidget {
   static const platform = MethodChannel('com.aro.aro_app/foreground');
   static const windowsPlatform = MethodChannel('com.aro.aro_app/windows');
+  static const appModePlatform = MethodChannel('app_mode');
 
   const MyApp({super.key});
 
@@ -222,10 +223,14 @@ class _MyHomePageState extends State<MyHomePage>
   bool _trayMenuOpening = false;
   bool _hasShownWindowsBackgroundNotice = false;
   bool _isShuttingDown = false;
+  bool _isWindowsTrayReady = false;
+  bool? _lastOfflineIconState;
 
   final _memoryManager = WebViewMemoryManager();
 
   final service = StudyService.instance;
+
+  bool get _isEffectivelyOffline => !_isConnected || _webViewNetworkIssue;
 
   bool get _shouldShowStatusOverlay =>
       _isInitialNodeInfoLoading ||
@@ -258,6 +263,77 @@ class _MyHomePageState extends State<MyHomePage>
     }
 
     return _defaultWebViewUrl;
+  }
+
+  void _logConnectivityIconSyncFailure(
+    String message,
+    Object error, [
+    StackTrace? stackTrace,
+  ]) {
+    try {
+      LoggerService().error(message, error, stackTrace);
+    } catch (_) {
+      debugPrint('$message: $error');
+      if (stackTrace != null) {
+        debugPrint(stackTrace.toString());
+      }
+    }
+  }
+
+  String _windowsTrayIconPath({required bool offline}) {
+    final exeDir = p.dirname(Platform.resolvedExecutable);
+    return p.join(
+      exeDir,
+      'resources',
+      offline ? 'app_icon_offline.ico' : 'app_icon.ico',
+    );
+  }
+
+  Future<void> _syncConnectivityIcon({bool force = false}) async {
+    if (!(Platform.isMacOS || Platform.isWindows)) {
+      return;
+    }
+
+    final isOffline = _isEffectivelyOffline;
+    if (!force && _lastOfflineIconState == isOffline) {
+      return;
+    }
+    _lastOfflineIconState = isOffline;
+
+    if (Platform.isWindows) {
+      if (_isWindowsTrayReady) {
+        try {
+          await trayManager.setIcon(_windowsTrayIconPath(offline: isOffline));
+        } catch (e, s) {
+          _logConnectivityIconSyncFailure(
+            'Failed to update Windows tray icon',
+            e,
+            s,
+          );
+        }
+      }
+
+      try {
+        await MyApp.windowsPlatform.invokeMethod('setConnectivityState', {
+          'offline': isOffline,
+        });
+      } catch (e, s) {
+        _logConnectivityIconSyncFailure(
+          'Failed to update Windows app icon',
+          e,
+          s,
+        );
+      }
+      return;
+    }
+
+    try {
+      await MyApp.appModePlatform.invokeMethod('setConnectivityState', {
+        'offline': isOffline,
+      });
+    } catch (e, s) {
+      _logConnectivityIconSyncFailure('Failed to update macOS app icon', e, s);
+    }
   }
 
   _InitialBindState _classifyInitialBindState(dynamic statPayload) {
@@ -824,6 +900,7 @@ class _MyHomePageState extends State<MyHomePage>
       LoggerService().info('App starting...');
 
       await ConnectivityService().initialize();
+      await _syncConnectivityIcon(force: true);
 
       await _configureStudyLibraryOverridePath();
       StudyLibrary.ensureInitialized();
@@ -841,17 +918,18 @@ class _MyHomePageState extends State<MyHomePage>
       if (Platform.isWindows) {
         var trayReady = false;
         try {
-          final exeDir = p.dirname(Platform.resolvedExecutable);
-          final iconPath = p.join(exeDir, 'resources', 'app_icon.ico');
+          final iconPath = _windowsTrayIconPath(offline: false);
           await trayManager.setIcon(iconPath);
           await trayManager.setToolTip('ARO Desktop');
           await _setupWindowsTrayMenu();
+          _isWindowsTrayReady = true;
           trayReady = true;
         } catch (e) {
           LoggerService().error('Failed to setup Windows tray icon', e);
         }
 
         if (trayReady) {
+          await _syncConnectivityIcon(force: true);
           try {
             await windowManager.setPreventClose(true);
           } catch (e, s) {
@@ -953,6 +1031,7 @@ class _MyHomePageState extends State<MyHomePage>
         windowManager.removeListener(this);
       } catch (_) {}
       try {
+        _isWindowsTrayReady = false;
         await trayManager.destroy();
       } catch (_) {}
       try {
@@ -1052,6 +1131,7 @@ class _MyHomePageState extends State<MyHomePage>
       setState(() {
         _isConnected = isConnected;
       });
+      unawaited(_syncConnectivityIcon());
 
       // If the app is still blocked on the startup nodeInfo flow or the
       // current page hit a main-frame network error, trigger one reload when
@@ -1105,6 +1185,7 @@ class _MyHomePageState extends State<MyHomePage>
         _webViewNetworkIssue = false;
         _isDesktopWebViewReady = true;
       });
+      unawaited(_syncConnectivityIcon());
       LoggerService().info(
         'Desktop WebView recovery deferred until controller is available ($reason)',
       );
@@ -1127,6 +1208,7 @@ class _MyHomePageState extends State<MyHomePage>
       _isWebViewLoading = true;
       _webViewNetworkIssue = false;
     });
+    unawaited(_syncConnectivityIcon());
     _mobileWebViewCurrentUrl = targetUrl;
     _mobileWebViewTimeoutRetryCount = 0;
     _controller!.loadRequest(Uri.parse(targetUrl));
@@ -1160,6 +1242,7 @@ class _MyHomePageState extends State<MyHomePage>
         windowManager.removeListener(this);
       } catch (_) {}
       try {
+        _isWindowsTrayReady = false;
         trayManager.destroy();
       } catch (_) {}
     }
@@ -1215,6 +1298,7 @@ class _MyHomePageState extends State<MyHomePage>
                 setState(() {
                   _webViewNetworkIssue = true;
                 });
+                unawaited(_syncConnectivityIcon());
               }
 
               // WKWebView network errors that commonly happen after macOS sleep/wake.
@@ -1263,6 +1347,7 @@ class _MyHomePageState extends State<MyHomePage>
               _isWebViewLoading = false;
               _webViewNetworkIssue = false;
             });
+            unawaited(_syncConnectivityIcon());
 
             _mobileWebViewTimeoutRetryCount = 0;
 
@@ -1614,38 +1699,29 @@ One-click start and forget it.
           // Bottom green bar
           Align(
             alignment: Alignment.bottomCenter,
-            child: SafeArea(
-              top: false,
-              child: Container(
-                height: 98,
-                decoration: BoxDecoration(
-                  color: const Color(0xFF02B421),
-                  borderRadius: const BorderRadius.only(
-                    topLeft: Radius.circular(30),
-                    topRight: Radius.circular(30),
-                  ),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withOpacity(0.2),
-                      blurRadius: 8,
-                      offset: const Offset(0, 2),
-                    ),
-                  ],
-                ),
-                child: Center(
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 10.0),
-                    child: isStartupLoading
-                        ? const Text(
-                            'Fetching the latest node status, please wait.',
-                            style: TextStyle(
-                              fontSize: 12,
-                              color: Colors.white,
-                              fontWeight: FontWeight.w400,
-                            ),
-                            textAlign: TextAlign.center,
-                          )
-                        : const Text.rich(
+            child: _isEffectivelyOffline
+                ? SafeArea(
+                    top: false,
+                    child: Container(
+                      height: 98,
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF02B421),
+                        borderRadius: const BorderRadius.only(
+                          topLeft: Radius.circular(30),
+                          topRight: Radius.circular(30),
+                        ),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withOpacity(0.2),
+                            blurRadius: 8,
+                            offset: const Offset(0, 2),
+                          ),
+                        ],
+                      ),
+                      child: Center(
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 10.0),
+                          child: const Text.rich(
                             TextSpan(
                               children: [
                                 WidgetSpan(
@@ -1670,10 +1746,11 @@ One-click start and forget it.
                             ),
                             textAlign: TextAlign.center,
                           ),
-                  ),
-                ),
-              ),
-            ),
+                        ),
+                      ),
+                    ),
+                  )
+                : null,
           ),
         ],
       ),
@@ -1712,6 +1789,7 @@ One-click start and forget it.
             setState(() {
               _webViewNetworkIssue = false;
             });
+            unawaited(_syncConnectivityIcon());
           }
           try {
             controller.addJavaScriptHandler(
@@ -1791,6 +1869,7 @@ One-click start and forget it.
             _hasInitialWebViewContentLoaded = true;
             _webViewNetworkIssue = false;
           });
+          unawaited(_syncConnectivityIcon());
         },
         onReceivedError: (controller, request, error) {
           final isMainFrame = request.isForMainFrame == true;
@@ -1804,6 +1883,7 @@ One-click start and forget it.
               _webViewNetworkIssue = true;
               _desktopWebViewError = null;
             });
+            unawaited(_syncConnectivityIcon());
             return;
           }
 

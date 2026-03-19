@@ -25,8 +25,11 @@ class FlutterWindow : public Win32Window {
                          LPARAM const lparam) noexcept override;
 
  private:
-    void RegisterWindowChannel();
-    void ShowTrayNotification(const std::string& title, const std::string& body);
+  void RegisterWindowChannel();
+  void ShowTrayNotification(const std::string& title, const std::string& body);
+  void SetConnectivityState(bool offline);
+  std::wstring ResolveConnectivityIconPath(bool offline) const;
+  void DisposeWindowIcons();
 
   // The project to run.
   flutter::DartProject project_;
@@ -35,6 +38,8 @@ class FlutterWindow : public Win32Window {
   std::unique_ptr<flutter::FlutterViewController> flutter_controller_;
   std::unique_ptr<flutter::MethodChannel<flutter::EncodableValue>>
       windows_channel_;
+  HICON large_window_icon_ = nullptr;
+  HICON small_window_icon_ = nullptr;
 };
 
 #endif  // RUNNER_FLUTTER_WINDOW_H_

@@ -1,5 +1,6 @@
 #include "flutter_window.h"
 
+#include <filesystem>
 #include <optional>
 #include <shellapi.h>
 #include <string>
@@ -36,6 +37,17 @@ std::wstring Utf8ToWide(const std::string& value) {
   return wide;
 }
 
+std::filesystem::path GetExecutableDirectory() {
+  wchar_t module_path[MAX_PATH];
+  const DWORD length =
+      ::GetModuleFileNameW(nullptr, module_path, MAX_PATH);
+  if (length == 0 || length >= MAX_PATH) {
+    return std::filesystem::current_path();
+  }
+
+  return std::filesystem::path(std::wstring(module_path, length)).parent_path();
+}
+
 }  // namespace
 
 FlutterWindow::FlutterWindow(const flutter::DartProject& project)
@@ -54,6 +66,22 @@ void FlutterWindow::RegisterWindowChannel() {
       [this](const flutter::MethodCall<flutter::EncodableValue>& call,
              std::unique_ptr<flutter::MethodResult<flutter::EncodableValue>>
                  result) {
+        if (call.method_name() == "setConnectivityState") {
+          bool offline = false;
+
+          if (const auto* args =
+                  std::get_if<flutter::EncodableMap>(call.arguments())) {
+            if (const auto* offline_value =
+                    std::get_if<bool>(ValueOrNull(*args, "offline"))) {
+              offline = *offline_value;
+            }
+          }
+
+          SetConnectivityState(offline);
+          result->Success(flutter::EncodableValue(true));
+          return;
+        }
+
         if (call.method_name() != "showBackgroundNotification") {
           result->NotImplemented();
           return;
@@ -77,6 +105,56 @@ void FlutterWindow::RegisterWindowChannel() {
         ShowTrayNotification(title, body);
         result->Success(flutter::EncodableValue(true));
       });
+}
+
+std::wstring FlutterWindow::ResolveConnectivityIconPath(bool offline) const {
+  const auto icon_path = GetExecutableDirectory() / L"resources" /
+                         (offline ? L"app_icon_offline.ico" : L"app_icon.ico");
+  return icon_path.wstring();
+}
+
+void FlutterWindow::DisposeWindowIcons() {
+  if (large_window_icon_ != nullptr) {
+    ::DestroyIcon(large_window_icon_);
+    large_window_icon_ = nullptr;
+  }
+
+  if (small_window_icon_ != nullptr) {
+    ::DestroyIcon(small_window_icon_);
+    small_window_icon_ = nullptr;
+  }
+}
+
+void FlutterWindow::SetConnectivityState(bool offline) {
+  if (GetHandle() == nullptr) {
+    return;
+  }
+
+  const std::wstring icon_path = ResolveConnectivityIconPath(offline);
+  HICON large_icon = static_cast<HICON>(::LoadImageW(
+      nullptr, icon_path.c_str(), IMAGE_ICON, ::GetSystemMetrics(SM_CXICON),
+      ::GetSystemMetrics(SM_CYICON), LR_DEFAULTCOLOR | LR_LOADFROMFILE));
+  HICON small_icon = static_cast<HICON>(::LoadImageW(
+      nullptr, icon_path.c_str(), IMAGE_ICON,
+      ::GetSystemMetrics(SM_CXSMICON), ::GetSystemMetrics(SM_CYSMICON),
+      LR_DEFAULTCOLOR | LR_LOADFROMFILE));
+
+  if (large_icon == nullptr && small_icon == nullptr) {
+    return;
+  }
+
+  if (large_icon != nullptr) {
+    ::SendMessage(GetHandle(), WM_SETICON, ICON_BIG,
+                  reinterpret_cast<LPARAM>(large_icon));
+  }
+  if (small_icon != nullptr) {
+    ::SendMessage(GetHandle(), WM_SETICON, ICON_SMALL,
+                  reinterpret_cast<LPARAM>(small_icon));
+  }
+
+  DisposeWindowIcons();
+  large_window_icon_ = large_icon;
+  small_window_icon_ = small_icon;
 }
 
 void FlutterWindow::ShowTrayNotification(const std::string& title,
@@ -118,6 +196,7 @@ bool FlutterWindow::OnCreate() {
   SetChildContent(flutter_controller_->view()->GetNativeWindow());
 
   this->Show();
+  SetConnectivityState(false);
 
   // Flutter can complete the first frame before the "show window" callback is
   // registered. The following call ensures a frame is pending to ensure the
@@ -128,6 +207,8 @@ bool FlutterWindow::OnCreate() {
 }
 
 void FlutterWindow::OnDestroy() {
+  DisposeWindowIcons();
+
   if (flutter_controller_) {
     flutter_controller_ = nullptr;
   }

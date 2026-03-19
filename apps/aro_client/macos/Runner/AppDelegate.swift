@@ -20,10 +20,9 @@ class AppDelegate: FlutterAppDelegate {
     statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
 
     if let button = statusItem?.button {
-      let image = NSImage(named: "AppIcon")
-      image?.size = NSSize(width: 18, height: 18)
-      button.image = image
       button.action = #selector(toggleWindow)
+      button.target = self
+      applyConnectivityState(offline: false)
     }
 
     let menu = NSMenu()
@@ -50,9 +49,56 @@ class AppDelegate: FlutterAppDelegate {
       case "showApp":
         self.showApp()
         result(nil)
+      case "setConnectivityState":
+        let args = call.arguments as? [String: Any]
+        let offline = args?["offline"] as? Bool ?? false
+        DispatchQueue.main.async {
+          self.applyConnectivityState(offline: offline)
+          result(nil)
+        }
       default:
         result(FlutterMethodNotImplemented)
       }
+    }
+  }
+
+  func imageFromBundleAsset(named name: String) -> NSImage? {
+    if let image = NSImage(named: NSImage.Name(name)) {
+      return image.copy() as? NSImage ?? image
+    }
+
+    guard let url = Bundle.main.url(forResource: name, withExtension: "png") else {
+      return nil
+    }
+    return NSImage(contentsOf: url)
+  }
+
+  func statusBarIconImage(offline: Bool) -> NSImage? {
+    let image = imageFromBundleAsset(named: offline ? "OfflineAppIcon" : "AppIcon")
+      ?? (offline ? imageFromBundleAsset(named: "TrayOffline") : nil)
+      ?? imageFromBundleAsset(named: offline ? "app_icon_offline" : "app_icon")
+
+    image?.size = NSSize(width: 18, height: 18)
+    image?.isTemplate = false
+    return image
+  }
+
+  func applicationIconImage(offline: Bool) -> NSImage? {
+    imageFromBundleAsset(named: offline ? "OfflineAppIcon" : "AppIcon")
+      ?? imageFromBundleAsset(named: offline ? "app_icon_offline" : "app_icon")
+      ?? (offline ? imageFromBundleAsset(named: "TrayOffline") : nil)
+      ?? NSWorkspace.shared.icon(forFile: Bundle.main.bundlePath)
+  }
+
+  func applyConnectivityState(offline: Bool) {
+    if let button = statusItem?.button,
+       let image = statusBarIconImage(offline: offline) {
+      button.image = image
+      button.imagePosition = .imageOnly
+    }
+
+    if let appIcon = applicationIconImage(offline: offline) {
+      NSApp.applicationIconImage = appIcon
     }
   }
 
