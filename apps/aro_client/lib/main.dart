@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:ffi' show Abi;
+import 'dart:isolate';
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
@@ -22,6 +23,20 @@ import 'package:aro_client/utils/config.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart' as inapp;
 import 'package:url_launcher/url_launcher.dart';
 import 'package:aro_client/services/webview_memory_manager.dart';
+
+String? _studyLibraryOverridePathCache;
+
+enum _InitialBindState {
+  resolved,
+  pending,
+  invalidPayload,
+}
+
+String _loadNodeStatInBackground(String? overridePath) {
+  StudyLibrary.setOverridePath(overridePath);
+  StudyLibrary.ensureInitialized();
+  return StudyService.instance.getNodeStat();
+}
 
 void main(List<String> args) async {
   // if (Platform.isMacOS && !bool.fromEnvironment('dart.vm.product')) {
@@ -115,6 +130,7 @@ Future<void> _configureStudyLibraryOverridePath() async {
 
   final pinnedPath = await LibUpdateService.instance.readPinnedLibraryPath();
   if (pinnedPath != null) {
+    _studyLibraryOverridePathCache = pinnedPath;
     StudyLibrary.setOverridePath(pinnedPath);
     LoggerService().info('StudyLibrary pinned override path: $pinnedPath');
     return;
@@ -128,6 +144,7 @@ Future<void> _configureStudyLibraryOverridePath() async {
     final preferredPath = p.join(appSupportDir, preferredFile);
     final overridePath =
         File(preferredPath).existsSync() ? preferredPath : null;
+    _studyLibraryOverridePathCache = overridePath;
     StudyLibrary.setOverridePath(overridePath);
     LoggerService().info(
       'StudyLibrary macOS override path: ${overridePath ?? '(none)'}',
@@ -137,6 +154,7 @@ Future<void> _configureStudyLibraryOverridePath() async {
 
   final overrideFile = Platform.isWindows ? 'libstudy.dll' : 'libstudy.so';
   final overridePath = p.join(appSupportDir, overrideFile);
+  _studyLibraryOverridePathCache = overridePath;
   StudyLibrary.setOverridePath(overridePath);
   LoggerService().info('StudyLibrary override path: $overridePath');
 }
@@ -197,6 +215,9 @@ class _MyHomePageState extends State<MyHomePage>
   String? _desktopWebViewError;
   bool _isConnected = true;
   bool _webViewNetworkIssue = false;
+  bool _isInitialNodeInfoLoading = true;
+  bool _hasReceivedInitialNodeInfo = false;
+  bool _hasInitialWebViewContentLoaded = false;
 
   bool _trayMenuOpening = false;
   bool _hasShownWindowsBackgroundNotice = false;
@@ -205,6 +226,79 @@ class _MyHomePageState extends State<MyHomePage>
   final _memoryManager = WebViewMemoryManager();
 
   final service = StudyService.instance;
+
+  bool get _shouldShowStatusOverlay =>
+      _isInitialNodeInfoLoading ||
+      (_hasReceivedInitialNodeInfo && (!_isConnected || _webViewNetworkIssue));
+
+  bool get _shouldShowStartupNodeInfoLoading =>
+      _isInitialNodeInfoLoading && _isConnected && !_webViewNetworkIssue;
+
+  String get _defaultWebViewUrl => Platform.isAndroid || Platform.isIOS
+      ? AllConfig.mobileURL
+      : AllConfig.deskTopURL;
+
+  bool _isUsableWebViewUrl(String? url) {
+    if (url == null) return false;
+
+    final trimmed = url.trim();
+    if (trimmed.isEmpty) return false;
+
+    final uri = Uri.tryParse(trimmed);
+    return uri != null && uri.hasScheme;
+  }
+
+  String _resolveMobileWebViewUrl([String? candidateUrl]) {
+    if (_isUsableWebViewUrl(candidateUrl)) {
+      return candidateUrl!.trim();
+    }
+
+    if (_isUsableWebViewUrl(_mobileWebViewCurrentUrl)) {
+      return _mobileWebViewCurrentUrl!.trim();
+    }
+
+    return _defaultWebViewUrl;
+  }
+
+  _InitialBindState _classifyInitialBindState(dynamic statPayload) {
+    if (statPayload is! Map) return _InitialBindState.invalidPayload;
+    if (statPayload['code'] != 200) return _InitialBindState.invalidPayload;
+
+    final data = statPayload['data'];
+    if (data is! Map) return _InitialBindState.invalidPayload;
+
+    final bindValue = data['bind'];
+    return bindValue is bool
+        ? _InitialBindState.resolved
+        : _InitialBindState.pending;
+  }
+
+  Future<String> _getNodeStatAsync() {
+    final overridePath = _studyLibraryOverridePathCache;
+    return Isolate.run(() => _loadNodeStatInBackground(overridePath));
+  }
+
+  void _completeInitialNodeInfoFlow({bool didReceiveNodeInfo = false}) {
+    if (!didReceiveNodeInfo) return;
+    if (!_isInitialNodeInfoLoading && _hasReceivedInitialNodeInfo) return;
+
+    if (!mounted) {
+      _hasReceivedInitialNodeInfo = true;
+      _isInitialNodeInfoLoading = false;
+      return;
+    }
+
+    setState(() {
+      _hasReceivedInitialNodeInfo = true;
+      _isInitialNodeInfoLoading = false;
+    });
+  }
+
+  Widget _buildStatusOverlayScaffold() {
+    return Scaffold(
+      body: _buildNetworkOfflineOverlay(),
+    );
+  }
 
   // void sendToWeb(Map<String, dynamic> data) {
   //   final json = jsonEncode(data);
@@ -474,11 +568,19 @@ class _MyHomePageState extends State<MyHomePage>
     }
 
     if (message == 'nodeInfo') {
+      var shouldCompleteInitialLoading = false;
       try {
-        final stat = service.getNodeStat();
+        final stat = await _getNodeStatAsync();
         final statMap = jsonDecode(stat);
+        final initialBindState = _classifyInitialBindState(statMap);
+        shouldCompleteInitialLoading =
+            initialBindState == _InitialBindState.resolved;
+
         print('statMap nodeInfo $statMap');
-        LoggerService().info('statMap nodeInfo : $statMap');
+        LoggerService().info(
+          'statMap nodeInfo : $statMap, initialBindState=$initialBindState, '
+          'isConnected=$_isConnected',
+        );
 
         if (statMap['code'] == 200) {
           print('Send stat result:  ------- $stat $statMap ');
@@ -490,6 +592,10 @@ class _MyHomePageState extends State<MyHomePage>
       } catch (e) {
         print('nodeInfo error $e');
         LoggerService().info('nodeInfo--- error $e ');
+      } finally {
+        _completeInitialNodeInfoFlow(
+          didReceiveNodeInfo: shouldCompleteInitialLoading,
+        );
       }
     } else if (message == 'nodeSignUp') {
       try {
@@ -500,7 +606,7 @@ class _MyHomePageState extends State<MyHomePage>
           'payload': status,
         });
 
-        final stat = service.getNodeStat();
+        final stat = await _getNodeStatAsync();
         final statMap = jsonDecode(stat);
 
         print('statMapStat $statMap');
@@ -947,12 +1053,15 @@ class _MyHomePageState extends State<MyHomePage>
         _isConnected = isConnected;
       });
 
-      // If we were showing the offline overlay due to a main-frame load error,
-      // try a single reload when connectivity comes back (common after macOS
-      // sleep/wake).
-      if (connectionRestored && _webViewNetworkIssue) {
+      // If the app is still blocked on the startup nodeInfo flow or the
+      // current page hit a main-frame network error, trigger one reload when
+      // connectivity comes back.
+      if (connectionRestored &&
+          (_webViewNetworkIssue || !_hasReceivedInitialNodeInfo)) {
         _scheduleWebViewRecovery(
-          reason: 'connectivity restored',
+          reason: !_hasReceivedInitialNodeInfo
+              ? 'connectivity restored during startup nodeInfo load'
+              : 'connectivity restored',
           delay: const Duration(milliseconds: 400),
         );
       }
@@ -972,15 +1081,57 @@ class _MyHomePageState extends State<MyHomePage>
       if (!mounted) return;
 
       try {
-        if (Platform.isWindows || Platform.isLinux) {
-          _desktopController?.reload();
-        } else {
-          _controller?.reload();
-        }
-        LoggerService().info('WebView reload triggered ($reason)');
+        _recoverWebView(reason: reason);
       } catch (e, s) {
         LoggerService().error('WebView reload failed ($reason)', e, s);
       }
+    });
+  }
+
+  void _recoverWebView({required String reason}) {
+    if (Platform.isWindows || Platform.isLinux) {
+      final targetUrl = inapp.WebUri(AllConfig.deskTopURL);
+
+      if (_desktopController != null) {
+        _desktopController!.loadUrl(
+          urlRequest: inapp.URLRequest(url: targetUrl),
+        );
+        LoggerService().info('Desktop WebView load triggered ($reason)');
+        return;
+      }
+
+      setState(() {
+        _desktopWebViewError = null;
+        _webViewNetworkIssue = false;
+        _isDesktopWebViewReady = true;
+      });
+      LoggerService().info(
+        'Desktop WebView recovery deferred until controller is available ($reason)',
+      );
+      return;
+    }
+
+    final targetUrl = _resolveMobileWebViewUrl();
+
+    if (_controller == null) {
+      _mobileWebViewCurrentUrl = targetUrl;
+      _mobileWebViewTimeoutRetryCount = 0;
+      _initMobileWebView();
+      LoggerService().info(
+        'Mobile WebView controller recreated for recovery ($reason)',
+      );
+      return;
+    }
+
+    setState(() {
+      _isWebViewLoading = true;
+      _webViewNetworkIssue = false;
+    });
+    _mobileWebViewCurrentUrl = targetUrl;
+    _mobileWebViewTimeoutRetryCount = 0;
+    _controller!.loadRequest(Uri.parse(targetUrl));
+    LoggerService().info('Mobile WebView load triggered ($reason)', {
+      'url': targetUrl,
     });
   }
 
@@ -1051,7 +1202,7 @@ class _MyHomePageState extends State<MyHomePage>
       _controller!.setNavigationDelegate(
         NavigationDelegate(
           onWebResourceError: (error) {
-            final url = _mobileWebViewCurrentUrl ?? 'unknown';
+            final url = _resolveMobileWebViewUrl(_mobileWebViewCurrentUrl);
             final isMainFrame = error.isForMainFrame != false;
             final message =
                 'WebView error: ${error.description} (${error.errorCode}) '
@@ -1108,6 +1259,7 @@ class _MyHomePageState extends State<MyHomePage>
             print('[DEBUG] onPageFinished called');
             setState(() {
               print('[DEBUG] setState: _isWebViewLoading = false');
+              _hasInitialWebViewContentLoaded = true;
               _isWebViewLoading = false;
               _webViewNetworkIssue = false;
             });
@@ -1161,9 +1313,17 @@ class _MyHomePageState extends State<MyHomePage>
             print('[DEBUG] onPageStarted $url');
 
             final previousUrl = _mobileWebViewCurrentUrl;
-            _mobileWebViewCurrentUrl = url;
-            if (previousUrl != url) {
+            if (_isUsableWebViewUrl(url)) {
+              _mobileWebViewCurrentUrl = url;
+            }
+
+            if (previousUrl != _mobileWebViewCurrentUrl) {
               _mobileWebViewTimeoutRetryCount = 0;
+            } else if (!_isUsableWebViewUrl(url)) {
+              LoggerService().warning(
+                'Ignoring invalid WebView start URL during recovery',
+                {'url': url},
+              );
             }
 
             setState(() {
@@ -1182,9 +1342,7 @@ class _MyHomePageState extends State<MyHomePage>
         ),
       );
 
-      final url = Platform.isAndroid || Platform.isIOS
-          ? AllConfig.mobileURL
-          : AllConfig.deskTopURL;
+      final url = _resolveMobileWebViewUrl(_mobileWebViewCurrentUrl);
       print('[DEBUG] WebView loading url: $url');
       _mobileWebViewCurrentUrl = url;
       _mobileWebViewTimeoutRetryCount = 0;
@@ -1205,6 +1363,9 @@ class _MyHomePageState extends State<MyHomePage>
     if (Platform.isWindows || Platform.isLinux) {
       // Use Builder to ensure Hero system is fully disabled before creating InAppWebView
       if (!_isDesktopWebViewReady) {
+        if (_shouldShowStatusOverlay) {
+          return _buildStatusOverlayScaffold();
+        }
         return const Scaffold(
           body: Center(child: CircularProgressIndicator()),
         );
@@ -1253,8 +1414,7 @@ class _MyHomePageState extends State<MyHomePage>
                 ),
               ),
             ),
-            if (!_isConnected || _webViewNetworkIssue)
-              _buildNetworkOfflineOverlay(),
+            if (_shouldShowStatusOverlay) _buildNetworkOfflineOverlay(),
           ],
         ),
       );
@@ -1269,6 +1429,9 @@ class _MyHomePageState extends State<MyHomePage>
           _initMobileWebView();
         }
       });
+      if (_shouldShowStatusOverlay) {
+        return _buildStatusOverlayScaffold();
+      }
       return Scaffold(
         body: Container(
           color: Colors.white,
@@ -1280,7 +1443,12 @@ class _MyHomePageState extends State<MyHomePage>
     }
     print(
         'build: _isInitializing=$_isInitializing, _initError=$_initError, _controller=$_controller');
-    if (_isInitializing || !_isAppInitialized) {
+    if ((_isInitializing || !_isAppInitialized) &&
+        _isInitialNodeInfoLoading &&
+        !_hasInitialWebViewContentLoaded) {
+      if (_shouldShowStatusOverlay) {
+        return _buildStatusOverlayScaffold();
+      }
       return Scaffold(
         body: Container(
           color: Colors.black,
@@ -1324,7 +1492,7 @@ class _MyHomePageState extends State<MyHomePage>
       body: Stack(
         children: [
           WebViewWidget(controller: _controller!),
-          if (_isWebViewLoading)
+          if (_isWebViewLoading && !_shouldShowStartupNodeInfoLoading)
             Container(
               color: Colors.black,
               child: Center(
@@ -1339,14 +1507,15 @@ class _MyHomePageState extends State<MyHomePage>
                 ),
               ),
             ),
-          if (!_isConnected || _webViewNetworkIssue)
-            _buildNetworkOfflineOverlay(),
+          if (_shouldShowStatusOverlay) _buildNetworkOfflineOverlay(),
         ],
       ),
     );
   }
 
   Widget _buildNetworkOfflineOverlay() {
+    final isStartupLoading = _shouldShowStartupNodeInfoLoading;
+
     return Container(
       decoration: const BoxDecoration(
         gradient: LinearGradient(
@@ -1416,17 +1585,28 @@ One-click start and forget it.
                   ),
                   textAlign: TextAlign.center,
                 ),
+                if (isStartupLoading) ...[
+                  const SizedBox(height: 20),
+                  const SizedBox(
+                    width: 24,
+                    height: 24,
+                    child: CircularProgressIndicator(
+                      color: Colors.white,
+                      strokeWidth: 2.2,
+                    ),
+                  ),
+                ],
                 const SizedBox(height: 12),
               ],
             ),
           ),
-          const Align(
+          Align(
             alignment: Alignment.bottomCenter,
             child: Padding(
-              padding: EdgeInsets.only(bottom: 118.0),
+              padding: const EdgeInsets.only(bottom: 118.0),
               child: Text(
                 'Connecting...',
-                style: TextStyle(fontSize: 15, color: Colors.white),
+                style: const TextStyle(fontSize: 15, color: Colors.white),
                 textAlign: TextAlign.center,
               ),
             ),
@@ -1452,34 +1632,44 @@ One-click start and forget it.
                     ),
                   ],
                 ),
-                child: const Center(
+                child: Center(
                   child: Padding(
-                    padding: EdgeInsets.symmetric(horizontal: 10.0),
-                    child: Text.rich(
-                      TextSpan(
-                        children: [
-                          WidgetSpan(
-                            alignment: PlaceholderAlignment.middle,
-                            child: Icon(
-                              Icons.info_outline,
-                              size: 18,
+                    padding: const EdgeInsets.symmetric(horizontal: 10.0),
+                    child: isStartupLoading
+                        ? const Text(
+                            'Fetching the latest node status, please wait.',
+                            style: TextStyle(
+                              fontSize: 12,
                               color: Colors.white,
+                              fontWeight: FontWeight.w400,
                             ),
+                            textAlign: TextAlign.center,
+                          )
+                        : const Text.rich(
+                            TextSpan(
+                              children: [
+                                WidgetSpan(
+                                  alignment: PlaceholderAlignment.middle,
+                                  child: Icon(
+                                    Icons.info_outline,
+                                    size: 18,
+                                    color: Colors.white,
+                                  ),
+                                ),
+                                WidgetSpan(child: SizedBox(width: 8)),
+                                TextSpan(
+                                  text:
+                                      'There seems to be a network issue, please check your internet connectivity.',
+                                ),
+                              ],
+                            ),
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: Colors.white,
+                              fontWeight: FontWeight.w400,
+                            ),
+                            textAlign: TextAlign.center,
                           ),
-                          WidgetSpan(child: SizedBox(width: 8)),
-                          TextSpan(
-                            text:
-                                'There seems to be a network issue, please check your internet connectivity.',
-                          ),
-                        ],
-                      ),
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: Colors.white,
-                        fontWeight: FontWeight.w400,
-                      ),
-                      textAlign: TextAlign.center,
-                    ),
                   ),
                 ),
               ),
@@ -1597,8 +1787,8 @@ One-click start and forget it.
           }
 
           if (!mounted) return;
-          if (!_webViewNetworkIssue) return;
           setState(() {
+            _hasInitialWebViewContentLoaded = true;
             _webViewNetworkIssue = false;
           });
         },
