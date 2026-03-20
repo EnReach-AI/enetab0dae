@@ -33,6 +33,9 @@ static LAST_PAGE_LOAD_ERROR_AT_MS: std::sync::atomic::AtomicI64 =
 static INITIAL_NODE_INFO_RESOLVED: std::sync::atomic::AtomicBool =
   std::sync::atomic::AtomicBool::new(false);
 
+static LAST_STATUS_OVERLAY_STATE: std::sync::atomic::AtomicU8 =
+  std::sync::atomic::AtomicU8::new(1);
+
 #[cfg(target_os = "macos")]
 static LAST_MACOS_CONNECTIVITY_STATE: std::sync::atomic::AtomicU8 =
   std::sync::atomic::AtomicU8::new(0);
@@ -266,22 +269,39 @@ fn start_libstudy_update_monitor(app: tauri::AppHandle, app_data_dir: PathBuf) {
   }
 }
 
-fn emit_no_internet_and_show_overlay(
+fn infer_network_issue_state() -> NetState {
+  match cached_connectivity_state() {
+    Some(NetState::Offline) => NetState::Offline,
+    Some(NetState::NoInternet) => NetState::NoInternet,
+    _ => match classify_local_network_state(Duration::from_millis(350)) {
+      NetState::Offline => NetState::Offline,
+      _ => NetState::NoInternet,
+    },
+  }
+}
+
+fn emit_network_issue_and_show_overlay(
   app: &tauri::AppHandle,
   main_window: Option<tauri::WebviewWindow>,
   reason: &str,
 ) {
-  LAST_PAGE_LOAD_ERROR_AT_MS.store(now_ms_i64(), std::sync::atomic::Ordering::Relaxed);
-  log::warn!("net: forcing offline overlay (no_internet): {reason}");
+  let state = infer_network_issue_state();
+  let overlay_state = if state == NetState::Offline {
+    StatusOverlayState::Offline
+  } else {
+    StatusOverlayState::NoInternet
+  };
 
-  // Best-effort: broadcast a temporary NoInternet state so overlay text matches immediately.
+  LAST_PAGE_LOAD_ERROR_AT_MS.store(now_ms_i64(), std::sync::atomic::Ordering::Relaxed);
+  log::warn!("net: forcing overlay ({state:?}): {reason}");
+
   let payload = NetStatusPayload {
-    state: NetState::NoInternet,
+    state,
     checked_at_ms: now_ms_i64() as i128,
   };
   let _ = app.emit("aro-net-status", payload);
 
-  show_status_overlay(app, main_window, StatusOverlayState::NoInternet, true);
+  show_status_overlay(app, main_window, overlay_state, true);
 }
 
 fn acquire_single_instance_lock() -> bool {
@@ -827,12 +847,10 @@ fn offline_overlay_html() -> &'static str {
     .logo { width:142px; height:30px; object-fit:contain; display:block; margin:0 auto 24px auto; pointer-events:none; }
     .desc { font-family:'Poppins', system-ui, -apple-system, Segoe UI, Roboto, sans-serif; font-size:14px; font-weight:700; opacity:0.95; white-space:pre-line; }
     .connecting { position:absolute; left:0; right:0; bottom:118px; text-align:center; font-size:15px; opacity:0.9; }
-    .bottom { position:absolute; left:0; right:0; bottom:0; height:98px; background:#02B421; border-top-left-radius:30px; border-top-right-radius:30px; display:flex; align-items:center; justify-content:center; gap:8px; padding:0 20px; box-shadow:0 2px 8px rgba(0,0,0,0.2); text-align:center; font-size:14px; font-weight:600;display:flex }
+    .bottom { position:absolute; left:0; right:0; bottom:0; height:98px; background:#02B421; border-top-left-radius:30px; border-top-right-radius:30px; display:none; align-items:center; justify-content:center; gap:8px; padding:0 20px; box-shadow:0 2px 8px rgba(0,0,0,0.2); text-align:center; font-size:14px; font-weight:600 }
     .bottom-icon { width:14px; height:14px; flex:0 0 14px; }
     .bottom-text { line-height:1.35; }
     .msgTitle { display:flex; justify-content:flex-start}
-    .bottom[data-state="loading"] .msgTitle { justify-content:center; }
-    // .bottom[data-state="loading"] .bottom-icon { display:none; }
     @keyframes spin { to { transform: rotate(360deg); } }
   </style>
 </head>
@@ -865,20 +883,43 @@ One-click start and forget it.</div>
 
   <script>
     (function() {
+      const invoke = (cmd, args) => {
+        try {
+          const t = window.__TAURI__;
+          const fn = (t && t.core && t.core.invoke)
+            || (window.__TAURI_INTERNALS__ && window.__TAURI_INTERNALS__.invoke);
+          if (typeof fn !== 'function') return Promise.reject(new Error('invoke not available'));
+          return fn(cmd, args || {});
+        } catch (error) {
+          return Promise.reject(error);
+        }
+      };
+
       const setMsg = (state) => {
         const normalized = state || 'loading';
         const msg = document.getElementById('msg');
         const title = document.getElementById('connecting-text');
         const el = document.getElementById('msg-text');
-        if (msg) msg.dataset.state = normalized;
+        const showOfflineMessage = normalized === 'offline';
+        if (msg) {
+          msg.dataset.state = normalized;
+          msg.style.display = showOfflineMessage ? 'flex' : 'none';
+        }
         if (!el || !title) return;
         title.textContent = 'Connecting...';
-        if (normalized === 'offline') {
+        if (showOfflineMessage) {
           el.textContent = 'Network disconnected. Please check your connectivity.';
-        } else if (normalized === 'no_internet') {
-          el.textContent = 'There seems to be a network issue, please check your internet connectivity.';
         } else {
+          el.textContent = '';
         }
+      };
+
+      const syncCurrentState = async () => {
+        try {
+          const payload = await invoke('get_status_overlay_state');
+          const state = payload && payload.state ? String(payload.state) : 'loading';
+          setMsg(state);
+        } catch (_) {}
       };
 
       const listen = (eventName) => {
@@ -895,12 +936,16 @@ One-click start and forget it.</div>
         } catch (_) { return false; }
       };
       setMsg('loading');
+      syncCurrentState();
       const attach = () => {
         const overlayOk = listen('aro-status-overlay');
         const netOk = listen('aro-net-status');
         return overlayOk || netOk;
       };
-      attach() || setTimeout(attach, 250);
+      attach() || setTimeout(() => {
+        attach();
+        syncCurrentState();
+      }, 250);
     })();
   </script>
 </body>
@@ -953,6 +998,24 @@ struct StatusOverlayPayload {
   state: StatusOverlayState,
 }
 
+fn cache_status_overlay_state(state: StatusOverlayState) {
+  let value = match state {
+    StatusOverlayState::Loading => 1,
+    StatusOverlayState::Offline => 2,
+    StatusOverlayState::NoInternet => 3,
+  };
+
+  LAST_STATUS_OVERLAY_STATE.store(value, std::sync::atomic::Ordering::Relaxed);
+}
+
+fn current_status_overlay_state() -> StatusOverlayState {
+  match LAST_STATUS_OVERLAY_STATE.load(std::sync::atomic::Ordering::Relaxed) {
+    2 => StatusOverlayState::Offline,
+    3 => StatusOverlayState::NoInternet,
+    _ => StatusOverlayState::Loading,
+  }
+}
+
 fn initial_node_info_pending() -> bool {
   !INITIAL_NODE_INFO_RESOLVED.load(std::sync::atomic::Ordering::Relaxed)
 }
@@ -984,6 +1047,7 @@ fn show_status_overlay(
     return;
   };
 
+  cache_status_overlay_state(state);
   let _ = app.emit("aro-status-overlay", StatusOverlayPayload { state });
 
   if let Some(m) = main.clone() {
@@ -1009,6 +1073,10 @@ fn show_status_overlay(
 
   let _ = off.show();
   let _ = off.set_focus();
+}
+
+fn should_hide_main_for_loading_overlay() -> bool {
+  cfg!(target_os = "linux")
 }
 
 fn hide_status_overlay(app: &tauri::AppHandle) {
@@ -1164,6 +1232,84 @@ struct NetStatusPayload {
   checked_at_ms: i128,
 }
 
+#[cfg(target_os = "linux")]
+fn linux_default_route_interface() -> Option<String> {
+  let routes = fs::read_to_string("/proc/net/route").ok()?;
+
+  routes.lines().skip(1).find_map(|line| {
+    let fields: Vec<&str> = line.split_whitespace().collect();
+    if fields.len() > 1 && fields[1] == "00000000" {
+      Some(fields[0].to_string())
+    } else {
+      None
+    }
+  })
+}
+
+#[cfg(target_os = "linux")]
+fn linux_interface_has_carrier(interface: &str) -> Option<bool> {
+  let carrier_path = format!("/sys/class/net/{interface}/carrier");
+  if let Ok(value) = fs::read_to_string(&carrier_path) {
+    return Some(value.trim() == "1");
+  }
+
+  let operstate_path = format!("/sys/class/net/{interface}/operstate");
+  let state = fs::read_to_string(&operstate_path).ok()?;
+
+  match state.trim() {
+    "up" | "unknown" => Some(true),
+    "down" | "dormant" | "lowerlayerdown" | "notpresent" => Some(false),
+    _ => None,
+  }
+}
+
+fn classify_local_network_state(timeout: Duration) -> NetState {
+  #[cfg(target_os = "linux")]
+  {
+    match linux_default_route_interface() {
+      Some(interface) => {
+        if matches!(linux_interface_has_carrier(&interface), Some(false)) {
+          log::debug!("net: linux interface has no carrier iface={interface}");
+          return NetState::Offline;
+        }
+      }
+      None => {
+        log::debug!("net: linux default route missing");
+        return NetState::Offline;
+      }
+    }
+  }
+
+  let probe_addrs = [
+    std::net::SocketAddr::from(([1, 1, 1, 1], 443)),
+    std::net::SocketAddr::from(([8, 8, 8, 8], 443)),
+  ];
+
+  let mut saw_unreachable = false;
+
+  for addr in probe_addrs {
+    match TcpStream::connect_timeout(&addr, timeout) {
+      Ok(_) => return NetState::NoInternet,
+      Err(e) => {
+        use std::io::ErrorKind;
+        match e.kind() {
+          ErrorKind::NetworkUnreachable | ErrorKind::NotConnected | ErrorKind::AddrNotAvailable => {
+            saw_unreachable = true;
+          }
+          _ => {}
+        }
+        log::debug!("net: fallback probe failed addr={addr} err={e}");
+      }
+    }
+  }
+
+  if saw_unreachable {
+    NetState::Offline
+  } else {
+    NetState::NoInternet
+  }
+}
+
 fn check_remote_reachability(remote_ui_url: &str, timeout: Duration) -> NetState {
   let parsed = match Url::parse(remote_ui_url) {
     Ok(u) => u,
@@ -1179,9 +1325,10 @@ fn check_remote_reachability(remote_ui_url: &str, timeout: Duration) -> NetState
   let addrs: Vec<std::net::SocketAddr> = match (host.as_str(), port).to_socket_addrs() {
     Ok(it) => it.take(3).collect(),
     Err(e) => {
-      // DNS failure or resolver not available.
+      // DNS failure or resolver not available. Probe a stable public IP to
+      // distinguish a real local disconnect from a remote hostname issue.
       log::debug!("net: resolve failed host={host} port={port} err={e}");
-      return NetState::NoInternet;
+      return classify_local_network_state(timeout);
     }
   };
 
@@ -1344,7 +1491,7 @@ fn start_network_monitor(app: tauri::AppHandle) {
               &app,
               Some(main.clone()),
               StatusOverlayState::Loading,
-              false,
+              should_hide_main_for_loading_overlay(),
             );
           } else {
             hide_status_overlay(&app);
@@ -1387,7 +1534,14 @@ fn report_page_load_error(app: tauri::AppHandle, window: tauri::WebviewWindow, e
   if window.label() != "main" {
     return;
   }
-  emit_no_internet_and_show_overlay(&app, Some(window), &error);
+  emit_network_issue_and_show_overlay(&app, Some(window), &error);
+}
+
+#[tauri::command]
+fn get_status_overlay_state() -> StatusOverlayPayload {
+  StatusOverlayPayload {
+    state: current_status_overlay_state(),
+  }
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -1512,7 +1666,7 @@ pub fn run() {
         &app.handle(),
         app.get_webview_window("main"),
         StatusOverlayState::Loading,
-        false,
+        should_hide_main_for_loading_overlay(),
       );
 
       #[cfg(target_os = "macos")]
@@ -1653,6 +1807,7 @@ pub fn run() {
       bridge_log,
       bridge_crash_log,
       report_page_load_error,
+      get_status_overlay_state,
       set_libstudy_override_path,
       init_libstudy,
       init_libstudy_with_params,
@@ -1958,7 +2113,7 @@ async fn get_node_stat(app: tauri::AppHandle) -> Result<String, String> {
         || msg_lc.contains("name or service not known");
 
       if looks_like_network {
-        emit_no_internet_and_show_overlay(
+        emit_network_issue_and_show_overlay(
           &app,
           app.get_webview_window("main"),
           &format!("libstudy get_node_stat code=500: {msg}"),

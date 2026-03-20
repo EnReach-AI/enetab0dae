@@ -21,7 +21,7 @@
         "maximizable": true,
         "fullscreen": false,
         "decorations": false,
-        "visible": true,
+        "visible": false,
         "alwaysOnTop": true,
         "visibleOnAllWorkspaces": true,
         "skipTaskbar": false,
