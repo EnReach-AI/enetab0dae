@@ -28,6 +28,7 @@ dependencies:
   connectivity_plus: ^5.0.0
   shared_preferences: ^2.2.0
   permission_handler: ^11.3.0
+  google_fonts: ^6.3.2
 
 dev_dependencies:
   flutter_test:

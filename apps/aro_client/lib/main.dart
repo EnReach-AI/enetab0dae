@@ -21,6 +21,7 @@ import 'package:path/path.dart' as p;
 import 'dart:convert';
 import 'package:aro_client/utils/config.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart' as inapp;
+import 'package:google_fonts/google_fonts.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:aro_client/services/webview_memory_manager.dart';
 
@@ -592,10 +593,10 @@ class _MyHomePageState extends State<MyHomePage>
           return AlertDialog(
             title: const Text('Optimize App Performance'),
             content: const Text(
-              'To ensure ARO Mobile runs reliably, please go to App Settings and enable the following:\n\n'
-              '1. Notifications — Allow notifications so the background service can run properly.\n\n'
-              '2. Background running — Allow the app to run in the background to keep your node online.\n\n'
-              '3. Auto-start — Enable auto-start so the app can restart automatically after a reboot.',
+              'To ensure ARO Mobile runs smoothly on your phone, please head to your device settings and enable these options:\n\n'
+              '1. Background running – Allow the app to continue working in the background (you enjoy higher rewards!).\n\n'
+              '2. Auto-start – Let the app launch automatically after your phone restarts.\n\n'
+              'No worries—you can tweak or disable them anytime in your settings if needed.',
             ),
             actions: [
               TextButton(
@@ -1663,7 +1664,7 @@ class _MyHomePageState extends State<MyHomePage>
 A lightweight desktop app.
 One-click start and forget it.
 ''',
-                  style: const TextStyle(
+                  style: GoogleFonts.poppins(
                     fontSize: 14,
                     fontWeight: FontWeight.bold,
                     color: Colors.white,
@@ -1691,7 +1692,10 @@ One-click start and forget it.
               padding: const EdgeInsets.only(bottom: 118.0),
               child: Text(
                 'Connecting...',
-                style: const TextStyle(fontSize: 15, color: Colors.white),
+                style: GoogleFonts.poppins(
+                  fontSize: 15,
+                  color: Colors.white,
+                ),
                 textAlign: TextAlign.center,
               ),
             ),
@@ -1721,7 +1725,7 @@ One-click start and forget it.
                       child: Center(
                         child: Padding(
                           padding: const EdgeInsets.symmetric(horizontal: 10.0),
-                          child: const Text.rich(
+                          child: Text.rich(
                             TextSpan(
                               children: [
                                 WidgetSpan(
@@ -1739,7 +1743,7 @@ One-click start and forget it.
                                 ),
                               ],
                             ),
-                            style: TextStyle(
+                            style: GoogleFonts.poppins(
                               fontSize: 12,
                               color: Colors.white,
                               fontWeight: FontWeight.w400,
