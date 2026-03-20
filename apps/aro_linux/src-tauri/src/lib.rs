@@ -30,6 +30,17 @@ static INSTANCE_LOCK_FILE: OnceLock<std::fs::File> = OnceLock::new();
 static LAST_PAGE_LOAD_ERROR_AT_MS: std::sync::atomic::AtomicI64 =
   std::sync::atomic::AtomicI64::new(0);
 
+static INITIAL_NODE_INFO_RESOLVED: std::sync::atomic::AtomicBool =
+  std::sync::atomic::AtomicBool::new(false);
+
+#[cfg(target_os = "macos")]
+static LAST_MACOS_CONNECTIVITY_STATE: std::sync::atomic::AtomicU8 =
+  std::sync::atomic::AtomicU8::new(0);
+
+#[cfg(target_os = "linux")]
+static LAST_LINUX_CONNECTIVITY_STATE: std::sync::atomic::AtomicU8 =
+  std::sync::atomic::AtomicU8::new(0);
+
 #[cfg(target_os = "linux")]
 const LIBSTUDY_UPDATE_CHECK_INTERVAL: Duration = Duration::from_secs(10 * 60);
 
@@ -270,39 +281,7 @@ fn emit_no_internet_and_show_overlay(
   };
   let _ = app.emit("aro-net-status", payload);
 
-  // Prefer the provided main window handle; otherwise fetch by label.
-  let main = main_window.clone().or_else(|| app.get_webview_window("main"));
-
-  // Hide the main window to avoid showing an error/blank page.
-  if let Some(m) = main.clone() {
-    let _ = m.hide();
-  }
-
-  // Show the offline overlay.
-  if app.get_webview_window("offline").is_none() {
-    let _ = ensure_offline_overlay_window(app);
-  }
-
-  let Some(off) = app.get_webview_window("offline") else {
-    return;
-  };
-
-  // Keep the overlay above the main window and try to match bounds.
-  if let Some(m) = main {
-    let _ = m.set_always_on_top(false);
-    let _ = off.set_always_on_top(true);
-    if let Ok(pos) = m.outer_position() {
-      let _ = off.set_position(pos);
-    }
-    if let Ok(size) = m.outer_size() {
-      let _ = off.set_size(size);
-    }
-  } else {
-    let _ = off.set_always_on_top(true);
-  }
-
-  let _ = off.show();
-  let _ = off.set_focus();
+  show_status_overlay(app, main_window, StatusOverlayState::NoInternet, true);
 }
 
 fn acquire_single_instance_lock() -> bool {
@@ -583,8 +562,16 @@ fn set_default_libstudy_override(app: &tauri::AppHandle) {
 #[cfg(target_os = "macos")]
 const MACOS_TRAY_ICON: tauri::image::Image<'static> = tauri::include_image!("./icons/32x32.png");
 
+#[cfg(target_os = "macos")]
+const MACOS_TRAY_ICON_OFFLINE: tauri::image::Image<'static> =
+  tauri::include_image!("./icons/app_icon_offline.png");
+
 #[cfg(target_os = "linux")]
 const LINUX_TRAY_ICON: tauri::image::Image<'static> = tauri::include_image!("./icons/32x32.png");
+
+#[cfg(target_os = "linux")]
+const LINUX_TRAY_ICON_OFFLINE: tauri::image::Image<'static> =
+  tauri::include_image!("./icons/app_icon_offline.png");
 
 const FLUTTER_COMPAT_BRIDGE_JS: &str = r#"
 (function () {
@@ -836,10 +823,17 @@ fn offline_overlay_html() -> &'static str {
     .header { width:100%; height:120px; object-fit:cover; display:block; }
     .logo-tl { position:absolute; top:18px; left:18px; width:142px; height:30px; object-fit:contain; pointer-events:none; }
     .center { position:absolute; inset:0; display:flex; align-items:center; justify-content:center; padding:24px; text-align:center; }
+    .spinner { width:30px; height:30px; margin:0 auto 20px auto; border-radius:999px; border:3px solid rgba(255,255,255,0.2); border-top-color:#fff; animation:spin 0.9s linear infinite; }
     .logo { width:142px; height:30px; object-fit:contain; display:block; margin:0 auto 24px auto; pointer-events:none; }
-    .desc { font-size:14px; font-weight:700; opacity:0.95; white-space:pre-line; }
+    .desc { font-family:'Poppins', system-ui, -apple-system, Segoe UI, Roboto, sans-serif; font-size:14px; font-weight:700; opacity:0.95; white-space:pre-line; }
     .connecting { position:absolute; left:0; right:0; bottom:118px; text-align:center; font-size:15px; opacity:0.9; }
-    .bottom { position:absolute; left:0; right:0; bottom:0; height:98px; background:#02B421; border-top-left-radius:30px; border-top-right-radius:30px; display:flex; align-items:center; justify-content:center; padding:0 20px; box-shadow:0 2px 8px rgba(0,0,0,0.2); text-align:center; font-size:14px; font-weight:600; }
+    .bottom { position:absolute; left:0; right:0; bottom:0; height:98px; background:#02B421; border-top-left-radius:30px; border-top-right-radius:30px; display:flex; align-items:center; justify-content:center; gap:8px; padding:0 20px; box-shadow:0 2px 8px rgba(0,0,0,0.2); text-align:center; font-size:14px; font-weight:600;display:flex }
+    .bottom-icon { width:14px; height:14px; flex:0 0 14px; }
+    .bottom-text { line-height:1.35; }
+    .msgTitle { display:flex; justify-content:flex-start}
+    .bottom[data-state="loading"] .msgTitle { justify-content:center; }
+    // .bottom[data-state="loading"] .bottom-icon { display:none; }
+    @keyframes spin { to { transform: rotate(360deg); } }
   </style>
 </head>
 <body>
@@ -849,35 +843,50 @@ fn offline_overlay_html() -> &'static str {
     </div>
     <div class="center">
       <div>
+      
         <img class="logo" alt="ARO" src="data:image/png;base64,__LOGO_B64__" />
         <div class="desc">A lightweight desktop app.
 One-click start and forget it.</div>
       </div>
     </div>
-    <div class="connecting">Connecting...</div>
-    <div class="bottom" id="msg">There seems to be a network issue, please check your internet connectivity.</div>
+    <div class="connecting" id="connecting-text">Connecting...</div>
+    <div class="bottom" id="msg" data-state="loading">
+    <div class="msgTitle">
+      <svg class="bottom-icon" id="msg-icon" width="14" height="14" viewBox="0 0 14 14" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+        <path fill-rule="evenodd" clip-rule="evenodd" d="M6.99968 1.75004C4.10018 1.75004 1.74967 4.10055 1.74967 7.00004C1.74967 9.89954 4.10018 12.25 6.99968 12.25C9.89917 12.25 12.2497 9.89954 12.2497 7.00004C12.2497 4.10055 9.89917 1.75004 6.99968 1.75004ZM0.583008 7.00004C0.583008 3.45621 3.45585 0.583374 6.99968 0.583374C10.5435 0.583374 13.4163 3.45621 13.4163 7.00004C13.4163 10.5439 10.5435 13.4167 6.99968 13.4167C3.45585 13.4167 0.583008 10.5439 0.583008 7.00004Z" fill="white"/>
+        <path fill-rule="evenodd" clip-rule="evenodd" d="M7.00033 4.08337C7.32249 4.08337 7.58366 4.34454 7.58366 4.66671V7.00004C7.58366 7.32221 7.32249 7.58337 7.00033 7.58337C6.67816 7.58337 6.41699 7.32221 6.41699 7.00004V4.66671C6.41699 4.34454 6.67816 4.08337 7.00033 4.08337Z" fill="white"/>
+        <path fill-rule="evenodd" clip-rule="evenodd" d="M6.41699 9.33333C6.41699 9.01117 6.67816 8.75 7.00033 8.75H7.00616C7.32833 8.75 7.58949 9.01117 7.58949 9.33333C7.58949 9.6555 7.32833 9.91667 7.00616 9.91667H7.00033C6.67816 9.91667 6.41699 9.6555 6.41699 9.33333Z" fill="white"/>
+      </svg>
+      <span class="bottom-text" id="msg-text">There seems to be a network issue, please check your internet connectivity.</span>
+    </div>
+    </div>
+
   </div>
 
   <script>
     (function() {
       const setMsg = (state) => {
-        const el = document.getElementById('msg');
-        if (!el) return;
-        if (state === 'offline') {
+        const normalized = state || 'loading';
+        const msg = document.getElementById('msg');
+        const title = document.getElementById('connecting-text');
+        const el = document.getElementById('msg-text');
+        if (msg) msg.dataset.state = normalized;
+        if (!el || !title) return;
+        title.textContent = 'Connecting...';
+        if (normalized === 'offline') {
           el.textContent = 'Network disconnected. Please check your connectivity.';
-        } else if (state === 'no_internet') {
+        } else if (normalized === 'no_internet') {
           el.textContent = 'There seems to be a network issue, please check your internet connectivity.';
         } else {
-          el.textContent = 'Connecting...';
         }
       };
 
-      const listen = () => {
+      const listen = (eventName) => {
         try {
           const t = window.__TAURI__;
           const fn = t && t.event && t.event.listen;
           if (typeof fn !== 'function') return false;
-          fn('aro-net-status', (event) => {
+          fn(eventName, (event) => {
             const p = event && event.payload ? event.payload : null;
             const s = p && p.state ? String(p.state) : '';
             setMsg(s);
@@ -885,7 +894,13 @@ One-click start and forget it.</div>
           return true;
         } catch (_) { return false; }
       };
-      listen() || setTimeout(listen, 250);
+      setMsg('loading');
+      const attach = () => {
+        const overlayOk = listen('aro-status-overlay');
+        const netOk = listen('aro-net-status');
+        return overlayOk || netOk;
+      };
+      attach() || setTimeout(attach, 250);
     })();
   </script>
 </body>
@@ -923,6 +938,224 @@ enum NetState {
   Online,
   Offline,
   NoInternet,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "snake_case")]
+enum StatusOverlayState {
+  Loading,
+  Offline,
+  NoInternet,
+}
+
+#[derive(Debug, Clone, Serialize)]
+struct StatusOverlayPayload {
+  state: StatusOverlayState,
+}
+
+fn initial_node_info_pending() -> bool {
+  !INITIAL_NODE_INFO_RESOLVED.load(std::sync::atomic::Ordering::Relaxed)
+}
+
+fn mark_initial_node_info_resolved() -> bool {
+  INITIAL_NODE_INFO_RESOLVED
+    .compare_exchange(
+      false,
+      true,
+      std::sync::atomic::Ordering::Relaxed,
+      std::sync::atomic::Ordering::Relaxed,
+    )
+    .is_ok()
+}
+
+fn show_status_overlay(
+  app: &tauri::AppHandle,
+  main_window: Option<tauri::WebviewWindow>,
+  state: StatusOverlayState,
+  hide_main: bool,
+) {
+  let main = main_window.or_else(|| app.get_webview_window("main"));
+
+  if app.get_webview_window("offline").is_none() {
+    let _ = ensure_offline_overlay_window(app);
+  }
+
+  let Some(off) = app.get_webview_window("offline") else {
+    return;
+  };
+
+  let _ = app.emit("aro-status-overlay", StatusOverlayPayload { state });
+
+  if let Some(m) = main.clone() {
+    if hide_main {
+      let _ = m.hide();
+    } else {
+      let _ = m.show();
+    }
+  }
+
+  if let Some(m) = main {
+    let _ = m.set_always_on_top(false);
+    let _ = off.set_always_on_top(true);
+    if let Ok(pos) = m.outer_position() {
+      let _ = off.set_position(pos);
+    }
+    if let Ok(size) = m.outer_size() {
+      let _ = off.set_size(size);
+    }
+  } else {
+    let _ = off.set_always_on_top(true);
+  }
+
+  let _ = off.show();
+  let _ = off.set_focus();
+}
+
+fn hide_status_overlay(app: &tauri::AppHandle) {
+  if let Some(off) = app.get_webview_window("offline") {
+    let _ = off.hide();
+  }
+}
+
+#[cfg(target_os = "macos")]
+fn cached_connectivity_state() -> Option<NetState> {
+  cached_macos_connectivity_state()
+}
+
+#[cfg(target_os = "linux")]
+fn cached_connectivity_state() -> Option<NetState> {
+  cached_linux_connectivity_state()
+}
+
+#[cfg(not(any(target_os = "macos", target_os = "linux")))]
+fn cached_connectivity_state() -> Option<NetState> {
+  None
+}
+
+fn initial_node_info_has_bind_value(resp: &str) -> bool {
+  let Ok(value) = serde_json::from_str::<serde_json::Value>(resp) else {
+    return false;
+  };
+
+  matches!(
+    value.get("data").and_then(|data| data.get("bind")),
+    Some(serde_json::Value::Bool(_))
+  )
+}
+
+fn maybe_complete_initial_node_info(app: &tauri::AppHandle, resp: &str) {
+  if !initial_node_info_pending() || !initial_node_info_has_bind_value(resp) {
+    return;
+  }
+
+  if !mark_initial_node_info_resolved() {
+    return;
+  }
+
+  log::info!("initial node info resolved; hiding startup loading overlay");
+
+  match cached_connectivity_state() {
+    Some(NetState::Offline) => {
+      show_status_overlay(
+        app,
+        app.get_webview_window("main"),
+        StatusOverlayState::Offline,
+        true,
+      );
+    }
+    Some(NetState::NoInternet) => {
+      show_status_overlay(
+        app,
+        app.get_webview_window("main"),
+        StatusOverlayState::NoInternet,
+        true,
+      );
+    }
+    _ => {
+      hide_status_overlay(app);
+      if let Some(main) = app.get_webview_window("main") {
+        let _ = main.set_always_on_top(true);
+        let _ = main.show();
+        let _ = main.set_focus();
+      }
+    }
+  }
+}
+
+#[cfg(target_os = "macos")]
+fn cache_macos_connectivity_state(state: NetState) {
+  let value = match state {
+    NetState::Online => 1,
+    NetState::Offline => 2,
+    NetState::NoInternet => 3,
+  };
+
+  LAST_MACOS_CONNECTIVITY_STATE.store(value, std::sync::atomic::Ordering::Relaxed);
+}
+
+#[cfg(target_os = "macos")]
+fn cached_macos_connectivity_state() -> Option<NetState> {
+  match LAST_MACOS_CONNECTIVITY_STATE.load(std::sync::atomic::Ordering::Relaxed) {
+    1 => Some(NetState::Online),
+    2 => Some(NetState::Offline),
+    3 => Some(NetState::NoInternet),
+    _ => None,
+  }
+}
+
+#[cfg(target_os = "macos")]
+fn sync_macos_connectivity_icon(app: &tauri::AppHandle, state: NetState) {
+  let icon = if state == NetState::Online {
+    Some(MACOS_TRAY_ICON)
+  } else {
+    Some(MACOS_TRAY_ICON_OFFLINE)
+  };
+
+  let Some(tray) = app.tray_by_id("main") else {
+    return;
+  };
+
+  if let Err(e) = tray.set_icon(icon) {
+    log::warn!("macos tray icon sync failed state={state:?} err={e}");
+  }
+}
+
+#[cfg(target_os = "linux")]
+fn cache_linux_connectivity_state(state: NetState) {
+  let value = match state {
+    NetState::Online => 1,
+    NetState::Offline => 2,
+    NetState::NoInternet => 3,
+  };
+
+  LAST_LINUX_CONNECTIVITY_STATE.store(value, std::sync::atomic::Ordering::Relaxed);
+}
+
+#[cfg(target_os = "linux")]
+fn cached_linux_connectivity_state() -> Option<NetState> {
+  match LAST_LINUX_CONNECTIVITY_STATE.load(std::sync::atomic::Ordering::Relaxed) {
+    1 => Some(NetState::Online),
+    2 => Some(NetState::Offline),
+    3 => Some(NetState::NoInternet),
+    _ => None,
+  }
+}
+
+#[cfg(target_os = "linux")]
+fn sync_linux_connectivity_icon(app: &tauri::AppHandle, state: NetState) {
+  let icon = if state == NetState::Online {
+    Some(LINUX_TRAY_ICON)
+  } else {
+    Some(LINUX_TRAY_ICON_OFFLINE)
+  };
+
+  let Some(tray) = app.tray_by_id("main") else {
+    return;
+  };
+
+  if let Err(e) = tray.set_icon(icon) {
+    log::warn!("linux tray icon sync failed state={state:?} err={e}");
+  }
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -1074,6 +1307,18 @@ fn start_network_monitor(app: tauri::AppHandle) {
       // Note: If raw_state flipped but we suppressed it due to hysteresis, state == last_emitted, so we won't emit.
       let should_emit = last_emitted.map(|s| s != state).unwrap_or(true);
       if should_emit {
+        #[cfg(target_os = "macos")]
+        {
+          cache_macos_connectivity_state(state);
+          sync_macos_connectivity_icon(&app, state);
+        }
+
+        #[cfg(target_os = "linux")]
+        {
+          cache_linux_connectivity_state(state);
+          sync_linux_connectivity_icon(&app, state);
+        }
+
         // Emit to all windows (main + offline overlay).
         let _ = app.emit("aro-net-status", payload.clone());
 
@@ -1094,43 +1339,30 @@ fn start_network_monitor(app: tauri::AppHandle) {
             }
           }
 
-          if let Some(off) = app.get_webview_window("offline") {
-            let _ = off.hide();
+          if initial_node_info_pending() {
+            show_status_overlay(
+              &app,
+              Some(main.clone()),
+              StatusOverlayState::Loading,
+              false,
+            );
+          } else {
+            hide_status_overlay(&app);
+
+            // Restore main always-on-top behavior (configured in tauri.conf.json).
+            let _ = main.set_always_on_top(true);
+
+            // Always ensure the main window is visible again after recovering from Offline.
+            let _ = main.show();
+            let _ = main.set_focus();
           }
-
-          // Restore main always-on-top behavior (configured in tauri.conf.json).
-          let _ = main.set_always_on_top(true);
-
-          // Always ensure the main window is visible again after recovering from Offline.
-          let _ = main.show();
-          let _ = main.set_focus();
         } else {
-          // Offline/NoInternet: show the native overlay window.
-          // Hide the main window to avoid showing two windows (main + offline overlay).
-          let _ = main.hide();
-
-          if app.get_webview_window("offline").is_none() {
-            let _ = ensure_offline_overlay_window(&app);
-          }
-
-          if let Some(off) = app.get_webview_window("offline") {
-            // Ensure the overlay is actually above the main window.
-            let _ = main.set_always_on_top(false);
-            let _ = off.set_always_on_top(true);
-
-            // Best-effort: match main window bounds.
-            if let Ok(pos) = main.outer_position() {
-              let _ = off.set_position(pos);
-            }
-            if let Ok(size) = main.outer_size() {
-              let _ = off.set_size(size);
-            } else {
-              // Fallback to configured fixed size.
-              let _ = off.set_size(tauri::LogicalSize::new(360.0, 640.0));
-            }
-            let _ = off.show();
-            let _ = off.set_focus();
-          }
+          let overlay_state = if state == NetState::Offline {
+            StatusOverlayState::Offline
+          } else {
+            StatusOverlayState::NoInternet
+          };
+          show_status_overlay(&app, Some(main.clone()), overlay_state, true);
         }
 
         last_emitted = Some(state);
@@ -1276,6 +1508,13 @@ pub fn run() {
       // Tauri-layer network monitor: emits 'aro-net-status' for UI prompts.
       start_network_monitor(app.handle().clone());
 
+      show_status_overlay(
+        &app.handle(),
+        app.get_webview_window("main"),
+        StatusOverlayState::Loading,
+        false,
+      );
+
       #[cfg(target_os = "macos")]
       {
         // Ensure the app appears in the Dock (not an "agent" app) during dev runs.
@@ -1322,6 +1561,10 @@ pub fn run() {
         let labels: Vec<String> = handle.webview_windows().keys().cloned().collect();
         log::info!("webview window labels: {labels:?}");
 
+        if let Some(state) = cached_macos_connectivity_state() {
+          sync_macos_connectivity_icon(&handle, state);
+        }
+
         // Do not show the window here; network monitor will show it after routing.
       }
 
@@ -1357,6 +1600,10 @@ pub fn run() {
         let handle = app.handle();
         let labels: Vec<String> = handle.webview_windows().keys().cloned().collect();
         log::info!("webview window labels: {labels:?}");
+
+        if let Some(state) = cached_linux_connectivity_state() {
+          sync_linux_connectivity_icon(&handle, state);
+        }
 
         // Do not show the window here; network monitor will show it after routing.
       }
@@ -1685,6 +1932,8 @@ async fn get_node_stat(app: tauri::AppHandle) -> Result<String, String> {
   let resp = call_libstudy(LibstudyOp::GetNodeStat).await?;
   println!("[get_node_stat] response={resp}");
   log::info!("get_node_stat response={resp}");
+
+  maybe_complete_initial_node_info(&app, &resp);
 
   // If the API call failed in a network-y way, switch to the offline overlay.
   // libstudy tends to wrap transport errors into { code: 500, message: "request failed: ..." }.
