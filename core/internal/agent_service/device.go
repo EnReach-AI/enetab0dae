@@ -62,13 +62,7 @@ func GetDeviceInfo() (model.DeviceInfo, error) {
 }
 
 // readAndroidSystemProp 使用 getprop 命令读取 Android 系统属性，失败时返回空字符串
-func readAndroidSystemProp(key string) string {
-	out, err := exec.Command("getprop", key).Output()
-	if err != nil {
-		return ""
-	}
-	return strings.TrimSpace(string(out))
-}
+
 
 func DetectEnvironment() {
 
@@ -105,13 +99,13 @@ func DetectEnvironmentReliable() {
 	// gopsutil 在 Android 上无法读取 /etc/os-release，platform 等字段为空，手动补全
 	if runtime.GOOS == "android" {
 		if platform == "" {
-			platform = readAndroidSystemProp("ro.product.name")
+			platform = ReadAndroidSystemProp("ro.product.name")
 			if platform == "" {
 				platform = "android"
 			}
 		}
 		if platformVersion == "" {
-			platformVersion = readAndroidSystemProp("ro.build.version.release")
+			platformVersion = ReadAndroidSystemProp("ro.build.version.release")
 		}
 	}
 
@@ -234,7 +228,17 @@ func detectWindowsVirtualMachine() {
 		}
 	}
 }
-
+// readAndroidSystemProp 使用 getprop 命令读取 Android 系统属性，失败时返回空字符串
+func ReadAndroidSystemProp(key string) string {
+	// Use full path because /system/bin may not be in PATH when running as a service
+	out, err := exec.Command("/system/bin/getprop", key).Output()
+	if err != nil {
+		log.Printf("Failed to read system property %s: %v", key, err)
+		return ""
+	}
+	log.Printf("System property %s: %s", key, strings.TrimSpace(string(out)))
+	return strings.TrimSpace(string(out))
+}
 // macOS: 检查系统信息判断虚拟机
 func detectDarwinVirtualMachine() {
 	// 优先使用轻量级的 sysctl 命令，避免 system_profiler 可能触发的弹窗
@@ -314,7 +318,8 @@ func detectAndroidVirtualMachine() {
 	}
 
 	for _, prop := range vmProperties {
-		cmd := exec.Command("getprop", prop)
+		// Use full path because /system/bin may not be in PATH when running as a service
+		cmd := exec.Command("/system/bin/getprop", prop)
 
 		// 隐藏命令行窗口
 		hideCommandWindow(cmd)

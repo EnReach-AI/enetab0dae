@@ -14,10 +14,8 @@ import (
 	"io"
 	"log"
 	"net/http"
-	"os/exec"
 	"path/filepath"
 	"runtime"
-	"strings"
 	"time"
 
 	"github.com/aro-network/aro-edge-agent/agent/common"
@@ -26,6 +24,8 @@ import (
 	"github.com/aro-network/aro-edge-agent/agent/util"
 	httputil "github.com/aro-network/aro-edge-agent/agent/util/http"
 	"github.com/shirou/gopsutil/v4/host"
+	internalService "aro-ext-app/core/internal/agent_service"
+	
 )
 
 type DeviceType string
@@ -82,16 +82,7 @@ func getAuthToken(deviceInfo model.DeviceInfo) (string, error) {
 	return PublicEncrypt(agentConstant.BACKEND_ENCODE_PUBLIC_KEY, msg)
 }
 
-// readAndroidSystemProp 使用 getprop 命令读取 Android 系统属性，失败时返回空字符串
-func readAndroidSystemProp(key string) string {
-	out, err := exec.Command("getprop", key).Output()
-	if err != nil {
-		log.Printf("Failed to read system property %s: %v", key, err)
-		return ""
-	}
-	log.Printf("System property %s: %s", key, strings.TrimSpace(string(out)))
-	return strings.TrimSpace(string(out))
-}
+
 
 func NewBackendService(deviceInfo model.DeviceInfo) *BackendService {
 	authToken, _ := getAuthToken(deviceInfo)
@@ -125,13 +116,13 @@ func (b *BackendService) GetNodeBindStatus() (model.BindResult, error) {
 		// gopsutil 在 Android 上无法读取 /etc/os-release，platform 等字段为空，手动补全
 		if runtime.GOOS == "android" {
 			if platform == "" {
-				platform = readAndroidSystemProp("ro.product.model")
+				platform = internalService.ReadAndroidSystemProp("ro.product.model")
 				if platform == "" {
 					platform = "android"
 				}
 			}
 			if platformVersion == "" {
-				platformVersion = readAndroidSystemProp("ro.build.version.release")
+				platformVersion = internalService.ReadAndroidSystemProp("ro.build.version.release")
 			}
 		}
 

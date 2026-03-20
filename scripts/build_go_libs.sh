@@ -365,10 +365,17 @@ show_version_info() {
 # 生成压缩包（源文件保持不变）
 generate_archives() {
     local platform_filter="${1:-}"   # 可选：指定平台，例如 "linux"
-    local archive_date=$(date +%Y%m%d_%H%M%S)
 
     log_info "生成压缩包（源文件保持不变）"
     mkdir -p "$ARCHIVES_DIR"
+
+    # 平台目录 -> 平台_架构 映射
+    declare -A PLATFORM_ARCH_MAP=(
+        ["linux"]="linux_amd64"
+        ["windows"]="windows_amd64"
+        ["macos"]="darwin_arm64"
+        ["android"]="android_arm64"
+    )
 
     local generated=0
 
@@ -397,21 +404,17 @@ generate_archives() {
             continue
         fi
 
-        for lib_file in "${lib_files[@]}"; do
-            local lib_basename
-            lib_basename=$(basename "$lib_file")
-            local lib_stem="${lib_basename%.*}"
-            local archive_name="${lib_stem}_${archive_date}.zip"
-            local archive_path="$ARCHIVES_DIR/$archive_name"
+        local platform_arch="${PLATFORM_ARCH_MAP[$platform_name]:-${platform_name}_amd64}"
+        local archive_name="${platform_arch}.zip"
+        local archive_path="$ARCHIVES_DIR/$archive_name"
 
-            # -j 只存文件名，不含路径——源文件不动
-            zip -j "$archive_path" "$lib_file"
+        # -j 只存文件名，不含路径——源文件不动
+        zip -j "$archive_path" "${lib_files[@]}"
 
-            local size
-            size=$(ls -lh "$archive_path" | awk '{print $5}')
-            log_success "  压缩包: $archive_path ($size)"
-            (( generated++ )) || true
-        done
+        local size
+        size=$(ls -lh "$archive_path" | awk '{print $5}')
+        log_success "  压缩包: $archive_path ($size)"
+        (( generated++ )) || true
     done
 
     if [ "$generated" -eq 0 ]; then
@@ -459,21 +462,21 @@ build_ci() {
     case "$current_platform" in
         Linux)
             log_info "检测到 Linux 环境"
-            build_for_platform "linux" "amd64" "libstudy_${BASE_VERSION}_linux_amd64"
+            build_for_platform "linux" "amd64" "libstudy"
             ;;
         macOS)
             log_info "检测到 macOS 环境"
-            build_for_platform "darwin" "arm64" "libstudy_${BASE_VERSION}_darwin_arm64"
-            build_for_platform "darwin" "amd64" "libstudy_${BASE_VERSION}_darwin_amd64"
+            build_for_platform "darwin" "arm64" "libstudy"
+            build_for_platform "darwin" "amd64" "libstudy"
             ;;
         Windows)
             log_info "检测到 Windows 环境"
-            build_for_platform "windows" "amd64" "libstudy_${BASE_VERSION}_windows_amd64"
+            build_for_platform "windows" "amd64" "libstudy"
             ;;
         *)
             # 默认情况下构建 Linux
             log_warning "未知的环境，默认构建 Linux"
-            build_for_platform "linux" "amd64" "libstudy_${BASE_VERSION}_linux_amd64"
+            build_for_platform "linux" "amd64" "libstudy"
             ;;
     esac
     
@@ -498,11 +501,11 @@ main() {
             log_info "开始构建所有平台"
             clean_build
             
-            build_for_platform "linux" "amd64" "libstudy_${BASE_VERSION}_linux_amd64"
-            build_for_platform "windows" "amd64" "libstudy_${BASE_VERSION}_windows_amd64"
-            build_for_platform "darwin" "arm64" "libstudy_${BASE_VERSION}_darwin_arm64"
-            build_for_platform "darwin" "amd64" "libstudy_${BASE_VERSION}_darwin_amd64"
-            build_for_platform "android" "arm64" "libstudy_${BASE_VERSION}_android_arm64"
+            build_for_platform "linux" "amd64" "libstudy"
+            build_for_platform "windows" "amd64" "libstudy"
+            build_for_platform "darwin" "arm64" "libstudy"
+            build_for_platform "darwin" "amd64" "libstudy"
+            build_for_platform "android" "arm64" "libstudy"
             
             generate_manifest
             generate_archives
@@ -514,29 +517,29 @@ main() {
             
         build-linux)
             log_info "构建 Linux 平台"
-            build_for_platform "linux" "amd64" "libstudy_${BASE_VERSION}_linux_amd64"
+            build_for_platform "linux" "amd64" "libstudy"
             generate_archives "linux"
             log_success "Linux 构建完成"
             ;;
             
         build-windows)
             log_info "构建 Windows 平台"
-            build_for_platform "windows" "amd64" "libstudy_${BASE_VERSION}_windows_amd64"
+            build_for_platform "windows" "amd64" "libstudy"
             generate_archives "windows"
             log_success "Windows 构建完成"
             ;;
             
         build-macos)
             log_info "构建 macOS 平台"
-            build_for_platform "darwin" "arm64" "libstudy_${BASE_VERSION}_darwin_arm64"
-            build_for_platform "darwin" "amd64" "libstudy_${BASE_VERSION}_darwin_amd64"
+            build_for_platform "darwin" "arm64" "libstudy"
+            build_for_platform "darwin" "amd64" "libstudy"
             generate_archives "macos"
             log_success "macOS 构建完成"
             ;;
             
         build-android)
             log_info "构建 Android 平台"
-            build_for_platform "android" "arm64" "libstudy_${BASE_VERSION}_android_arm64"
+            build_for_platform "android" "arm64" "libstudy"
             generate_archives "android"
             log_success "Android 构建完成"
             ;;
