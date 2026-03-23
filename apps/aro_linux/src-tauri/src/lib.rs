@@ -912,11 +912,13 @@ One-click start and forget it.</div>
       // Expose globally so Rust can push state via eval directly.
       window.__setOverlayState = setMsg;
 
-      // If Rust pushed state before this JS was ready, pick it up now.
-      if (window.__pendingOverlayState) {
-        setMsg(window.__pendingOverlayState);
-      }
+      const pendingState = typeof window.__pendingOverlayState === 'string'
+        ? window.__pendingOverlayState
+        : '';
 
+      setMsg(pendingState || 'loading');
+
+      // If Rust pushed state before this JS was ready, pick it up now.
       const syncCurrentState = async () => {
         try {
           const payload = await invoke('get_status_overlay_state');
@@ -938,7 +940,6 @@ One-click start and forget it.</div>
           return true;
         } catch (_) { return false; }
       };
-      setMsg('loading');
       syncCurrentState();
       const attach = () => {
         const overlayOk = listen('aro-status-overlay');
@@ -960,13 +961,27 @@ One-click start and forget it.</div>
   })
 }
 
+fn write_offline_overlay_html(window: &tauri::WebviewWindow, source: &str) -> Result<(), String> {
+  let html_js = serde_json::to_string(offline_overlay_html())
+    .map_err(|e| format!("failed to encode offline overlay html ({source}): {e}"))?;
+
+  let js = format!(
+    "document.open();document.write({});document.close();",
+    html_js
+  );
+
+  window
+    .eval(&js)
+    .map_err(|e| format!("failed to write offline overlay html ({source}): {e}"))
+}
+
 fn ensure_offline_overlay_window(app: &tauri::AppHandle) -> Result<(), String> {
   if app.get_webview_window("offline").is_some() {
     return Ok(());
   }
 
   let about_blank = Url::parse("about:blank").map_err(|e| format!("invalid about:blank url: {e}"))?;
-  tauri::WebviewWindowBuilder::new(app, "offline", tauri::WebviewUrl::External(about_blank))
+  let window = tauri::WebviewWindowBuilder::new(app, "offline", tauri::WebviewUrl::External(about_blank))
     .title("ARO Desktop")
     .inner_size(360.0, 640.0)
     .resizable(false)
@@ -976,6 +991,8 @@ fn ensure_offline_overlay_window(app: &tauri::AppHandle) -> Result<(), String> {
     .visible(false)
     .build()
     .map_err(|e| format!("failed to create offline overlay window: {e}"))?;
+
+  let _ = write_offline_overlay_html(&window, "window creation");
 
   Ok(())
 }
@@ -1034,12 +1051,25 @@ fn mark_initial_node_info_resolved() -> bool {
     .is_ok()
 }
 
+fn normalize_status_overlay_state(requested: StatusOverlayState) -> StatusOverlayState {
+  if requested != StatusOverlayState::Loading {
+    return requested;
+  }
+
+  match cached_connectivity_state() {
+    Some(NetState::Offline) => StatusOverlayState::Offline,
+    Some(NetState::NoInternet) => StatusOverlayState::NoInternet,
+    _ => StatusOverlayState::Loading,
+  }
+}
+
 fn show_status_overlay(
   app: &tauri::AppHandle,
   main_window: Option<tauri::WebviewWindow>,
   state: StatusOverlayState,
   hide_main: bool,
 ) {
+  let state = normalize_status_overlay_state(state);
   let main = main_window.or_else(|| app.get_webview_window("main"));
 
   if app.get_webview_window("offline").is_none() {
@@ -1116,19 +1146,59 @@ fn cached_connectivity_state() -> Option<NetState> {
   None
 }
 
-fn initial_node_info_has_bind_value(resp: &str) -> bool {
-  let Ok(value) = serde_json::from_str::<serde_json::Value>(resp) else {
-    return false;
-  };
+fn parse_node_stat_response(resp: &str) -> Option<serde_json::Value> {
+  serde_json::from_str::<serde_json::Value>(resp).ok()
+}
 
+fn node_stat_response_looks_like_network_failure(value: &serde_json::Value) -> bool {
+  let code_500 = value.get("code").and_then(|c| c.as_i64()) == Some(500);
+  if !code_500 {
+    return false;
+  }
+
+  let msg = value
+    .get("message")
+    .and_then(|m| m.as_str())
+    .unwrap_or("");
+  let msg_lc = msg.to_ascii_lowercase();
+
+  msg_lc.contains("request failed")
+    || msg_lc.contains("unexpected eof")
+    || msg_lc.contains("connection")
+    || msg_lc.contains("timed out")
+    || msg_lc.contains("timeout")
+    || msg_lc.contains("dns")
+    || msg_lc.contains("resolve")
+    || msg_lc.contains("name or service not known")
+}
+
+fn node_stat_response_is_auth_required(value: &serde_json::Value) -> bool {
+  let message = value
+    .get("message")
+    .and_then(|m| m.as_str())
+    .unwrap_or("")
+    .to_ascii_lowercase();
+
+  message.contains("code=401") || message.contains("401") && message.contains("need auth")
+}
+
+fn initial_node_info_response_is_ready(value: &serde_json::Value) -> bool {
   matches!(
     value.get("data").and_then(|data| data.get("bind")),
     Some(serde_json::Value::Bool(_))
-  )
+  ) || node_stat_response_is_auth_required(value)
 }
 
 fn maybe_complete_initial_node_info(app: &tauri::AppHandle, resp: &str) {
-  if !initial_node_info_pending() || !initial_node_info_has_bind_value(resp) {
+  if !initial_node_info_pending() {
+    return;
+  }
+
+  let Some(value) = parse_node_stat_response(resp) else {
+    return;
+  };
+
+  if !initial_node_info_response_is_ready(&value) {
     return;
   }
 
@@ -1136,7 +1206,12 @@ fn maybe_complete_initial_node_info(app: &tauri::AppHandle, resp: &str) {
     return;
   }
 
-  log::info!("initial node info resolved; hiding startup loading overlay");
+  let resolved_for_auth = node_stat_response_is_auth_required(&value);
+  if resolved_for_auth {
+    log::info!("initial node info resolved by auth-required response; hiding startup loading overlay");
+  } else {
+    log::info!("initial node info resolved; hiding startup loading overlay");
+  }
 
   match cached_connectivity_state() {
     Some(NetState::Offline) => {
@@ -1574,20 +1649,14 @@ pub fn run() {
       // Inject scripts on every page load for reliability (remote UI navigation / reloads).
       if window.label() == "offline" {
         // Fill the about:blank window with our offline overlay HTML.
-        // Use JSON string encoding to avoid JS escaping issues.
         match serde_json::to_string(offline_overlay_html()) {
           Ok(html_js) => {
-            let js = format!(
-              "document.open();document.write({});document.close();",
-              html_js
-            );
+            let js = format!("document.open();document.write({});document.close();", html_js);
             if let Err(e) = window.eval(&js) {
               log::warn!("failed to write offline overlay html (page load): {e}");
             }
           }
-          Err(e) => {
-            log::warn!("failed to encode offline overlay html: {e}");
-          }
+          Err(e) => log::warn!("failed to encode offline overlay html (page load): {e}"),
         }
         return;
       }
@@ -2110,31 +2179,18 @@ async fn get_node_stat(app: tauri::AppHandle) -> Result<String, String> {
   // libstudy tends to wrap transport errors into { code: 500, message: "request failed: ..." }.
   log::info!("get_rewardsRes response={resp}");
 
-  if let Ok(v) = serde_json::from_str::<serde_json::Value>(&resp) {
-    let code_500 = v.get("code").and_then(|c| c.as_i64()) == Some(500);
-    if code_500 {
+  if let Some(v) = parse_node_stat_response(&resp) {
+    if node_stat_response_looks_like_network_failure(&v) {
       let msg = v
         .get("message")
         .and_then(|m| m.as_str())
         .unwrap_or("");
-      let msg_lc = msg.to_ascii_lowercase();
 
-      let looks_like_network = msg_lc.contains("request failed")
-        || msg_lc.contains("unexpected eof")
-        || msg_lc.contains("connection")
-        || msg_lc.contains("timed out")
-        || msg_lc.contains("timeout")
-        || msg_lc.contains("dns")
-        || msg_lc.contains("resolve")
-        || msg_lc.contains("name or service not known");
-
-      if looks_like_network {
-        emit_network_issue_and_show_overlay(
-          &app,
-          app.get_webview_window("main"),
-          &format!("libstudy get_node_stat code=500: {msg}"),
-        );
-      }
+      emit_network_issue_and_show_overlay(
+        &app,
+        app.get_webview_window("main"),
+        &format!("libstudy get_node_stat code=500: {msg}"),
+      );
     }
   }
   Ok(resp)
