@@ -912,6 +912,11 @@ One-click start and forget it.</div>
       // Expose globally so Rust can push state via eval directly.
       window.__setOverlayState = setMsg;
 
+      // If Rust pushed state before this JS was ready, pick it up now.
+      if (window.__pendingOverlayState) {
+        setMsg(window.__pendingOverlayState);
+      }
+
       const syncCurrentState = async () => {
         try {
           const payload = await invoke('get_status_overlay_state');
@@ -1056,8 +1061,8 @@ fn show_status_overlay(
     StatusOverlayState::NoInternet => "no_internet",
   };
   let js_push = format!(
-    "try {{ if (typeof window.__setOverlayState === 'function') window.__setOverlayState('{}'); }} catch(_) {{}}",
-    state_str
+    "try {{ window.__pendingOverlayState = '{}'; if (typeof window.__setOverlayState === 'function') window.__setOverlayState('{}'); }} catch(_) {{}}",
+    state_str, state_str
   );
   let _ = off.eval(&js_push);
 
