@@ -845,9 +845,9 @@ fn offline_overlay_html() -> &'static str {
     .center { position:absolute; inset:0; display:flex; align-items:center; justify-content:center; padding:24px; text-align:center; }
     .spinner { width:30px; height:30px; margin:0 auto 20px auto; border-radius:999px; border:3px solid rgba(255,255,255,0.2); border-top-color:#fff; animation:spin 0.9s linear infinite; }
     .logo { width:142px; height:30px; object-fit:contain; display:block; margin:0 auto 24px auto; pointer-events:none; }
-    .desc { font-family:'Poppins', system-ui, -apple-system, Segoe UI, Roboto, sans-serif; font-size:14px; font-weight:700; opacity:0.95; white-space:pre-line; }
+    .desc { font-family:'Poppins', system-ui, -apple-system, Segoe UI, Roboto, sans-serif; font-size:14px; font-weight:700; opacity:0.95; white-space:pre-line;font-weight:600 }
     .connecting { position:absolute; left:0; right:0; bottom:118px; text-align:center; font-size:15px; opacity:0.9; }
-    .bottom { position:absolute; left:0; right:0; bottom:0; height:98px; background:#02B421; border-top-left-radius:30px; border-top-right-radius:30px; display:none; align-items:center; justify-content:center; gap:8px; padding:0 20px; box-shadow:0 2px 8px rgba(0,0,0,0.2); text-align:center; font-size:14px; font-weight:600 }
+    .bottom { position:absolute; left:0; right:0; bottom:0; height:78px; background:#02B421; border-top-left-radius:30px; border-top-right-radius:30px; display:none; align-items:center; justify-content:center; gap:8px; padding:0 20px; box-shadow:0 2px 8px rgba(0,0,0,0.2); text-align:center; font-size:14px; font-weight:600 }
     .bottom-icon { width:14px; height:14px; flex:0 0 14px; }
     .bottom-text { line-height:1.35; }
     .msgTitle { display:flex; justify-content:flex-start}
@@ -899,20 +899,18 @@ One-click start and forget it.</div>
         const normalized = state || 'loading';
         const msg = document.getElementById('msg');
         const title = document.getElementById('connecting-text');
-        const el = document.getElementById('msg-text');
-        const showOfflineMessage = normalized === 'offline';
+        const isDisconnected = normalized === 'offline' || normalized === 'no_internet';
         if (msg) {
           msg.dataset.state = normalized;
-          msg.style.display = showOfflineMessage ? 'flex' : 'none';
+          msg.style.display = isDisconnected ? 'flex' : 'none';
         }
-        if (!el || !title) return;
-        title.textContent = 'Connecting...';
-        if (showOfflineMessage) {
-          el.textContent = 'Network disconnected. Please check your connectivity.';
-        } else {
-          el.textContent = '';
+        if (title) {
+          title.textContent = 'Connecting...';
         }
       };
+
+      // Expose globally so Rust can push state via eval directly.
+      window.__setOverlayState = setMsg;
 
       const syncCurrentState = async () => {
         try {
@@ -1049,6 +1047,19 @@ fn show_status_overlay(
 
   cache_status_overlay_state(state);
   let _ = app.emit("aro-status-overlay", StatusOverlayPayload { state });
+
+  // Directly push state into the overlay window via eval so it works even if
+  // the event listener hasn't attached yet (race with document.write injection).
+  let state_str = match state {
+    StatusOverlayState::Loading => "loading",
+    StatusOverlayState::Offline => "offline",
+    StatusOverlayState::NoInternet => "no_internet",
+  };
+  let js_push = format!(
+    "try {{ if (typeof window.__setOverlayState === 'function') window.__setOverlayState('{}'); }} catch(_) {{}}",
+    state_str
+  );
+  let _ = off.eval(&js_push);
 
   if let Some(m) = main.clone() {
     if hide_main {
