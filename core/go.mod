@@ -9,7 +9,7 @@ replace github.com/go-gost/x => ./vendor-x
 // replace github.com/aro-network/aro-edge-agent/devpage => ../../aro-edge-agent/devpage
 
 require (
-	github.com/aro-network/aro-edge-agent/agent v0.0.0-20260305102601-aa3d301972be
+	github.com/aro-network/aro-edge-agent/agent v0.0.0-20260323080925-31016801976e
 	github.com/go-gost/core v0.3.3
 	github.com/go-gost/x v0.8.1
 	github.com/google/uuid v1.6.0
