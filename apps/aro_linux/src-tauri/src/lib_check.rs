@@ -46,6 +46,11 @@ pub async fn check_and_update(
             current_version_map.get("data"),
             latest_version_map.get("data")
         );
+        println!(
+            "libstudy update: unable to extract versions; skipping update. current.data={:?} latest.data={:?}",
+            current_version_map.get("data"),
+            latest_version_map.get("data")
+        );
         return Ok(UpdateResult {
             updated: false,
             message: "Unable to determine current/latest version; skipping update".to_string(),
@@ -53,6 +58,11 @@ pub async fn check_and_update(
     };
 
     log::info!(
+        "Checking libstudy update: current={}, latest={}",
+        current_version,
+        latest_version
+    );
+    println!(
         "Checking libstudy update: current={}, latest={}",
         current_version,
         latest_version
@@ -65,6 +75,7 @@ pub async fn check_and_update(
         }
         Some(Ordering::Equal) => {
             log::info!("libstudy update: skip (already up to date): current==latest=={}", current_version);
+            println!("libstudy update: skip (already up to date): current==latest=={}", current_version);
             return Ok(UpdateResult {
                 updated: false,
                 message: format!("Already up to date ({})", current_version),
@@ -72,6 +83,11 @@ pub async fn check_and_update(
         }
         Some(Ordering::Greater) => {
             log::warn!(
+                "libstudy update: skip (downgrade prevented): current={} latest={}",
+                current_version,
+                latest_version
+            );
+            println!(
                 "libstudy update: skip (downgrade prevented): current={} latest={}",
                 current_version,
                 latest_version
@@ -86,6 +102,11 @@ pub async fn check_and_update(
         }
         None => {
             log::warn!(
+                "libstudy update: unable to compare versions (non-semver); skipping update. current={} latest={}",
+                current_version,
+                latest_version
+            );
+            println!(
                 "libstudy update: unable to compare versions (non-semver); skipping update. current={} latest={}",
                 current_version,
                 latest_version
@@ -112,6 +133,7 @@ pub async fn check_and_update(
 
     let download_url = download_url.unwrap();
     log::info!("Downloading libstudy from: {}", download_url);
+    println!("Downloading libstudy from: {}", download_url);
 
     let response = reqwest::get(download_url).await?;
     let bytes = response.bytes().await?;
@@ -141,6 +163,7 @@ pub async fn check_and_update(
     })?;
 
     log::info!("libstudy updated to {} at {:?}", latest_version, lib_path);
+    println!("libstudy updated to {} at {:?}", latest_version, lib_path);
 
     Ok(UpdateResult {
         updated: true,
@@ -234,6 +257,7 @@ fn extract_lib_from_zip(bytes: &bytes::Bytes, expected_filename: &str) -> Result
             return Ok(out);
         }
     }
+
 
     Err(anyhow::anyhow!(
         "zip did not contain expected library file {}",

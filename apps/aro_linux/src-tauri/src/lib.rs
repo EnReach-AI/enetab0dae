@@ -178,6 +178,7 @@ async fn run_libstudy_update_check(
   source: &'static str,
 ) {
   log::info!("libstudy update: checking for updates ({source})...");
+  println!("libstudy update: checking for updates ({source})...");
 
   let (current_ver, latest_ver) = match (
     call_libstudy_sync(LibstudyOp::GetCurrentVersion),
@@ -186,10 +187,12 @@ async fn run_libstudy_update_check(
     (Ok(current_ver), Ok(latest_ver)) => (current_ver, latest_ver),
     (Err(e), _) => {
       log::warn!("libstudy update: failed to get current version ({source}): {e}");
+      println!("libstudy update: failed to get current version ({source}): {e}");
       return;
     }
     (_, Err(e)) => {
       log::warn!("libstudy update: failed to get latest version ({source}): {e}");
+      println!("libstudy update: failed to get latest version ({source}): {e}");
       return;
     }
   };
@@ -205,12 +208,22 @@ async fn run_libstudy_update_check(
         current_ver,
         latest_ver
       );
+      println!(
+        "libstudy update: failed to parse version JSON ({source}). current={} latest={}",
+        current_ver,
+        latest_ver
+      );
       return;
     }
   };
 
   if !libstudy_version_response_ok(&current_map) || !libstudy_version_response_ok(&latest_map) {
     log::warn!(
+      "libstudy update: version API returned non-success code ({source}). current={} latest={}",
+      current_ver,
+      latest_ver
+    );
+    println!(
       "libstudy update: version API returned non-success code ({source}). current={} latest={}",
       current_ver,
       latest_ver
@@ -223,12 +236,22 @@ async fn run_libstudy_update_check(
     current_ver,
     latest_ver
   );
+  println!(
+    "libstudy update: current version: {}, latest version: {} ({source})",
+    current_ver,
+    latest_ver
+  );
 
   match lib_check::check_and_update(current_map, latest_map, app_data_dir).await {
     Ok(update_result) => {
       log::info!("libstudy update result ({source}): {:?}", update_result);
+      println!("libstudy update result ({source}): {:?}", update_result);
       if update_result.updated {
         log::warn!(
+          "libstudy was updated. Restarting app automatically to apply changes. {}",
+          update_result.message
+        );
+        println!(
           "libstudy was updated. Restarting app automatically to apply changes. {}",
           update_result.message
         );
@@ -237,6 +260,7 @@ async fn run_libstudy_update_check(
     }
     Err(e) => {
       log::warn!("libstudy update check failed ({source}): {e}");
+      println!("libstudy update check failed ({source}): {e}");
     }
   }
 }
@@ -245,6 +269,7 @@ async fn run_libstudy_update_check(
 fn start_libstudy_update_monitor(app: tauri::AppHandle, app_data_dir: PathBuf) {
   if LIBSTUDY_UPDATE_MONITOR_STARTED.set(()).is_err() {
     log::info!("libstudy update monitor already started; skipping duplicate start");
+    println!("libstudy update monitor already started; skipping duplicate start");
     return;
   }
 
@@ -261,8 +286,13 @@ fn start_libstudy_update_monitor(app: tauri::AppHandle, app_data_dir: PathBuf) {
     })
   {
     log::error!("failed to start libstudy update monitor: {e}");
+    println!("failed to start libstudy update monitor: {e}");
   } else {
     log::info!(
+      "libstudy update monitor started; interval={}s",
+      LIBSTUDY_UPDATE_CHECK_INTERVAL.as_secs()
+    );
+    println!(
       "libstudy update monitor started; interval={}s",
       LIBSTUDY_UPDATE_CHECK_INTERVAL.as_secs()
     );
@@ -849,7 +879,7 @@ fn offline_overlay_html() -> &'static str {
     .connecting { position:absolute; left:0; right:0; bottom:118px; text-align:center; font-size:15px; opacity:0.9; }
     .bottom { position:absolute; left:0; right:0; bottom:0; height:78px; background:#02B421; border-top-left-radius:30px; border-top-right-radius:30px; display:none; align-items:center; justify-content:center; gap:8px; padding:0 20px; box-shadow:0 2px 8px rgba(0,0,0,0.2); text-align:center; font-size:14px; font-weight:600 }
     .bottom-icon { width:14px; height:14px; flex:0 0 14px; }
-    .bottom-text { line-height:1.35; }
+    .bottom-text { line-height:1.35;font-family:'Poppins', system-ui, -apple-system, Segoe UI, Roboto, sans-serif; }
     .msgTitle { display:flex; justify-content:flex-start}
     @keyframes spin { to { transform: rotate(360deg); } }
   </style>
@@ -1784,10 +1814,16 @@ pub fn run() {
                 let _ = w.show();
                 let _ = w.set_focus();
               }
+              if let Some(off) = app.get_webview_window("offline") {
+                let _ = off.show();
+              }
             }
             "tray_hidden" => {
               if let Some(w) = app.get_webview_window("main") {
                 let _ = w.hide();
+              }
+              if let Some(off) = app.get_webview_window("offline") {
+                let _ = off.hide();
               }
             }
             "tray_quit" => {
@@ -1823,10 +1859,16 @@ pub fn run() {
                 let _ = w.show();
                 let _ = w.set_focus();
               }
+              if let Some(off) = app.get_webview_window("offline") {
+                let _ = off.show();
+              }
             }
             "tray_hidden" => {
               if let Some(w) = app.get_webview_window("main") {
                 let _ = w.hide();
+              }
+              if let Some(off) = app.get_webview_window("offline") {
+                let _ = off.hide();
               }
             }
             "tray_quit" => {
@@ -2086,6 +2128,7 @@ async fn init_libstudy_auto(app: tauri::AppHandle) -> Result<String, String> {
           // Check if we are using a different file than the one in data dir, AND the data dir file exists (is broken)
           if loaded_path != data_lib_path && data_lib_path.exists() {
              log::warn!("init_libstudy_auto: Self-healing triggered. Loaded from {:?} but expected {:?}. Overwriting broken library...", loaded_path, data_lib_path);
+             println!("[init_libstudy_auto] Self-healing: loaded from {:?} but expected {:?}. Attempting to overwrite broken library...", loaded_path, data_lib_path);
              
              match std::fs::copy(&loaded_path, &data_lib_path) {
                Ok(_) => {
