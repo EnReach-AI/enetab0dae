@@ -636,6 +636,50 @@ const MACOS_TRAY_ICON_OFFLINE: tauri::image::Image<'static> =
 const LINUX_APP_ICON: tauri::image::Image<'static> = tauri::include_image!("./icons/128x128.png");
 
 #[cfg(target_os = "linux")]
+const LINUX_APP_ICON_BYTES: &[u8] = include_bytes!("./icons/128x128.png");
+
+#[cfg(target_os = "linux")]
+const LINUX_DESKTOP_ENTRY: &str = include_str!("../resources/com.aro.ARONetwork.desktop");
+
+/// Install the app icon and .desktop file to user-local XDG directories so that
+/// the Linux desktop environment can display the correct taskbar icon and app name.
+/// This works in both development (`cargo tauri dev`) and production installs.
+#[cfg(target_os = "linux")]
+fn install_linux_desktop_integration() {
+  let home = match std::env::var_os("HOME") {
+    Some(h) => PathBuf::from(h),
+    None => return,
+  };
+
+  let app_id = "com.aro.ARONetwork";
+
+  // Install icon to ~/.local/share/icons/hicolor/128x128/apps/
+  let icon_dir = home.join(".local/share/icons/hicolor/128x128/apps");
+  let icon_path = icon_dir.join(format!("{app_id}.png"));
+  if !icon_path.exists() {
+    if let Err(e) = fs::create_dir_all(&icon_dir) {
+      log::warn!("failed to create icon dir {}: {e}", icon_dir.display());
+    } else if let Err(e) = fs::write(&icon_path, LINUX_APP_ICON_BYTES) {
+      log::warn!("failed to write icon {}: {e}", icon_path.display());
+    } else {
+      log::info!("installed app icon to {}", icon_path.display());
+    }
+  }
+
+  // Install .desktop file to ~/.local/share/applications/
+  let desktop_dir = home.join(".local/share/applications");
+  let desktop_path = desktop_dir.join(format!("{app_id}.desktop"));
+  // Always overwrite to keep it up-to-date.
+  if let Err(e) = fs::create_dir_all(&desktop_dir) {
+    log::warn!("failed to create desktop dir {}: {e}", desktop_dir.display());
+  } else if let Err(e) = fs::write(&desktop_path, LINUX_DESKTOP_ENTRY) {
+    log::warn!("failed to write desktop entry {}: {e}", desktop_path.display());
+  } else {
+    log::info!("installed desktop entry to {}", desktop_path.display());
+  }
+}
+
+#[cfg(target_os = "linux")]
 const LINUX_TRAY_ICON: tauri::image::Image<'static> = tauri::include_image!("./icons/32x32.png");
 
 #[cfg(target_os = "linux")]
@@ -1806,7 +1850,12 @@ pub fn run() {
       // Tauri-layer network monitor: emits 'aro-net-status' for UI prompts.
       start_network_monitor(app.handle().clone());
 
-      // On Linux, explicitly set the window icon so it appears in the taskbar.
+      // On Linux, install icon + .desktop to user dirs so the DE shows correct
+      // taskbar icon and app name (works for both dev and production).
+      #[cfg(target_os = "linux")]
+      install_linux_desktop_integration();
+
+      // On Linux, explicitly set the window icon (X11 _NET_WM_ICON fallback).
       #[cfg(target_os = "linux")]
       if let Some(main) = app.get_webview_window("main") {
         if let Err(e) = main.set_icon(LINUX_APP_ICON) {
