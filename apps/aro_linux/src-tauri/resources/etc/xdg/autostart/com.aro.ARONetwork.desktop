@@ -5,4 +5,5 @@ Comment=Start ARO Desktop on login
 Exec=/usr/bin/ARO
 TryExec=/usr/bin/ARO
 Terminal=false
+StartupWMClass=ARO
 X-GNOME-Autostart-enabled=true

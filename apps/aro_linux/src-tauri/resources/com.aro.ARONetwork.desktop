@@ -6,4 +6,5 @@ Exec=aro-desktop
 Icon=com.aro.ARONetwork
 Terminal=false
 Categories=Network;
+StartupWMClass=ARO
 StartupNotify=true

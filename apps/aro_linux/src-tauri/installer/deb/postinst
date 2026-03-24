@@ -56,14 +56,14 @@ fi
 
 SCRIPT_DIR="$(dirname "$0")"
 PROJECT_ROOT="$SCRIPT_DIR/../../../.."
-BIN_SRC="$PROJECT_ROOT/apps/aro_linux/src-tauri/target/release/ARO"
-BIN_DST="/usr/bin/ARO"
+BIN_SRC="$PROJECT_ROOT/apps/aro_linux/src-tauri/target/release/aro-desktop"
+BIN_DST="/usr/bin/aro-desktop"
 if [ -f "$BIN_SRC" ]; then
 	install -Dm755 "$BIN_SRC" "$BIN_DST"
 fi
 
 # If the bundle installed the canonical binary (e.g. /usr/bin/aro-desktop),
-# keep /usr/bin/ARO as a stable entrypoint for autostart.
+# ensure it is available.
 if [ -x "/usr/bin/aro-desktop" ] && [ ! -e "$BIN_DST" ]; then
 	ln -sf "/usr/bin/aro-desktop" "$BIN_DST" || true
 fi
@@ -98,8 +98,8 @@ else
 Type=Application
 Name=ARO Desktop
 Comment=Start ARO Desktop on login
-Exec=/usr/bin/ARO
-TryExec=/usr/bin/ARO
+Exec=/usr/bin/aro-desktop
+TryExec=/usr/bin/aro-desktop
 Terminal=false
 X-GNOME-Autostart-enabled=true
 EOF

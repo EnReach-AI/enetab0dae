@@ -633,6 +633,9 @@ const MACOS_TRAY_ICON_OFFLINE: tauri::image::Image<'static> =
   tauri::include_image!("./icons/app_icon_offline.png");
 
 #[cfg(target_os = "linux")]
+const LINUX_APP_ICON: tauri::image::Image<'static> = tauri::include_image!("./icons/128x128.png");
+
+#[cfg(target_os = "linux")]
 const LINUX_TRAY_ICON: tauri::image::Image<'static> = tauri::include_image!("./icons/32x32.png");
 
 #[cfg(target_os = "linux")]
@@ -1037,6 +1040,12 @@ fn ensure_offline_overlay_window(app: &tauri::AppHandle) -> Result<(), String> {
     .visible(false)
     .build()
     .map_err(|e| format!("failed to create offline overlay window: {e}"))?;
+
+  // On Linux, set the window icon so it appears correctly in the taskbar.
+  #[cfg(target_os = "linux")]
+  if let Err(e) = window.set_icon(LINUX_APP_ICON) {
+    log::warn!("failed to set offline overlay window icon: {e}");
+  }
 
   let _ = write_offline_overlay_html(&window, "window creation");
 
@@ -1797,6 +1806,14 @@ pub fn run() {
       // Tauri-layer network monitor: emits 'aro-net-status' for UI prompts.
       start_network_monitor(app.handle().clone());
 
+      // On Linux, explicitly set the window icon so it appears in the taskbar.
+      #[cfg(target_os = "linux")]
+      if let Some(main) = app.get_webview_window("main") {
+        if let Err(e) = main.set_icon(LINUX_APP_ICON) {
+          log::warn!("failed to set main window icon: {e}");
+        }
+      }
+
       show_status_overlay(
         &app.handle(),
         app.get_webview_window("main"),
@@ -1804,7 +1821,7 @@ pub fn run() {
         should_hide_main_for_loading_overlay(),
       );
 
-      #[cfg(target_os = "macos")]
+      #[cfg(target_os = "macos")
       {
         // Ensure the app appears in the Dock (not an "agent" app) during dev runs.
         let handle = app.handle();
