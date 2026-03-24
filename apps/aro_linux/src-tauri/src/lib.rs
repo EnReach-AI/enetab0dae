@@ -636,7 +636,7 @@ const MACOS_TRAY_ICON_OFFLINE: tauri::image::Image<'static> =
 const LINUX_APP_ICON: tauri::image::Image<'static> = tauri::include_image!("./icons/128x128.png");
 
 #[cfg(target_os = "linux")]
-const LINUX_APP_ICON_BYTES: &[u8] = include_bytes!("./icons/128x128.png");
+const LINUX_APP_ICON_BYTES: &[u8] = include_bytes!("../icons/128x128.png");
 
 #[cfg(target_os = "linux")]
 const LINUX_DESKTOP_ENTRY: &str = include_str!("../resources/com.aro.ARONetwork.desktop");
