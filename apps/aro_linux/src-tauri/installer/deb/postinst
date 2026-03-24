@@ -72,6 +72,27 @@ fi
 APP_ID="com.aro.ARONetwork"
 AUTOSTART_DST="/etc/xdg/autostart/${APP_ID}.desktop"
 
+# Install application icon to hicolor theme so desktop entries can reference it by name.
+ICON_NAME="${APP_ID}.png"
+ICON_DST="/usr/share/icons/hicolor/128x128/apps/${ICON_NAME}"
+# 1) bundled resource path
+ICON_SRC_BUNDLED="$(find /usr/lib -maxdepth 3 -type f -name '128x128.png' -path '*/icons/*' -print -quit 2>/dev/null || true)"
+# 2) development source path
+ICON_SRC_DEV="$PROJECT_ROOT/apps/aro_linux/src-tauri/icons/128x128.png"
+if [ -n "$ICON_SRC_BUNDLED" ] && [ -f "$ICON_SRC_BUNDLED" ]; then
+	install -Dm644 "$ICON_SRC_BUNDLED" "$ICON_DST"
+elif [ -f "$ICON_SRC_DEV" ]; then
+	install -Dm644 "$ICON_SRC_DEV" "$ICON_DST"
+fi
+# Also install to pixmaps as fallback for DEs that don't use hicolor.
+if [ -f "$ICON_DST" ]; then
+	install -Dm644 "$ICON_DST" "/usr/share/pixmaps/${ICON_NAME}"
+fi
+# Update icon cache if available.
+if command -v gtk-update-icon-cache >/dev/null 2>&1; then
+	gtk-update-icon-cache -f -t /usr/share/icons/hicolor 2>/dev/null || true
+fi
+
 # 1) development source path (when running from repo)
 AUTOSTART_SRC_DEV="$PROJECT_ROOT/apps/aro_linux/src-tauri/resources/etc/xdg/autostart/${APP_ID}.desktop"
 # 2) packaged bundled resource path (product name may contain spaces)

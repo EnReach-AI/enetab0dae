@@ -17,6 +17,13 @@ pgrep -f ARO | xargs -r kill -KILL || true
 # 移除 system desktop entry
 rm -f /usr/share/applications/${APP_ID}.desktop || true
 
+# Remove installed application icons
+rm -f "/usr/share/icons/hicolor/128x128/apps/${APP_ID}.png" || true
+rm -f "/usr/share/pixmaps/${APP_ID}.png" || true
+if command -v gtk-update-icon-cache >/dev/null 2>&1; then
+  gtk-update-icon-cache -f -t /usr/share/icons/hicolor 2>/dev/null || true
+fi
+
 remove_dir_under_home() {
   home_dir="$1"
   if [ -d "$home_dir" ]; then
