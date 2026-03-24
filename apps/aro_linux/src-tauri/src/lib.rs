@@ -36,6 +36,10 @@ static INITIAL_NODE_INFO_RESOLVED: std::sync::atomic::AtomicBool =
 static LAST_STATUS_OVERLAY_STATE: std::sync::atomic::AtomicU8 =
   std::sync::atomic::AtomicU8::new(1);
 
+/// Whether the offline overlay is the currently active (visible) window.
+static STATUS_OVERLAY_VISIBLE: std::sync::atomic::AtomicBool =
+  std::sync::atomic::AtomicBool::new(false);
+
 #[cfg(target_os = "macos")]
 static LAST_MACOS_CONNECTIVITY_STATE: std::sync::atomic::AtomicU8 =
   std::sync::atomic::AtomicU8::new(0);
@@ -324,6 +328,18 @@ fn emit_network_issue_and_show_overlay(
 
   LAST_PAGE_LOAD_ERROR_AT_MS.store(now_ms_i64(), std::sync::atomic::Ordering::Relaxed);
   log::warn!("net: forcing overlay ({state:?}): {reason}");
+
+  // Keep tray icon in sync with the overlay state.
+  #[cfg(target_os = "macos")]
+  {
+    cache_macos_connectivity_state(state);
+    sync_macos_connectivity_icon(app, state);
+  }
+  #[cfg(target_os = "linux")]
+  {
+    cache_linux_connectivity_state(state);
+    sync_linux_connectivity_icon(app, state);
+  }
 
   let payload = NetStatusPayload {
     state,
@@ -875,9 +891,9 @@ fn offline_overlay_html() -> &'static str {
     .center { position:absolute; inset:0; display:flex; align-items:center; justify-content:center; padding:24px; text-align:center; }
     .spinner { width:30px; height:30px; margin:0 auto 20px auto; border-radius:999px; border:3px solid rgba(255,255,255,0.2); border-top-color:#fff; animation:spin 0.9s linear infinite; }
     .logo { width:142px; height:30px; object-fit:contain; display:block; margin:0 auto 24px auto; pointer-events:none; }
-    .desc { font-family:'Poppins', system-ui, -apple-system, Segoe UI, Roboto, sans-serif; font-size:14px; font-weight:700; opacity:0.95; white-space:pre-line;font-weight:600 }
+    .desc { font-family:'Poppins', system-ui, -apple-system, Segoe UI, Roboto, sans-serif; font-size:14px; font-weight:400; opacity:0.95; white-space:pre-line;}
     .connecting { position:absolute; left:0; right:0; bottom:118px; text-align:center; font-size:15px; opacity:0.9; }
-    .bottom { position:absolute; left:0; right:0; bottom:0; height:78px; background:#02B421; border-top-left-radius:30px; border-top-right-radius:30px; display:none; align-items:center; justify-content:center; gap:8px; padding:0 20px; box-shadow:0 2px 8px rgba(0,0,0,0.2); text-align:center; font-size:14px; font-weight:600 }
+    .bottom { position:absolute; left:0; right:0; bottom:0; height:78px; background:#02B421; border-top-left-radius:30px; border-top-right-radius:30px; display:none; align-items:center; justify-content:center; gap:8px; padding:0 20px; box-shadow:0 2px 8px rgba(0,0,0,0.2); text-align:center; font-size:14px; font-weight:400 }
     .bottom-icon { width:14px; height:14px; flex:0 0 14px; }
     .bottom-text { line-height:1.35;font-family:'Poppins', system-ui, -apple-system, Segoe UI, Roboto, sans-serif; }
     .msgTitle { display:flex; justify-content:flex-start}
@@ -1149,6 +1165,7 @@ fn show_status_overlay(
 
   let _ = off.show();
   let _ = off.set_focus();
+  STATUS_OVERLAY_VISIBLE.store(true, std::sync::atomic::Ordering::Relaxed);
 }
 
 fn should_hide_main_for_loading_overlay() -> bool {
@@ -1156,6 +1173,7 @@ fn should_hide_main_for_loading_overlay() -> bool {
 }
 
 fn hide_status_overlay(app: &tauri::AppHandle) {
+  STATUS_OVERLAY_VISIBLE.store(false, std::sync::atomic::Ordering::Relaxed);
   if let Some(off) = app.get_webview_window("offline") {
     let _ = off.hide();
   }
@@ -1810,12 +1828,17 @@ pub fn run() {
           .menu(&tray_menu)
           .on_menu_event(|app, event| match event.id().as_ref() {
             "tray_show" => {
-              if let Some(w) = app.get_webview_window("main") {
-                let _ = w.show();
-                let _ = w.set_focus();
-              }
-              if let Some(off) = app.get_webview_window("offline") {
-                let _ = off.show();
+              let overlay_active = STATUS_OVERLAY_VISIBLE.load(std::sync::atomic::Ordering::Relaxed);
+              if overlay_active {
+                if let Some(off) = app.get_webview_window("offline") {
+                  let _ = off.show();
+                  let _ = off.set_focus();
+                }
+              } else {
+                if let Some(w) = app.get_webview_window("main") {
+                  let _ = w.show();
+                  let _ = w.set_focus();
+                }
               }
             }
             "tray_hidden" => {
@@ -1850,17 +1873,30 @@ pub fn run() {
         let tray_quit = tauri::menu::MenuItem::with_id(app, "tray_quit", "Quit", true, None::<&str>)?;
         let tray_menu = tauri::menu::Menu::with_items(app, &[&tray_show, &tray_hidden, &tray_quit])?;
 
+        // Choose the initial tray icon based on cached connectivity state.
+        // At startup, if the network state is unknown or offline, use the offline icon
+        // so the tray matches the loading/offline overlay that is always shown initially.
+        let initial_tray_icon = match cached_linux_connectivity_state() {
+          Some(NetState::Online) => LINUX_TRAY_ICON,
+          _ => LINUX_TRAY_ICON_OFFLINE,
+        };
+
         let _tray = tauri::tray::TrayIconBuilder::with_id("main")
-          .icon(LINUX_TRAY_ICON)
+          .icon(initial_tray_icon)
           .menu(&tray_menu)
           .on_menu_event(|app, event| match event.id().as_ref() {
             "tray_show" => {
-              if let Some(w) = app.get_webview_window("main") {
-                let _ = w.show();
-                let _ = w.set_focus();
-              }
-              if let Some(off) = app.get_webview_window("offline") {
-                let _ = off.show();
+              let overlay_active = STATUS_OVERLAY_VISIBLE.load(std::sync::atomic::Ordering::Relaxed);
+              if overlay_active {
+                if let Some(off) = app.get_webview_window("offline") {
+                  let _ = off.show();
+                  let _ = off.set_focus();
+                }
+              } else {
+                if let Some(w) = app.get_webview_window("main") {
+                  let _ = w.show();
+                  let _ = w.set_focus();
+                }
               }
             }
             "tray_hidden" => {
