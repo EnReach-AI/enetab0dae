@@ -1821,7 +1821,7 @@ pub fn run() {
         should_hide_main_for_loading_overlay(),
       );
 
-      #[cfg(target_os = "macos")
+      #[cfg(target_os = "macos")]
       {
         // Ensure the app appears in the Dock (not an "agent" app) during dev runs.
         let handle = app.handle();
