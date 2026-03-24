@@ -1357,11 +1357,13 @@ fn sync_linux_connectivity_icon(app: &tauri::AppHandle, state: NetState) {
   };
 
   let Some(tray) = app.tray_by_id("main") else {
+    log::warn!("linux tray icon sync: tray 'main' not found, skipping (state={state:?})");
     return;
   };
 
-  if let Err(e) = tray.set_icon(icon) {
-    log::warn!("linux tray icon sync failed state={state:?} err={e}");
+  match tray.set_icon(icon) {
+    Ok(_) => log::info!("linux tray icon synced to state={state:?}"),
+    Err(e) => log::warn!("linux tray icon sync failed state={state:?} err={e}"),
   }
 }
 
@@ -1876,7 +1878,9 @@ pub fn run() {
         // Choose the initial tray icon based on cached connectivity state.
         // At startup, if the network state is unknown or offline, use the offline icon
         // so the tray matches the loading/offline overlay that is always shown initially.
-        let initial_tray_icon = match cached_linux_connectivity_state() {
+        let cached_state = cached_linux_connectivity_state();
+        log::info!("linux tray: creating with cached_state={cached_state:?}");
+        let initial_tray_icon = match cached_state {
           Some(NetState::Online) => LINUX_TRAY_ICON,
           _ => LINUX_TRAY_ICON_OFFLINE,
         };
@@ -1918,8 +1922,10 @@ pub fn run() {
         let labels: Vec<String> = handle.webview_windows().keys().cloned().collect();
         log::info!("webview window labels: {labels:?}");
 
-        if let Some(state) = cached_linux_connectivity_state() {
-          sync_linux_connectivity_icon(&handle, state);
+
+        {
+          let sync_state = cached_linux_connectivity_state().unwrap_or(NetState::Offline);
+          sync_linux_connectivity_icon(&handle, sync_state);
         }
 
         // Do not show the window here; network monitor will show it after routing.
