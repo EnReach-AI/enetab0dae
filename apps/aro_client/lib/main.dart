@@ -843,7 +843,7 @@ class _MyHomePageState extends State<MyHomePage>
     }
   }
 
-  Future<void> _showBatteryOptimizationDialog({bool fromResume = false}) async {
+  Future<void> _showBatteryOptimizationDialog() async {
     if (!Platform.isAndroid) return;
     if (!mounted) return;
     try {
@@ -852,57 +852,24 @@ class _MyHomePageState extends State<MyHomePage>
           .invokeMethod<bool>('isIgnoringBatteryOptimizations');
       if (isIgnoring == true) return;
 
-      // Throttle: show at most once per 24 hours
       final prefs = await SharedPreferences.getInstance();
       final lastPromptMs = prefs.getInt('battery_opt_last_prompt_ms') ?? 0;
-      final now = DateTime.now().millisecondsSinceEpoch;
-      if (fromResume && lastPromptMs > 0 && (now - lastPromptMs) < 86400000) {
-        return;
+
+      // After the first prompt, re-check every 12 hours
+      if (lastPromptMs > 0) {
+        final now = DateTime.now().millisecondsSinceEpoch;
+        if ((now - lastPromptMs) < 43200000) return;
       }
-      await prefs.setInt('battery_opt_last_prompt_ms', now);
 
-      if (!mounted) return;
-
-      await showDialog<void>(
-        context: context,
-        barrierDismissible: true,
-        builder: (context) {
-          return AlertDialog(
-            title: const Text('Disable Battery Optimization'),
-            content: const Text(
-              'To keep ARO Mobile running reliably in the background, please disable battery optimization for this app.\n\n'
-              'Android may kill background processes to save battery. Setting the app to "Unrestricted" or "No optimization" ensures:\n\n'
-              '• Stable background connection\n'
-              '• Higher rewards earned continuously\n'
-              '• No unexpected disconnections\n\n'
-              'Tap "Go to Settings" to open the battery optimization dialog directly.',
-            ),
-            actions: [
-              TextButton(
-                onPressed: () {
-                  Navigator.of(context).pop();
-                },
-                child: const Text('Later'),
-              ),
-              TextButton(
-                onPressed: () async {
-                  Navigator.of(context).pop();
-                  try {
-                    await MyApp.platform
-                        .invokeMethod('requestIgnoreBatteryOptimizations');
-                  } catch (e) {
-                    LoggerService()
-                        .error('Failed to request battery optimization', e);
-                  }
-                },
-                child: const Text('Go to Settings'),
-              ),
-            ],
-          );
-        },
+      await prefs.setInt(
+        'battery_opt_last_prompt_ms',
+        DateTime.now().millisecondsSinceEpoch,
       );
+
+      // Directly invoke the system-level battery optimization prompt
+      await MyApp.platform.invokeMethod('requestIgnoreBatteryOptimizations');
     } catch (e) {
-      LoggerService().error('Show battery optimization dialog failed', e);
+      LoggerService().error('Battery optimization request failed', e);
     }
   }
 
@@ -1512,7 +1479,7 @@ class _MyHomePageState extends State<MyHomePage>
 
       // Re-check battery optimization on resume (throttled to once/day)
       if (Platform.isAndroid && _isAppInitialized) {
-        _showBatteryOptimizationDialog(fromResume: true);
+        _showBatteryOptimizationDialog();
       }
     }
   }
@@ -1683,8 +1650,6 @@ class _MyHomePageState extends State<MyHomePage>
             ''');
           },
           onPageStarted: (url) {
-            print('[DEBUG] onPageStarted $url');
-
             final previousUrl = _mobileWebViewCurrentUrl;
             if (_isUsableWebViewUrl(url)) {
               _mobileWebViewCurrentUrl = url;

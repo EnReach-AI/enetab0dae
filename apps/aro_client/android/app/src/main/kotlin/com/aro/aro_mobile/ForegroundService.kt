@@ -93,7 +93,7 @@ class ForegroundService : Service() {
         )
 
         val notification: Notification = NotificationCompat.Builder(this, CHANNEL_ID)
-            .setContentTitle("App is running in the background")
+            .setContentTitle("ARO is earning for you in the background")
             .setContentText("Click return App")
             .setSmallIcon(R.mipmap.ic_launcher)
             .setContentIntent(openAppPendingIntent)

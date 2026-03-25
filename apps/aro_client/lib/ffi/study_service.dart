@@ -35,12 +35,9 @@ class StudyService {
   String nodeInit(
     Map<String, dynamic> config,
   ) {
-    print('Directorypath $config');
-
     final configJson = jsonEncode(config);
     final configPtr = configJson.toNativeUtf8();
 
-    LoggerService().info('StudyService.nodeInit -  config: $config');
     final ptr = StudyBindings.initLibstudy(configPtr);
 
     malloc.free(configPtr);
@@ -60,9 +57,7 @@ class StudyService {
 
   String _handleResult(Pointer<Utf8> ptr) {
     if (ptr == nullptr) return '';
-
     final str = ptr.toDartString();
-    print('ptr23232---: $str');
     return str;
   }
 }
