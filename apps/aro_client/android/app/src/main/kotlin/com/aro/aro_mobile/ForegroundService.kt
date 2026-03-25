@@ -9,7 +9,9 @@ import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
 import android.os.Build
+import android.os.Handler
 import android.os.IBinder
+import android.os.Looper
 import android.os.UserManager
 import android.util.Log
 import androidx.core.app.NotificationCompat
@@ -17,10 +19,12 @@ import io.flutter.FlutterInjector
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.embedding.engine.dart.DartExecutor
 import io.flutter.plugins.GeneratedPluginRegistrant
+import io.flutter.plugin.common.MethodChannel
 
 class ForegroundService : Service() {
 
     companion object {
+        const val CHANNEL_NAME = "com.aro.aro_app/foreground"
         const val ACTION_RESTART_APP = "com.aro.aro_mobile.ACTION_RESTART_APP"
         const val ACTION_STOP_FOR_UPDATE = "com.aro.aro_mobile.ACTION_STOP_FOR_UPDATE"
 
@@ -33,6 +37,7 @@ class ForegroundService : Service() {
     @Volatile
     private var workerRunning = false
 
+    private var serviceMethodChannel: MethodChannel? = null
     private var workerThread: Thread? = null
     private var unlockReceiver: android.content.BroadcastReceiver? = null
 
@@ -128,7 +133,10 @@ class ForegroundService : Service() {
     }
 
     private fun ensureBackgroundEngine() {
-        if (flutterEngine != null) return
+        flutterEngine?.let {
+            registerServiceMethodChannel(it)
+            return
+        }
 
         if (!isUserUnlocked()) {
             Log.w("ForegroundService", "User locked; postponing  engine start")
@@ -143,6 +151,7 @@ class ForegroundService : Service() {
 
             val engine = FlutterEngine(applicationContext)
             GeneratedPluginRegistrant.registerWith(engine)
+            registerServiceMethodChannel(engine)
 
             val entrypoint = DartExecutor.DartEntrypoint(loader.findAppBundlePath(), "backgroundMain")
             engine.dartExecutor.executeDartEntrypoint(entrypoint)
@@ -153,8 +162,38 @@ class ForegroundService : Service() {
         }
     }
 
+    private fun registerServiceMethodChannel(engine: FlutterEngine) {
+        serviceMethodChannel?.setMethodCallHandler(null)
+        serviceMethodChannel = MethodChannel(engine.dartExecutor.binaryMessenger, CHANNEL_NAME).apply {
+            setMethodCallHandler { call, result ->
+                when (call.method) {
+                    "restartServiceForUpdate" -> {
+                        result.success(true)
+                        Handler(Looper.getMainLooper()).post {
+                            restartServiceForUpdate()
+                        }
+                    }
+                    else -> result.notImplemented()
+                }
+            }
+        }
+    }
+
+    private fun restartServiceForUpdate() {
+        Log.i("ForegroundService", "Restarting background engine for update")
+        destroyBackgroundEngine()
+        Handler(Looper.getMainLooper()).postDelayed(
+            {
+                ensureBackgroundEngineIfNeeded()
+            },
+            500,
+        )
+    }
+
     private fun destroyBackgroundEngine() {
         try {
+            serviceMethodChannel?.setMethodCallHandler(null)
+            serviceMethodChannel = null
             flutterEngine?.destroy()
             Log.i("ForegroundService", "Background engine destroyed for update")
         } catch (t: Throwable) {

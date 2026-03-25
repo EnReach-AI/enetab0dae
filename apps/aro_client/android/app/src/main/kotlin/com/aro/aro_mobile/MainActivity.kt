@@ -5,6 +5,7 @@ import android.net.Uri
 import android.os.Build
 import android.os.Handler
 import android.os.Looper
+import android.os.PowerManager
 import android.provider.Settings
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.plugin.common.MethodChannel
@@ -61,6 +62,29 @@ class MainActivity: FlutterActivity() {
                         result.success(true)
                     } catch (e: Exception) {
                         result.error("SETTINGS_ERROR", e.message, null)
+                    }
+                }
+                "isIgnoringBatteryOptimizations" -> {
+                    try {
+                        val pm = getSystemService(POWER_SERVICE) as PowerManager
+                        val isIgnoring = pm.isIgnoringBatteryOptimizations(packageName)
+                        result.success(isIgnoring)
+                    } catch (e: Exception) {
+                        result.error("BATTERY_CHECK_ERROR", e.message, null)
+                    }
+                }
+                "requestIgnoreBatteryOptimizations" -> {
+                    try {
+                        val pm = getSystemService(POWER_SERVICE) as PowerManager
+                        if (!pm.isIgnoringBatteryOptimizations(packageName)) {
+                            val intent = Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS).apply {
+                                data = Uri.parse("package:$packageName")
+                            }
+                            startActivity(intent)
+                        }
+                        result.success(true)
+                    } catch (e: Exception) {
+                        result.error("BATTERY_REQUEST_ERROR", e.message, null)
                     }
                 }
                 else -> result.notImplemented()

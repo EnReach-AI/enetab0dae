@@ -27,6 +27,15 @@ import 'package:aro_client/services/webview_memory_manager.dart';
 
 String? _studyLibraryOverridePathCache;
 
+const Duration _autoUpdateInitialDelay = Duration(seconds: 5);
+const Duration _autoUpdateCheckInterval = Duration(minutes: 10);
+const Duration _autoUpdateThrottleWindow = Duration(minutes: 9);
+const String _autoUpdateStampFileName = 'libstudy.auto_update.last_check';
+
+Timer? _backgroundAutoUpdateTimer;
+bool _backgroundAutoUpdateLoopStarted = false;
+bool _autoUpdateCheckInProgress = false;
+
 enum _InitialBindState {
   resolved,
   pending,
@@ -37,6 +46,315 @@ String _loadNodeStatInBackground(String? overridePath) {
   StudyLibrary.setOverridePath(overridePath);
   StudyLibrary.ensureInitialized();
   return StudyService.instance.getNodeStat();
+}
+
+Future<void> _restartAppForUpdatedLibrary({
+  bool launchUiOnAndroid = true,
+}) async {
+  try {
+    if (Platform.isAndroid) {
+      if (!launchUiOnAndroid) {
+        LoggerService().info(
+          '[Restart] Restarting Android background engine after update...',
+        );
+        try {
+          await MyApp.platform.invokeMethod('restartServiceForUpdate');
+        } catch (e, s) {
+          LoggerService().error(
+            '[Restart] Background Android service restart failed',
+            e,
+            s,
+          );
+        }
+        return;
+      }
+
+      LoggerService().info(
+        '[Restart] Restarting ForegroundService to reload updated library...',
+      );
+      try {
+        await MyApp.platform.invokeMethod('stopServiceForUpdate');
+        await Future.delayed(const Duration(milliseconds: 500));
+        await MyApp.platform.invokeMethod('startService');
+        await MyApp.platform.invokeMethod('restartApp');
+        return;
+      } catch (e, s) {
+        LoggerService().error('[Restart] Platform channel failed', e, s);
+      }
+
+      exit(0);
+    }
+
+    if (Platform.isMacOS) {
+      final exePath = Platform.resolvedExecutable;
+      final exeDir = Directory(exePath).parent;
+      final appBundlePath = p.normalize(p.join(exeDir.path, '..', '..'));
+      final escaped = appBundlePath.replaceAll("'", "'\\''");
+      await Process.start(
+        'bash',
+        ['-c', "sleep 1 && open '$escaped'"],
+        mode: ProcessStartMode.detached,
+      );
+      exit(0);
+    }
+
+    if (Platform.isWindows) {
+      final exePath = Platform.resolvedExecutable;
+      LoggerService().info('[Restart] Windows relaunch requested', {
+        'exePath': exePath,
+      });
+
+      var relaunched = false;
+      try {
+        await Process.start(
+          exePath,
+          const ['--wait-for-single-instance'],
+          mode: ProcessStartMode.detached,
+        );
+        relaunched = true;
+        LoggerService().info('[Restart] Windows relaunch started directly');
+      } catch (e, s) {
+        LoggerService().error(
+          '[Restart] Direct Windows relaunch failed, trying cmd fallback',
+          e,
+          s,
+        );
+        try {
+          await Process.start(
+            'cmd',
+            ['/c', 'start', '', exePath, '--wait-for-single-instance'],
+            mode: ProcessStartMode.detached,
+          );
+          relaunched = true;
+          LoggerService().info('[Restart] Windows relaunch started via cmd');
+        } catch (e2, s2) {
+          LoggerService()
+              .error('[Restart] Windows cmd fallback failed', e2, s2);
+        }
+      }
+
+      if (relaunched) {
+        exit(0);
+      }
+
+      exit(0);
+    }
+
+    if (Platform.isLinux) {
+      final exePath = Platform.resolvedExecutable;
+      final escaped = exePath.replaceAll("'", "'\\''");
+      await Process.start(
+        'bash',
+        ['-c', "sleep 1 && '$escaped'"],
+        mode: ProcessStartMode.detached,
+      );
+      exit(0);
+    }
+  } catch (e, s) {
+    LoggerService().error('Restart failed', e, s);
+  }
+}
+
+Future<Map<String, dynamic>?> _checkAndUpdateCurrentPlatform({
+  required Map<String, dynamic> currentVersionMap,
+  required Map<String, dynamic> latestVersionMap,
+}) async {
+  if (Platform.isMacOS) {
+    return LibUpdateService.instance.checkAndUpdateMacOS(
+      currentVersionMap: currentVersionMap,
+      latestVersionMap: latestVersionMap,
+    );
+  }
+
+  if (Platform.isAndroid) {
+    return LibUpdateService.instance.checkAndUpdateAndroid(
+      currentVersionMap: currentVersionMap,
+      latestVersionMap: latestVersionMap,
+    );
+  }
+
+  if (Platform.isWindows) {
+    return LibUpdateService.instance.checkAndUpdateWindows(
+      currentVersionMap: currentVersionMap,
+      latestVersionMap: latestVersionMap,
+    );
+  }
+
+  if (Platform.isLinux) {
+    return LibUpdateService.instance.checkAndUpdateLinux(
+      currentVersionMap: currentVersionMap,
+      latestVersionMap: latestVersionMap,
+    );
+  }
+
+  return null;
+}
+
+Future<void> _performAutoUpdateCheck({
+  required String trigger,
+  bool launchUiOnAndroid = true,
+}) async {
+  final currentVersionRaw =
+      jsonDecode(StudyService.instance.getCurrentVersion());
+  final latestVersionRaw = jsonDecode(StudyService.instance.getLastVersion());
+
+  if (currentVersionRaw is! Map || latestVersionRaw is! Map) {
+    LoggerService().warning(
+      '[AutoUpdate] [$trigger] Invalid version payload, skipping',
+    );
+    return;
+  }
+
+  final currentVersionMap = Map<String, dynamic>.from(currentVersionRaw);
+  final latestVersionMap = Map<String, dynamic>.from(latestVersionRaw);
+
+  LoggerService().info(
+    '[AutoUpdate] [$trigger] currentVersion=$currentVersionMap '
+    'latestVersion=$latestVersionMap',
+  );
+
+  if (currentVersionMap['code'] != 200 || latestVersionMap['code'] != 200) {
+    LoggerService().info(
+      '[AutoUpdate] [$trigger] Version info unavailable, skipping',
+    );
+    return;
+  }
+
+  final updateResult = await _checkAndUpdateCurrentPlatform(
+    currentVersionMap: currentVersionMap,
+    latestVersionMap: latestVersionMap,
+  );
+
+  if (updateResult == null) {
+    LoggerService().info('[AutoUpdate] [$trigger] No updater for platform');
+    return;
+  }
+
+  LoggerService().info('[AutoUpdate] [$trigger] result: $updateResult');
+
+  if (updateResult['updated'] == true ||
+      updateResult['restartRequired'] == true) {
+    LoggerService().info(
+      '[AutoUpdate] [$trigger] Auto-restarting after update...',
+    );
+    await _restartAppForUpdatedLibrary(
+      launchUiOnAndroid: launchUiOnAndroid,
+    );
+  }
+}
+
+Future<void> _runCoordinatedAutoUpdateCheck({
+  required String trigger,
+  bool launchUiOnAndroid = true,
+  Duration delay = Duration.zero,
+  bool enforceThrottle = true,
+}) async {
+  if (delay > Duration.zero) {
+    await Future.delayed(delay);
+  }
+
+  if (_autoUpdateCheckInProgress) {
+    LoggerService().info(
+      '[AutoUpdate] [$trigger] Check already in progress, skipping',
+    );
+    return;
+  }
+
+  _autoUpdateCheckInProgress = true;
+  try {
+    if (!enforceThrottle) {
+      await _performAutoUpdateCheck(
+        trigger: trigger,
+        launchUiOnAndroid: launchUiOnAndroid,
+      );
+      return;
+    }
+
+    RandomAccessFile? lockHandle;
+    final appDir = await getAppSupportDir();
+    final stampFile = File(p.join(appDir, _autoUpdateStampFileName));
+    final lockFile = File('${stampFile.path}.lock');
+    var shouldStamp = false;
+
+    try {
+      await lockFile.create(recursive: true);
+      lockHandle = await lockFile.open(mode: FileMode.append);
+      await lockHandle.lock(FileLock.blockingExclusive);
+
+      final now = DateTime.now();
+      if (stampFile.existsSync()) {
+        final raw = (await stampFile.readAsString()).trim();
+        final millis = int.tryParse(raw);
+        if (millis != null) {
+          final lastCheck = DateTime.fromMillisecondsSinceEpoch(millis);
+          final elapsed = now.difference(lastCheck);
+          if (elapsed < _autoUpdateThrottleWindow) {
+            LoggerService().info(
+              '[AutoUpdate] [$trigger] Skipped; another process checked '
+              '${elapsed.inSeconds}s ago',
+            );
+            return;
+          }
+        }
+      }
+
+      shouldStamp = true;
+      await _performAutoUpdateCheck(
+        trigger: trigger,
+        launchUiOnAndroid: launchUiOnAndroid,
+      );
+    } finally {
+      try {
+        if (shouldStamp) {
+          await stampFile.writeAsString(
+            '${DateTime.now().millisecondsSinceEpoch}',
+            flush: true,
+          );
+        }
+      } catch (_) {}
+
+      try {
+        await lockHandle?.unlock();
+      } catch (_) {}
+
+      try {
+        await lockHandle?.close();
+      } catch (_) {}
+    }
+  } catch (e, s) {
+    LoggerService()
+        .error('[AutoUpdate] [$trigger] Auto update check failed', e, s);
+  } finally {
+    _autoUpdateCheckInProgress = false;
+  }
+}
+
+void _startBackgroundAutoUpdateSchedule() {
+  if (!Platform.isAndroid || _backgroundAutoUpdateLoopStarted) {
+    return;
+  }
+
+  _backgroundAutoUpdateLoopStarted = true;
+  LoggerService().info('[AutoUpdate] Starting Android background OTA schedule');
+
+  unawaited(
+    _runCoordinatedAutoUpdateCheck(
+      trigger: 'android-background-startup',
+      launchUiOnAndroid: false,
+      delay: _autoUpdateInitialDelay,
+    ),
+  );
+
+  _backgroundAutoUpdateTimer?.cancel();
+  _backgroundAutoUpdateTimer = Timer.periodic(
+    _autoUpdateCheckInterval,
+    (_) => unawaited(
+      _runCoordinatedAutoUpdateCheck(
+        trigger: 'android-background-periodic',
+        launchUiOnAndroid: false,
+      ),
+    ),
+  );
 }
 
 void main(List<String> args) async {
@@ -108,7 +426,9 @@ Future<void> _runBackgroundInit() async {
       "appDir": appDir,
       "config": {"BaseAPIURL": AllConfig.apiBase},
     });
+
     LoggerService().info('Background init result: $initResult');
+    _startBackgroundAutoUpdateSchedule();
   } catch (e, s) {
     // Use Logger if ready; otherwise print.
     try {
@@ -404,159 +724,57 @@ class _MyHomePageState extends State<MyHomePage>
   }
 
   Future<void> _restartApp() async {
-    try {
-      if (Platform.isAndroid) {
-        LoggerService().info(
-            '[Restart] Restarting ForegroundService to reload updated library...');
-        try {
-          // 1. Stop the Service with explicit update cleanup.
-          await MyApp.platform.invokeMethod('stopServiceForUpdate');
-          // Brief pause to let the system clean up the old process
-          await Future.delayed(const Duration(milliseconds: 500));
-          // 2. Start the Service again → new :bg process loads updated library
-          await MyApp.platform.invokeMethod('startService');
-          // 3. Relaunch the UI process automatically.
-          await MyApp.platform.invokeMethod('restartApp');
-          return;
-        } catch (e) {
-          LoggerService().error('[Restart] Platform channel failed', e);
-        }
-        // Fallback if platform restart fails.
-        exit(0);
-      }
+    if (Platform.isWindows) {
+      final exePath = Platform.resolvedExecutable;
+      LoggerService().info('[Restart] Windows relaunch requested', {
+        'exePath': exePath,
+      });
 
-      if (Platform.isMacOS) {
-        final exePath = Platform.resolvedExecutable;
-        final exeDir = Directory(exePath).parent;
-        final appBundlePath = p.normalize(p.join(exeDir.path, '..', '..'));
-        // Spawn a detached process that waits for this app to exit, then reopens it.
-        // Using 'open' directly while the app is running just activates the
-        // existing window instead of launching a new instance.
-        final escaped = appBundlePath.replaceAll("'", "'\\''");
+      var relaunched = false;
+      try {
         await Process.start(
-          'bash',
-          ['-c', "sleep 1 && open '$escaped'"],
+          exePath,
+          const ['--wait-for-single-instance'],
           mode: ProcessStartMode.detached,
         );
-        exit(0);
-      }
-
-      if (Platform.isWindows) {
-        final exePath = Platform.resolvedExecutable;
-        LoggerService().info('[Restart] Windows relaunch requested', {
-          'exePath': exePath,
-        });
-
-        var relaunched = false;
+        relaunched = true;
+        LoggerService().info('[Restart] Windows relaunch started directly');
+      } catch (e, s) {
+        LoggerService().error(
+          '[Restart] Direct Windows relaunch failed, trying cmd fallback',
+          e,
+          s,
+        );
         try {
           await Process.start(
-            exePath,
-            const ['--wait-for-single-instance'],
+            'cmd',
+            ['/c', 'start', '', exePath, '--wait-for-single-instance'],
             mode: ProcessStartMode.detached,
           );
           relaunched = true;
-          LoggerService().info('[Restart] Windows relaunch started directly');
-        } catch (e, s) {
-          LoggerService().error(
-            '[Restart] Direct Windows relaunch failed, trying cmd fallback',
-            e,
-            s,
-          );
-          try {
-            await Process.start(
-              'cmd',
-              ['/c', 'start', '', exePath, '--wait-for-single-instance'],
-              mode: ProcessStartMode.detached,
-            );
-            relaunched = true;
-            LoggerService().info('[Restart] Windows relaunch started via cmd');
-          } catch (e2, s2) {
-            LoggerService()
-                .error('[Restart] Windows cmd fallback failed', e2, s2);
-          }
+          LoggerService().info('[Restart] Windows relaunch started via cmd');
+        } catch (e2, s2) {
+          LoggerService()
+              .error('[Restart] Windows cmd fallback failed', e2, s2);
         }
-
-        if (relaunched) {
-          await _shutdownAndExit();
-          return;
-        }
-
-        exit(0);
       }
 
-      if (Platform.isLinux) {
-        final exePath = Platform.resolvedExecutable;
-        final escaped = exePath.replaceAll("'", "'\\''");
-        await Process.start(
-          'bash',
-          ['-c', "sleep 1 && '$escaped'"],
-          mode: ProcessStartMode.detached,
-        );
-        exit(0);
+      if (relaunched) {
+        await _shutdownAndExit();
+        return;
       }
-    } catch (e) {
-      LoggerService().error('Restart failed', e);
     }
+
+    await _restartAppForUpdatedLibrary();
   }
 
   /// Proactively check for library updates at startup without relying on
   /// WebView messages. If an update is found, download and auto-restart.
   Future<void> _autoCheckAndUpdate() async {
-    // Wait a few seconds after init so the node has time to fetch
-    // the latest version info from the server.
-    await Future.delayed(const Duration(seconds: 5));
-    try {
-      final version = service.getCurrentVersion();
-      final version2 = service.getLastVersion();
-
-      final versionMap = jsonDecode(version);
-      final versionMap2 = jsonDecode(version2);
-
-      LoggerService().info(
-          '[AutoUpdate] currentVersion=$versionMap latestVersion=$versionMap2');
-
-      if (versionMap['code'] != 200 || versionMap2['code'] != 200) {
-        LoggerService().info('[AutoUpdate] Version info unavailable, skipping');
-        return;
-      }
-
-      if (versionMap2 is! Map<String, dynamic>) return;
-
-      Map<String, dynamic>? updateResult;
-
-      if (Platform.isMacOS) {
-        updateResult = await LibUpdateService.instance.checkAndUpdateMacOS(
-          currentVersionMap: versionMap,
-          latestVersionMap: versionMap2,
-        );
-      } else if (Platform.isAndroid) {
-        updateResult = await LibUpdateService.instance.checkAndUpdateAndroid(
-          currentVersionMap: versionMap,
-          latestVersionMap: versionMap2,
-        );
-      } else if (Platform.isWindows) {
-        updateResult = await LibUpdateService.instance.checkAndUpdateWindows(
-          currentVersionMap: versionMap,
-          latestVersionMap: versionMap2,
-        );
-      } else if (Platform.isLinux) {
-        updateResult = await LibUpdateService.instance.checkAndUpdateLinux(
-          currentVersionMap: versionMap,
-          latestVersionMap: versionMap2,
-        );
-      }
-
-      if (updateResult != null) {
-        LoggerService().info('[AutoUpdate] result: $updateResult');
-        if (updateResult['updated'] == true ||
-            updateResult['restartRequired'] == true) {
-          LoggerService().info('[AutoUpdate] Auto-restarting after update...');
-          await _restartApp();
-        }
-      }
-    } catch (e) {
-      LoggerService().error('[AutoUpdate] Auto update check failed', e);
-    }
+    await _runCoordinatedAutoUpdateCheck(
+      trigger: 'foreground-ui',
+      delay: _autoUpdateInitialDelay,
+    );
   }
 
   Future<void> _showAndroidAppSettingsDialog() async {
@@ -622,6 +840,69 @@ class _MyHomePageState extends State<MyHomePage>
       );
     } catch (e) {
       LoggerService().error('Show app settings dialog failed', e);
+    }
+  }
+
+  Future<void> _showBatteryOptimizationDialog({bool fromResume = false}) async {
+    if (!Platform.isAndroid) return;
+    if (!mounted) return;
+    try {
+      // Check if already ignoring battery optimizations
+      final isIgnoring = await MyApp.platform
+          .invokeMethod<bool>('isIgnoringBatteryOptimizations');
+      if (isIgnoring == true) return;
+
+      // Throttle: show at most once per 24 hours
+      final prefs = await SharedPreferences.getInstance();
+      final lastPromptMs = prefs.getInt('battery_opt_last_prompt_ms') ?? 0;
+      final now = DateTime.now().millisecondsSinceEpoch;
+      if (fromResume && lastPromptMs > 0 && (now - lastPromptMs) < 86400000) {
+        return;
+      }
+      await prefs.setInt('battery_opt_last_prompt_ms', now);
+
+      if (!mounted) return;
+
+      await showDialog<void>(
+        context: context,
+        barrierDismissible: true,
+        builder: (context) {
+          return AlertDialog(
+            title: const Text('Disable Battery Optimization'),
+            content: const Text(
+              'To keep ARO Mobile running reliably in the background, please disable battery optimization for this app.\n\n'
+              'Android may kill background processes to save battery. Setting the app to "Unrestricted" or "No optimization" ensures:\n\n'
+              '• Stable background connection\n'
+              '• Higher rewards earned continuously\n'
+              '• No unexpected disconnections\n\n'
+              'Tap "Go to Settings" to open the battery optimization dialog directly.',
+            ),
+            actions: [
+              TextButton(
+                onPressed: () {
+                  Navigator.of(context).pop();
+                },
+                child: const Text('Later'),
+              ),
+              TextButton(
+                onPressed: () async {
+                  Navigator.of(context).pop();
+                  try {
+                    await MyApp.platform
+                        .invokeMethod('requestIgnoreBatteryOptimizations');
+                  } catch (e) {
+                    LoggerService()
+                        .error('Failed to request battery optimization', e);
+                  }
+                },
+                child: const Text('Go to Settings'),
+              ),
+            ],
+          );
+        },
+      );
+    } catch (e) {
+      LoggerService().error('Show battery optimization dialog failed', e);
     }
   }
 
@@ -951,8 +1232,9 @@ class _MyHomePageState extends State<MyHomePage>
 
       // Show app-settings prompt on Android after initialization completes
       if (Platform.isAndroid) {
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          _showAndroidAppSettingsDialog();
+        WidgetsBinding.instance.addPostFrameCallback((_) async {
+          await _showAndroidAppSettingsDialog();
+          await _showBatteryOptimizationDialog();
         });
       }
     } catch (e) {
@@ -1227,6 +1509,11 @@ class _MyHomePageState extends State<MyHomePage>
       LoggerService()
           .info('[Lifecycle] App resumed — triggering memory cleanup');
       _memoryManager.manualCleanup();
+
+      // Re-check battery optimization on resume (throttled to once/day)
+      if (Platform.isAndroid && _isAppInitialized) {
+        _showBatteryOptimizationDialog(fromResume: true);
+      }
     }
   }
 
