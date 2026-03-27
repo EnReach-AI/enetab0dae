@@ -27,6 +27,7 @@ const (
 	pollInterval      = 30 * time.Second
 	errorRetryDelay   = 30 * time.Second
 	bindCheckInterval = 30 * time.Second
+	maxBindCheckError = 5
 )
 
 func RunBackendThread() {
@@ -80,8 +81,8 @@ func RunBackendThread() {
 			go job.StartHeartBeat(ctx, bindResult.UUID, backendService)
 		}
 
-		// Monitor bind status
-		go monitorBindStatus(ctx, cancel, apiBackendService, bindCheckInterval)
+		// Monitor bind and BanIP status
+		go monitorBindStatus(ctx, cancel, apiBackendService, bindResult.BanIP, bindCheckInterval)
 
 		// Wait for context cancellation
 		<-ctx.Done()
@@ -96,10 +97,12 @@ type bindChecker interface {
 	GetNodeBindStatus() (model.BindResult, error)
 }
 
-// monitorBindStatus periodically checks if device is still bound
-func monitorBindStatus(ctx context.Context, cancel context.CancelFunc, backendService bindChecker, interval time.Duration) {
+// monitorBindStatus periodically checks if device bind/BanIP status changed.
+// When state changes, it cancels current context so the outer loop can rebuild workers.
+func monitorBindStatus(ctx context.Context, cancel context.CancelFunc, backendService bindChecker, initialBanIP bool, interval time.Duration) {
 	ticker := time.NewTicker(interval)
 	defer ticker.Stop()
+	consecutiveErr := 0
 
 	for {
 		select {
@@ -107,13 +110,27 @@ func monitorBindStatus(ctx context.Context, cancel context.CancelFunc, backendSe
 			return
 		case <-ticker.C:
 			bindResult, err := backendService.GetNodeBindStatus()
-			log.Printf("Bind result:%+v", bindResult)
 			if err != nil {
+				consecutiveErr++
 				log.Printf("Failed to check bind status: %v", err)
+				if consecutiveErr >= maxBindCheckError {
+					log.Printf("Bind status check failed %d times, restarting services for recovery", consecutiveErr)
+					cancel()
+					return
+				}
 				continue
 			}
+
+			consecutiveErr = 0
+			log.Printf("Bind result:%+v", bindResult)
 			if !bindResult.Binded {
 				log.Println("Device unbound, stopping services")
+				cancel()
+				return
+			}
+
+			if bindResult.BanIP != initialBanIP {
+				log.Printf("BanIP changed from %v to %v, restarting services", initialBanIP, bindResult.BanIP)
 				cancel()
 				return
 			}
