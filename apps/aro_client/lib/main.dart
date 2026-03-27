@@ -1,8 +1,8 @@
 import 'dart:async';
 import 'dart:ffi' show Abi;
 import 'dart:isolate';
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:aro_client/components/path_provider.dart';
 import 'package:aro_client/ffi/study_lib.dart';
@@ -16,12 +16,12 @@ import 'package:permission_handler/permission_handler.dart';
 import 'package:window_manager/window_manager.dart';
 import 'dart:io';
 import 'package:webview_flutter/webview_flutter.dart';
+import 'package:webview_flutter_android/webview_flutter_android.dart';
 import 'package:tray_manager/tray_manager.dart';
 import 'package:path/path.dart' as p;
 import 'dart:convert';
 import 'package:aro_client/utils/config.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart' as inapp;
-import 'package:google_fonts/google_fonts.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:aro_client/services/webview_memory_manager.dart';
 
@@ -437,7 +437,6 @@ Future<void> _runBackgroundInit() async {
       // ignore logger errors
     }
     print('Background init failed: $e');
-    print(s);
   }
 }
 
@@ -553,7 +552,10 @@ class _MyHomePageState extends State<MyHomePage>
 
   bool get _isEffectivelyOffline => !_isConnected || _webViewNetworkIssue;
 
+  bool _forbidden = false;
+
   bool get _shouldShowStatusOverlay =>
+      _forbidden ||
       _isInitialNodeInfoLoading ||
       (_hasReceivedInitialNodeInfo && (!_isConnected || _webViewNetworkIssue));
 
@@ -611,6 +613,7 @@ class _MyHomePageState extends State<MyHomePage>
   }
 
   Future<void> _syncConnectivityIcon({bool force = false}) async {
+    LoggerService().info('_webViewNetworkIssue', _webViewNetworkIssue);
     if (!(Platform.isMacOS || Platform.isWindows)) {
       return;
     }
@@ -709,8 +712,7 @@ class _MyHomePageState extends State<MyHomePage>
     final script = '''
     window.onFlutterMessage && window.onFlutterMessage($json);
   ''';
-    print(
-        'build: _isInitializing=$_isInitializing, _initError=$_initError, _controller=$_controller');
+
     if (Platform.isWindows || Platform.isLinux) {
       _desktopController?.evaluateJavascript(source: script);
     } else {
@@ -887,7 +889,6 @@ class _MyHomePageState extends State<MyHomePage>
         msgMap['type'] == 'openExternal' &&
         msgMap['url'] != null) {
       final url = msgMap['url'].toString();
-      print('Opening external URL from web: $url');
       await _openExternalUrl(url);
       return;
     }
@@ -898,8 +899,13 @@ class _MyHomePageState extends State<MyHomePage>
         final stat = await _getNodeStatAsync();
         final statMap = jsonDecode(stat);
         final initialBindState = _classifyInitialBindState(statMap);
+
+        print('initialBindState---- $initialBindState');
+        // Dismiss loading overlay for both resolved and pending bind states.
+        // Previously only 'resolved' was accepted, causing the overlay to
+        // persist forever when the node was not yet bound (bind == null).
         shouldCompleteInitialLoading =
-            initialBindState == _InitialBindState.resolved;
+            initialBindState != _InitialBindState.invalidPayload;
 
         print('statMap nodeInfo $statMap');
         LoggerService().info(
@@ -913,6 +919,19 @@ class _MyHomePageState extends State<MyHomePage>
             'type': 'nodeInfo',
             'payload': statMap,
           });
+
+          final isForbidden = statMap['data']['connect'] == 'Restricted ip';
+          if (_forbidden != isForbidden) {
+            if (mounted) {
+              setState(() {
+                _forbidden = isForbidden;
+              });
+            } else {
+              _forbidden = isForbidden;
+            }
+          }
+
+          print('_forbidden_forbidden $_forbidden');
         }
       } catch (e) {
         print('nodeInfo error $e');
@@ -1074,13 +1093,11 @@ class _MyHomePageState extends State<MyHomePage>
   Future<void> initNode() async {
     try {
       final appDir = await getAppSupportDir();
-      print('Generate file directory 123: $appDir');
-      print('Before nodeInit');
+      print('Generate file directory: $appDir');
       final initResult = service.nodeInit({
         "appDir": appDir,
         "config": {"BaseAPIURL": AllConfig.apiBase},
       });
-      print('After nodeInit');
       print('initializing node: $initResult');
       LoggerService().info('Init result: $initResult ------- ');
     } catch (e) {
@@ -1138,7 +1155,6 @@ class _MyHomePageState extends State<MyHomePage>
 
   Future<void> _asyncInit() async {
     setState(() {
-      print('setState: initializing = true');
       _isInitializing = true;
       _initError = null;
     });
@@ -1192,7 +1208,6 @@ class _MyHomePageState extends State<MyHomePage>
       }
 
       setState(() {
-        print('setState: initializing = false, appInitialized = true');
         _isInitializing = false;
         _isAppInitialized = true;
       });
@@ -1208,7 +1223,6 @@ class _MyHomePageState extends State<MyHomePage>
       LoggerService().error('Failed _asyncInit', e);
 
       setState(() {
-        print('setState: initializing = false, error');
         _isInitializing = false;
         _initError = e.toString();
       });
@@ -1524,7 +1538,6 @@ class _MyHomePageState extends State<MyHomePage>
 
   void _initMobileWebView() {
     try {
-      print('[DEBUG] _initMobileWebView called');
       _controller = WebViewController();
 
       _controller!.setJavaScriptMode(JavaScriptMode.unrestricted);
@@ -1532,7 +1545,6 @@ class _MyHomePageState extends State<MyHomePage>
       _controller!.addJavaScriptChannel(
         'Flutter',
         onMessageReceived: (JavaScriptMessage message) {
-          print('[DEBUG] Received Web message: $message');
           handleWebMessage(message.message);
         },
       );
@@ -1584,20 +1596,14 @@ class _MyHomePageState extends State<MyHomePage>
             LoggerService().warning(message);
           },
           onProgress: (progress) {
-            if (progress == 100) {
-              if (_isWebViewLoading) {
-                print('[DEBUG] progress=100 stop loading');
-                setState(() {
-                  _isWebViewLoading = false;
-                });
-              }
+            if (progress == 100 && _isWebViewLoading) {
+              setState(() {
+                _isWebViewLoading = false;
+              });
             }
-            print('[DEBUG] progress=100 stop loading $progress');
           },
           onPageFinished: (_) {
-            print('[DEBUG] onPageFinished called');
             setState(() {
-              print('[DEBUG] setState: _isWebViewLoading = false');
               _hasInitialWebViewContentLoaded = true;
               _isWebViewLoading = false;
               _webViewNetworkIssue = false;
@@ -1670,7 +1676,6 @@ class _MyHomePageState extends State<MyHomePage>
 
             Future.delayed(const Duration(seconds: 8), () {
               if (mounted && _isWebViewLoading) {
-                print('[DEBUG] fallback stop loading');
                 setState(() {
                   _isWebViewLoading = false;
                 });
@@ -1681,7 +1686,6 @@ class _MyHomePageState extends State<MyHomePage>
       );
 
       final url = _resolveMobileWebViewUrl(_mobileWebViewCurrentUrl);
-      print('[DEBUG] WebView loading url: $url');
       _mobileWebViewCurrentUrl = url;
       _mobileWebViewTimeoutRetryCount = 0;
       _controller!.loadRequest(Uri.parse(url));
@@ -1689,15 +1693,12 @@ class _MyHomePageState extends State<MyHomePage>
       // Start memory management for mobile/macOS WebView
       _memoryManager.start(mobileController: _controller);
     } catch (e) {
-      print('[DEBUG] Error initializing webview: $e');
-      LoggerService().error('Error initializing webview', e);
+      LoggerService().error('Error initializing mobile webview', e);
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    print(
-        '[DEBUG] build() called, _isInitializing=$_isInitializing, _isAppInitialized=$_isAppInitialized, _controller=$_controller');
     if (Platform.isWindows || Platform.isLinux) {
       // Use Builder to ensure Hero system is fully disabled before creating InAppWebView
       if (!_isDesktopWebViewReady) {
@@ -1768,6 +1769,8 @@ class _MyHomePageState extends State<MyHomePage>
         }
       });
       if (_shouldShowStatusOverlay) {
+        LoggerService()
+            .info('_shouldShowStatusOverlay=$_shouldShowStatusOverlay');
         return _buildStatusOverlayScaffold();
       }
       return Scaffold(
@@ -1779,8 +1782,7 @@ class _MyHomePageState extends State<MyHomePage>
         ),
       );
     }
-    print(
-        'build: _isInitializing=$_isInitializing, _initError=$_initError, _controller=$_controller');
+
     if ((_isInitializing || !_isAppInitialized) &&
         _isInitialNodeInfoLoading &&
         !_hasInitialWebViewContentLoaded) {
@@ -1825,11 +1827,19 @@ class _MyHomePageState extends State<MyHomePage>
     }
     // String errorMessage = 'Failed to load page';
 
-    print('[DEBUG] build() _isWebViewLoading=$_isWebViewLoading');
     return Scaffold(
       body: Stack(
         children: [
-          WebViewWidget(controller: _controller!),
+          WebViewWidget.fromPlatformCreationParams(
+            params: (Platform.isAndroid)
+                ? AndroidWebViewWidgetCreationParams(
+                    controller: _controller!.platform,
+                    displayWithHybridComposition: true,
+                  )
+                : PlatformWebViewWidgetCreationParams(
+                    controller: _controller!.platform,
+                  ),
+          ),
           if (_isWebViewLoading && !_shouldShowStartupNodeInfoLoading)
             Container(
               color: Colors.black,
@@ -1852,6 +1862,8 @@ class _MyHomePageState extends State<MyHomePage>
   }
 
   Widget _buildNetworkOfflineOverlay() {
+    LoggerService()
+        .info('Building network offline overlay =$_shouldShowStatusOverlay');
     final isStartupLoading = _shouldShowStartupNodeInfoLoading;
 
     return Container(
@@ -1909,20 +1921,75 @@ class _MyHomePageState extends State<MyHomePage>
                         height: 30,
                       ),
                 const SizedBox(height: 24),
-                Text(
-                  Platform.isAndroid
-                      ? 'Your mobile version ARO node.\nNow in your pocket. Take it anywhere.'
-                      : '''
+                if (_forbidden && _isConnected)
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: const [
+                      Icon(
+                        Icons.warning_amber_rounded,
+                        size: 24,
+                        color: Color(0xFFFFC107),
+                      ),
+                      SizedBox(width: 8),
+                      Text(
+                        'Service Unavailable',
+                        style: TextStyle(
+                          fontSize: 20,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.white,
+                        ),
+                        textAlign: TextAlign.center,
+                      ),
+                    ],
+                  ),
+                if (_forbidden && _isConnected)
+                  Padding(
+                    padding:
+                        const EdgeInsets.only(top: 20, left: 20, right: 20),
+                    child: Text.rich(
+                      TextSpan(
+                        style: const TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.white,
+                        ),
+                        children: [
+                          const TextSpan(
+                            text:
+                                'Due to legal requirements, our platform cannot provide services in your region. This is based on your IP address detection. For more details on restricted regions, please refer to our ',
+                          ),
+                          TextSpan(
+                            text: 'Terms of Service',
+                            style: const TextStyle(
+                              decoration: TextDecoration.underline,
+                              decorationColor: Colors.white,
+                            ),
+                            recognizer: TapGestureRecognizer()
+                              ..onTap = () =>
+                                  _openExternalUrl('https://aro.network/terms'),
+                          ),
+                          const TextSpan(text: '.'),
+                        ],
+                      ),
+                      textAlign: TextAlign.center,
+                    ),
+                  ),
+                const SizedBox(height: 24),
+                if (!_forbidden || _isEffectivelyOffline)
+                  Text(
+                    Platform.isAndroid
+                        ? 'Your mobile version ARO node.\nNow in your pocket. Take it anywhere.'
+                        : '''
 A lightweight desktop app.
 One-click start and forget it.
 ''',
-                  style: GoogleFonts.poppins(
-                    fontSize: 14,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.white,
+                    style: const TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.white,
+                    ),
+                    textAlign: TextAlign.center,
                   ),
-                  textAlign: TextAlign.center,
-                ),
                 if (isStartupLoading) ...[
                   const SizedBox(height: 20),
                   const SizedBox(
@@ -1940,17 +2007,19 @@ One-click start and forget it.
           ),
           Align(
             alignment: Alignment.bottomCenter,
-            child: Padding(
-              padding: const EdgeInsets.only(bottom: 118.0),
-              child: Text(
-                'Connecting...',
-                style: GoogleFonts.poppins(
-                  fontSize: 15,
-                  color: Colors.white,
-                ),
-                textAlign: TextAlign.center,
-              ),
-            ),
+            child: !_forbidden
+                ? Padding(
+                    padding: const EdgeInsets.only(bottom: 118.0),
+                    child: Text(
+                      'Connecting...',
+                      style: TextStyle(
+                        fontSize: 15,
+                        color: Colors.white,
+                      ),
+                      textAlign: TextAlign.center,
+                    ),
+                  )
+                : null,
           ),
           // Bottom green bar
           Align(
@@ -1975,35 +2044,34 @@ One-click start and forget it.
                         ],
                       ),
                       child: Center(
-                        child: Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 10.0),
-                          child: Text.rich(
-                            TextSpan(
-                              children: [
-                                WidgetSpan(
-                                  alignment: PlaceholderAlignment.middle,
-                                  child: Icon(
-                                    Icons.info_outline,
-                                    size: 18,
-                                    color: Colors.white,
-                                  ),
+                          child: Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 10.0),
+                        child: Text.rich(
+                          TextSpan(
+                            children: [
+                              WidgetSpan(
+                                alignment: PlaceholderAlignment.middle,
+                                child: Icon(
+                                  Icons.info_outline,
+                                  size: 18,
+                                  color: Colors.white,
                                 ),
-                                WidgetSpan(child: SizedBox(width: 8)),
-                                TextSpan(
-                                  text:
-                                      'There seems to be a network issue, please check your internet connectivity.',
-                                ),
-                              ],
-                            ),
-                            style: GoogleFonts.poppins(
-                              fontSize: 12,
-                              color: Colors.white,
-                              fontWeight: FontWeight.w400,
-                            ),
-                            textAlign: TextAlign.center,
+                              ),
+                              WidgetSpan(child: SizedBox(width: 8)),
+                              TextSpan(
+                                text:
+                                    'There seems to be a network issue, please check your internet connectivity.',
+                              ),
+                            ],
                           ),
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: Colors.white,
+                            fontWeight: FontWeight.w400,
+                          ),
+                          textAlign: TextAlign.center,
                         ),
-                      ),
+                      )),
                     ),
                   )
                 : null,

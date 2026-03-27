@@ -5,6 +5,7 @@ import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
 import android.app.Service
+import android.app.AlarmManager
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
@@ -12,6 +13,8 @@ import android.os.Build
 import android.os.Handler
 import android.os.IBinder
 import android.os.Looper
+import android.os.PowerManager
+import android.os.SystemClock
 import android.os.UserManager
 import android.util.Log
 import androidx.core.app.NotificationCompat
@@ -27,6 +30,9 @@ class ForegroundService : Service() {
         const val CHANNEL_NAME = "com.aro.aro_app/foreground"
         const val ACTION_RESTART_APP = "com.aro.aro_mobile.ACTION_RESTART_APP"
         const val ACTION_STOP_FOR_UPDATE = "com.aro.aro_mobile.ACTION_STOP_FOR_UPDATE"
+        private const val ACTION_KEEP_ALIVE_ALARM = "com.aro.aro_mobile.ACTION_KEEP_ALIVE_ALARM"
+        private const val KEEP_ALIVE_INTERVAL_MS = 15 * 60 * 1000L
+        private const val KEEP_ALIVE_REQUEST_CODE = 1001
 
         @Volatile
         private var flutterEngine: FlutterEngine? = null
@@ -38,8 +44,10 @@ class ForegroundService : Service() {
     private var workerRunning = false
 
     private var serviceMethodChannel: MethodChannel? = null
-    private var workerThread: Thread? = null
+    private val heartbeatHandler = Handler(Looper.getMainLooper())
+    private var heartbeatRunnable: Runnable? = null
     private var unlockReceiver: android.content.BroadcastReceiver? = null
+    private var wakeLock: PowerManager.WakeLock? = null
 
     override fun onBind(intent: Intent?): IBinder? = null
 
@@ -61,20 +69,16 @@ class ForegroundService : Service() {
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        if (intent?.action == ACTION_KEEP_ALIVE_ALARM) {
+            Log.i("ForegroundService", "Keep-alive alarm received")
+        }
+
         if (intent?.action == ACTION_STOP_FOR_UPDATE) {
             Log.i("ForegroundService", "Received STOP_FOR_UPDATE action, destroying engine and stopping service")
             destroyBackgroundEngine()
             stopForegroundCompat()
             stopSelf()
             return START_NOT_STICKY
-        }
-
-        ensureBackgroundEngineIfNeeded()
-
-        // Handle restart request: just keep the Service running in background.
-        // User will reopen the app manually and get the updated library.
-        if (intent?.action == ACTION_RESTART_APP) {
-            Log.i("ForegroundService", "Received RESTART_APP action, staying in background")
         }
 
         val openAppIntent = packageManager.getLaunchIntentForPackage(packageName)
@@ -104,24 +108,120 @@ class ForegroundService : Service() {
 
         startForeground(1, notification)
 
+        acquireWakeLock()
+        scheduleKeepAliveAlarm()
+
+        // Handle restart request: just keep the Service running in background.
+        // User will reopen the app manually and get the updated library.
+        if (intent?.action == ACTION_RESTART_APP) {
+            Log.i("ForegroundService", "Received RESTART_APP action, staying in background")
+        }
+
+        // Start heavy initialization after foreground elevation to avoid
+        // Android 8+ foreground service start timeout on slower devices.
+        ensureBackgroundEngineIfNeeded()
+
         if (!workerRunning) {
             workerRunning = true
-            workerThread = Thread {
-                while (workerRunning) {
-                    try {
-                        Thread.sleep(5000)
-                    } catch (ie: InterruptedException) {
-                        // allow loop to exit
-                    }
-
-                    if (workerRunning) {
-                        Log.d("ForegroundService", "Background service is executing....")
-                    }
-                }
-            }.apply { start() }
+            startHeartbeatLoop()
         }
 
         return START_STICKY
+    }
+
+    private fun acquireWakeLock() {
+        if (wakeLock?.isHeld == true) return
+        try {
+            val pm = getSystemService(POWER_SERVICE) as PowerManager
+            wakeLock = pm.newWakeLock(
+                PowerManager.PARTIAL_WAKE_LOCK,
+                "AroMobile:BackgroundServiceLock"
+            ).apply {
+                setReferenceCounted(false)
+                acquire()
+            }
+            Log.i("ForegroundService", "WakeLock acquired")
+        } catch (t: Throwable) {
+            Log.e("ForegroundService", "Failed to acquire WakeLock", t)
+        }
+    }
+
+    private fun releaseWakeLock() {
+        try {
+            wakeLock?.let {
+                if (it.isHeld) {
+                    it.release()
+                    Log.i("ForegroundService", "WakeLock released")
+                }
+            }
+        } catch (t: Throwable) {
+            Log.e("ForegroundService", "Failed to release WakeLock", t)
+        } finally {
+            wakeLock = null
+        }
+    }
+
+    private fun scheduleKeepAliveAlarm() {
+        try {
+            val alarmManager = getSystemService(ALARM_SERVICE) as AlarmManager
+            val pendingIntent = PendingIntent.getService(
+                this,
+                KEEP_ALIVE_REQUEST_CODE,
+                Intent(this, ForegroundService::class.java).apply {
+                    action = ACTION_KEEP_ALIVE_ALARM
+                },
+                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+            )
+
+            val triggerAt = SystemClock.elapsedRealtime() + KEEP_ALIVE_INTERVAL_MS
+            alarmManager.setAndAllowWhileIdle(
+                AlarmManager.ELAPSED_REALTIME_WAKEUP,
+                triggerAt,
+                pendingIntent,
+            )
+        } catch (t: Throwable) {
+            Log.e("ForegroundService", "Failed to schedule keep-alive alarm", t)
+        }
+    }
+
+    private fun cancelKeepAliveAlarm() {
+        try {
+            val alarmManager = getSystemService(ALARM_SERVICE) as AlarmManager
+            val pendingIntent = PendingIntent.getService(
+                this,
+                KEEP_ALIVE_REQUEST_CODE,
+                Intent(this, ForegroundService::class.java).apply {
+                    action = ACTION_KEEP_ALIVE_ALARM
+                },
+                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+            )
+            alarmManager.cancel(pendingIntent)
+        } catch (t: Throwable) {
+            Log.e("ForegroundService", "Failed to cancel keep-alive alarm", t)
+        }
+    }
+
+    private fun startHeartbeatLoop() {
+        if (heartbeatRunnable != null) return
+
+        val runnable = object : Runnable {
+            override fun run() {
+                if (!workerRunning) return
+                Log.d("ForegroundService", "Background service is executing....")
+                heartbeatHandler.postDelayed(this, 5000)
+            }
+        }
+
+        heartbeatRunnable = runnable
+        heartbeatHandler.post(runnable)
+    }
+
+    private fun stopHeartbeatLoop() {
+        workerRunning = false
+        heartbeatRunnable?.let {
+            heartbeatHandler.removeCallbacks(it)
+        }
+        heartbeatRunnable = null
     }
 
     private fun ensureBackgroundEngineIfNeeded() {
@@ -280,9 +380,9 @@ class ForegroundService : Service() {
     }
 
     override fun onDestroy() {
-        workerRunning = false
-        workerThread?.interrupt()
-        workerThread = null
+        stopHeartbeatLoop()
+        cancelKeepAliveAlarm()
+        releaseWakeLock()
         unlockReceiver?.let {
             try {
                 applicationContext.unregisterReceiver(it)

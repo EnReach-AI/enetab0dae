@@ -1,0 +1,129 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    android:versionCode="3000005"
+    android:versionName="3.0.5"
+    android:compileSdkVersion="35"
+    android:compileSdkVersionCodename="15"
+    package="io.getgrass.www"
+    platformBuildVersionCode="35"
+    platformBuildVersionName="15">
+    <uses-sdk
+        android:minSdkVersion="28"
+        android:targetSdkVersion="35"/>
+    <uses-permission android:name="android.permission.INTERNET"/>
+    <uses-feature
+        android:name="android.software.leanback"
+        android:required="false"/>
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE"/>
+    <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS"/>
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE"/>
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_REMOTE_MESSAGING"/>
+    <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW"/>
+    <uses-permission android:name="android.permission.WAKE_LOCK"/>
+    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES"/>
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED"/>
+    <permission
+        android:name="io.getgrass.www.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION"
+        android:protectionLevel="signature"/>
+    <uses-permission android:name="io.getgrass.www.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION"/>
+    <uses-permission android:name="com.google.android.finsky.permission.BIND_GET_INSTALL_REFERRER_SERVICE"/>
+    <application
+        android:theme="@style/Theme.app"
+        android:label="@string/app_name"
+        android:icon="@mipmap/ic_launcher"
+        android:supportsRtl="true"
+        android:extractNativeLibs="false"
+        android:usesCleartextTraffic="false"
+        android:appComponentFactory="androidx.core.app.CoreComponentFactory">
+        <meta-data
+            android:name="com.facebook.sdk.ApplicationId"
+            android:value="@string/facebook_app_id"/>
+        <activity
+            android:label="@string/main_activity_title"
+            android:name="io.getgrass.www.MainActivity"
+            android:exported="true"
+            android:launchMode="singleTask"
+            android:screenOrientation="portrait"
+            android:configChanges="smallestScreenSize|screenSize|uiMode|screenLayout|orientation|keyboardHidden|keyboard|locale">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN"/>
+                <category android:name="android.intent.category.LAUNCHER"/>
+                <category android:name="android.intent.category.LEANBACK_LAUNCHER"/>
+            </intent-filter>
+            <intent-filter android:autoVerify="true">
+                <action android:name="android.intent.action.VIEW"/>
+                <category android:name="android.intent.category.DEFAULT"/>
+                <category android:name="android.intent.category.BROWSABLE"/>
+                <data android:scheme="https"/>
+                <data android:scheme="http"/>
+                <data android:host="mobile.grass.io"/>
+            </intent-filter>
+        </activity>
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:exported="false"
+            android:authorities="io.getgrass.www.fileprovider"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/file_paths"/>
+        </provider>
+        <service
+            android:name="io.getgrass.plugin.ForegroundService"
+            android:enabled="true"
+            android:exported="false"
+            android:foregroundServiceType="remoteMessaging"/>
+        <receiver android:name="app.tauri.notification.TimedNotificationPublisher"/>
+        <receiver android:name="app.tauri.notification.NotificationDismissReceiver"/>
+        <receiver
+            android:name="app.tauri.notification.LocalNotificationRestoreReceiver"
+            android:exported="false"
+            android:directBootAware="true">
+            <intent-filter>
+                <action android:name="android.intent.action.LOCKED_BOOT_COMPLETED"/>
+                <action android:name="android.intent.action.BOOT_COMPLETED"/>
+                <action android:name="android.intent.action.QUICKBOOT_POWERON"/>
+            </intent-filter>
+        </receiver>
+        <activity
+            android:theme="@style/com_facebook_activity_theme"
+            android:name="com.facebook.FacebookActivity"
+            android:configChanges="screenSize|screenLayout|orientation|keyboardHidden|keyboard"/>
+        <activity android:name="com.facebook.CustomTabMainActivity"/>
+        <activity
+            android:name="com.facebook.CustomTabActivity"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW"/>
+                <category android:name="android.intent.category.DEFAULT"/>
+                <category android:name="android.intent.category.BROWSABLE"/>
+                <data
+                    android:scheme="fbconnect"
+                    android:host="cct.io.getgrass.www"/>
+            </intent-filter>
+        </activity>
+        <provider
+            android:name="com.facebook.internal.FacebookInitProvider"
+            android:exported="false"
+            android:authorities="io.getgrass.www.FacebookInitProvider"/>
+        <receiver
+            android:name="com.facebook.CurrentAccessTokenExpirationBroadcastReceiver"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="com.facebook.sdk.ACTION_CURRENT_ACCESS_TOKEN_CHANGED"/>
+            </intent-filter>
+        </receiver>
+        <provider
+            android:name="androidx.startup.InitializationProvider"
+            android:exported="false"
+            android:authorities="io.getgrass.www.androidx-startup">
+            <meta-data
+                android:name="androidx.emoji2.text.EmojiCompatInitializer"
+                android:value="androidx.startup"/>
+            <meta-data
+                android:name="androidx.lifecycle.ProcessLifecycleInitializer"
+                android:value="androidx.startup"/>
+        </provider>
+    </application>
+</manifest>

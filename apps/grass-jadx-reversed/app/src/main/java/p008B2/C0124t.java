@@ -1,0 +1,67 @@
+package p008B2;
+
+import p004A2.InterfaceC0024a;
+import p015D2.C0198v;
+import p119m2.AbstractC1766e;
+
+/* JADX INFO: renamed from: B2.t */
+/* JADX INFO: loaded from: classes.dex */
+public final class C0124t extends AbstractC0099g0 {
+
+    /* JADX INFO: renamed from: c */
+    public static final C0124t f324c = new C0124t(C0126u.f327a);
+
+    @Override // p008B2.AbstractC0086a
+    /* JADX INFO: renamed from: g */
+    public final int mo222g(Object obj) {
+        double[] dArr = (double[]) obj;
+        AbstractC1766e.m3920e("<this>", dArr);
+        return dArr.length;
+    }
+
+    @Override // p008B2.AbstractC0120r, p008B2.AbstractC0086a
+    /* JADX INFO: renamed from: i */
+    public final void mo223i(InterfaceC0024a interfaceC0024a, int i3, Object obj, boolean z3) {
+        C0122s c0122s = (C0122s) obj;
+        AbstractC1766e.m3920e("builder", c0122s);
+        double dMo79d = interfaceC0024a.mo79d(this.f286b, i3);
+        c0122s.mo228b(c0122s.mo229d() + 1);
+        double[] dArr = c0122s.f320a;
+        int i4 = c0122s.f321b;
+        c0122s.f321b = i4 + 1;
+        dArr[i4] = dMo79d;
+    }
+
+    @Override // p008B2.AbstractC0086a
+    /* JADX INFO: renamed from: j */
+    public final Object mo224j(Object obj) {
+        double[] dArr = (double[]) obj;
+        AbstractC1766e.m3920e("<this>", dArr);
+        C0122s c0122s = new C0122s();
+        c0122s.f320a = dArr;
+        c0122s.f321b = dArr.length;
+        c0122s.mo228b(10);
+        return c0122s;
+    }
+
+    @Override // p008B2.AbstractC0099g0
+    /* JADX INFO: renamed from: m */
+    public final Object mo225m() {
+        return new double[0];
+    }
+
+    @Override // p008B2.AbstractC0099g0
+    /* JADX INFO: renamed from: n */
+    public final void mo226n(C0198v c0198v, Object obj, int i3) {
+        double[] dArr = (double[]) obj;
+        AbstractC1766e.m3920e("encoder", c0198v);
+        AbstractC1766e.m3920e("content", dArr);
+        for (int i4 = 0; i4 < i3; i4++) {
+            double d = dArr[i4];
+            C0097f0 c0097f0 = this.f286b;
+            AbstractC1766e.m3920e("descriptor", c0097f0);
+            c0198v.m354f(c0097f0, i4);
+            c0198v.m353e(d);
+        }
+    }
+}

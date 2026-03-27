@@ -1,0 +1,47 @@
+package p011C2;
+
+import java.util.List;
+import p004A2.InterfaceC0025b;
+import p015D2.C0198v;
+import p033K0.AbstractC0405c;
+import p119m2.AbstractC1766e;
+import p125o0.AbstractC1800j;
+import p161x2.InterfaceC2012a;
+import p167z2.InterfaceC2095g;
+
+/* JADX INFO: renamed from: C2.e */
+/* JADX INFO: loaded from: classes.dex */
+public final class C0152e implements InterfaceC2012a {
+
+    /* JADX INFO: renamed from: a */
+    public static final C0152e f364a = new C0152e();
+
+    /* JADX INFO: renamed from: b */
+    public static final C0151d f365b = C0151d.f361b;
+
+    @Override // p161x2.InterfaceC2012a
+    /* JADX INFO: renamed from: a */
+    public final void mo219a(C0198v c0198v, Object obj) {
+        C0150c c0150c = (C0150c) obj;
+        AbstractC1766e.m3920e("encoder", c0198v);
+        AbstractC1766e.m3920e("value", c0150c);
+        AbstractC1800j.m3984b(c0198v);
+        C0160m c0160m = C0160m.f390a;
+        AbstractC0405c.m882a().mo219a(c0198v, c0150c);
+    }
+
+    @Override // p161x2.InterfaceC2012a
+    /* JADX INFO: renamed from: b */
+    public final Object mo220b(InterfaceC0025b interfaceC0025b) {
+        AbstractC1766e.m3920e("decoder", interfaceC0025b);
+        AbstractC1800j.m3986d(interfaceC0025b);
+        C0160m c0160m = C0160m.f390a;
+        return new C0150c((List) AbstractC0405c.m882a().m253h(interfaceC0025b));
+    }
+
+    @Override // p161x2.InterfaceC2012a
+    /* JADX INFO: renamed from: c */
+    public final InterfaceC2095g mo221c() {
+        return f365b;
+    }
+}

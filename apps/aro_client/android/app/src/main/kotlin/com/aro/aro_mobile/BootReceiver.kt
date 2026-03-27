@@ -31,7 +31,6 @@ class BootReceiver : BroadcastReceiver() {
                     if (Intent.ACTION_USER_UNLOCKED == intent.action) {
                         appContext.unregisterReceiver(this)
                         startForegroundServiceSafely(appContext)
-                        launchActivityForInit(appContext)
                     }
                 }
             }
@@ -40,13 +39,6 @@ class BootReceiver : BroadcastReceiver() {
         }
 
         startForegroundServiceSafely(context)
-
-        // Only launch Activity for boot events, NOT for package replacement.
-        // MY_PACKAGE_REPLACED should only restart the background service;
-        // the library hot-reload handles the rest without opening the UI.
-        if (action != Intent.ACTION_MY_PACKAGE_REPLACED) {
-            launchActivityForInit(context)
-        }
     }
 
     private fun startForegroundServiceSafely(context: Context) {
@@ -63,23 +55,4 @@ class BootReceiver : BroadcastReceiver() {
         }
     }
 
-    private fun launchActivityForInit(context: Context) {
-        // Kick the Flutter Activity so Dart-side init (node, FFI, etc.) runs after reboot.
-        try {
-            val launchIntent = context.packageManager
-                .getLaunchIntentForPackage(context.packageName)
-                ?.apply {
-                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED)
-                    putExtra(MainActivity.EXTRA_STARTED_FROM_BOOT, true)
-                }
-
-            if (launchIntent != null) {
-                context.startActivity(launchIntent)
-            } else {
-                Log.w("BootReceiver", "No launch intent found for package")
-            }
-        } catch (t: Throwable) {
-            Log.e("BootReceiver", "Failed to start activity for boot init", t)
-        }
-    }
 }
