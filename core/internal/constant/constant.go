@@ -10,7 +10,7 @@ const (
 
 const (
 
-	VERSION string = "0.0.19"
+	VERSION string = "0.0.21"
 )
 
 const (
