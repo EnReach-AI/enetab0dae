@@ -9,6 +9,8 @@ import android.app.AlarmManager
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
+import android.net.ConnectivityManager
+import android.net.Network
 import android.os.Build
 import android.os.Handler
 import android.os.IBinder
@@ -33,9 +35,13 @@ class ForegroundService : Service() {
         private const val ACTION_KEEP_ALIVE_ALARM = "com.aro.aro_mobile.ACTION_KEEP_ALIVE_ALARM"
         private const val KEEP_ALIVE_INTERVAL_MS = 15 * 60 * 1000L
         private const val KEEP_ALIVE_REQUEST_CODE = 1001
+        private const val WAKE_LOCK_TAG = "aro:foreground_wakelock"
 
         @Volatile
         private var flutterEngine: FlutterEngine? = null
+
+        @Volatile
+        private var isRunning = false
     }
 
     private val CHANNEL_ID = "foreground_service_channel"
@@ -48,12 +54,25 @@ class ForegroundService : Service() {
     private var heartbeatRunnable: Runnable? = null
     private var unlockReceiver: android.content.BroadcastReceiver? = null
     private var wakeLock: PowerManager.WakeLock? = null
+    private var connectivityManager: ConnectivityManager? = null
+    private var networkCallback: ConnectivityManager.NetworkCallback? = null
 
     override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onCreate() {
         super.onCreate()
+
+        if (isRunning) {
+            Log.w("ForegroundService", "Service already running, stopping duplicate")
+            stopSelf()
+            return
+        }
+        isRunning = true
+
         createNotificationChannel()
+        acquireWakeLock()
+        registerNetworkCallback()
+        Log.i("ForegroundService", "Service created with WakeLock and network monitor")
     }
 
     private fun createNotificationChannel() {
@@ -61,8 +80,11 @@ class ForegroundService : Service() {
             val channel = NotificationChannel(
                 CHANNEL_ID,
                 "Foreground Service Channel",
-                NotificationManager.IMPORTANCE_DEFAULT
-            )
+                NotificationManager.IMPORTANCE_LOW
+            ).apply {
+                description = "ARO is running in the background"
+                setShowBadge(false)
+            }
             val manager = getSystemService(NotificationManager::class.java)
             manager.createNotificationChannel(channel)
         }
@@ -103,7 +125,8 @@ class ForegroundService : Service() {
             .setContentIntent(openAppPendingIntent)
             .setOngoing(true)
             .setCategory(NotificationCompat.CATEGORY_SERVICE)
-            .setPriority(NotificationCompat.PRIORITY_DEFAULT)
+            .setPriority(NotificationCompat.PRIORITY_LOW)
+            .setSilent(true)
             .build()
 
         startForeground(1, notification)
@@ -135,7 +158,7 @@ class ForegroundService : Service() {
             val pm = getSystemService(POWER_SERVICE) as PowerManager
             wakeLock = pm.newWakeLock(
                 PowerManager.PARTIAL_WAKE_LOCK,
-                "AroMobile:BackgroundServiceLock"
+                WAKE_LOCK_TAG
             ).apply {
                 setReferenceCounted(false)
                 acquire()
@@ -159,6 +182,37 @@ class ForegroundService : Service() {
         } finally {
             wakeLock = null
         }
+    }
+
+    private fun registerNetworkCallback() {
+        try {
+            connectivityManager = getSystemService(CONNECTIVITY_SERVICE) as ConnectivityManager
+            networkCallback = object : ConnectivityManager.NetworkCallback() {
+                override fun onAvailable(network: Network) {
+                    Log.d("ForegroundService", "Network available: $network")
+                }
+
+                override fun onLost(network: Network) {
+                    Log.d("ForegroundService", "Network lost: $network")
+                }
+            }
+            connectivityManager?.registerDefaultNetworkCallback(networkCallback!!)
+            Log.i("ForegroundService", "Network callback registered")
+        } catch (t: Throwable) {
+            Log.e("ForegroundService", "Failed to register network callback", t)
+        }
+    }
+
+    private fun unregisterNetworkCallback() {
+        networkCallback?.let {
+            try {
+                connectivityManager?.unregisterNetworkCallback(it)
+            } catch (t: Throwable) {
+                Log.e("ForegroundService", "Failed to unregister network callback", t)
+            }
+        }
+        networkCallback = null
+        connectivityManager = null
     }
 
     private fun scheduleKeepAliveAlarm() {
@@ -208,7 +262,7 @@ class ForegroundService : Service() {
             override fun run() {
                 if (!workerRunning) return
                 Log.d("ForegroundService", "Background service is executing....")
-                heartbeatHandler.postDelayed(this, 5000)
+                heartbeatHandler.postDelayed(this, 30000)
             }
         }
 
@@ -382,7 +436,9 @@ class ForegroundService : Service() {
     override fun onDestroy() {
         stopHeartbeatLoop()
         cancelKeepAliveAlarm()
+        unregisterNetworkCallback()
         releaseWakeLock()
+        isRunning = false
         unlockReceiver?.let {
             try {
                 applicationContext.unregisterReceiver(it)

@@ -24,7 +24,8 @@
             android:name=".ForegroundService"
             android:exported="false"
             android:process=":bg"
-            android:foregroundServiceType="dataSync" />
+            android:foregroundServiceType="dataSync|remoteMessaging"
+            android:stopWithTask="false" />
 
         <receiver
             android:name=".BootReceiver"
