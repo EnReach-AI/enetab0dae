@@ -555,7 +555,6 @@ class _MyHomePageState extends State<MyHomePage>
   bool _forbidden = false;
 
   bool get _shouldShowStatusOverlay =>
-      _forbidden ||
       _isInitialNodeInfoLoading ||
       (_hasReceivedInitialNodeInfo && (!_isConnected || _webViewNetworkIssue));
 
@@ -901,11 +900,11 @@ class _MyHomePageState extends State<MyHomePage>
         final initialBindState = _classifyInitialBindState(statMap);
 
         print('initialBindState---- $initialBindState');
-        // Dismiss loading overlay for both resolved and pending bind states.
-        // Previously only 'resolved' was accepted, causing the overlay to
-        // persist forever when the node was not yet bound (bind == null).
+        // Only dismiss loading when bind is a concrete boolean (resolved).
+        // 'pending' (bind == null) means the server hasn't returned full data
+        // yet — keep loading visible until a subsequent nodeInfo resolves it.
         shouldCompleteInitialLoading =
-            initialBindState != _InitialBindState.invalidPayload;
+            initialBindState == _InitialBindState.resolved;
 
         print('statMap nodeInfo $statMap');
         LoggerService().info(
@@ -920,6 +919,7 @@ class _MyHomePageState extends State<MyHomePage>
             'payload': statMap,
           });
 
+          final wasForbidden = _forbidden;
           final isForbidden = statMap['data']['connect'] == 'Restricted ip';
           if (_forbidden != isForbidden) {
             if (mounted) {
@@ -929,6 +929,31 @@ class _MyHomePageState extends State<MyHomePage>
             } else {
               _forbidden = isForbidden;
             }
+          }
+
+          // When forbidden, reset initial-load state so the overlay stays
+          // visible via _isInitialNodeInfoLoading. This also covers the case
+          // where forbidden is detected after initial load already completed.
+          if (isForbidden) {
+            shouldCompleteInitialLoading = false;
+            if (_hasReceivedInitialNodeInfo || !_isInitialNodeInfoLoading) {
+              if (mounted) {
+                setState(() {
+                  _isInitialNodeInfoLoading = true;
+                  _hasReceivedInitialNodeInfo = false;
+                });
+              } else {
+                _isInitialNodeInfoLoading = true;
+                _hasReceivedInitialNodeInfo = false;
+              }
+            }
+          }
+
+          // When forbidden just cleared, skip this cycle so that
+          // _classifyInitialBindState gets a fresh evaluation on the
+          // next nodeInfo call.
+          if (wasForbidden && !isForbidden) {
+            shouldCompleteInitialLoading = false;
           }
 
           print('_forbidden_forbidden $_forbidden');
@@ -1990,7 +2015,8 @@ One-click start and forget it.
                     ),
                     textAlign: TextAlign.center,
                   ),
-                if (isStartupLoading) ...[
+                if (isStartupLoading &&
+                    (!_forbidden || _isEffectivelyOffline)) ...[
                   const SizedBox(height: 20),
                   const SizedBox(
                     width: 24,
