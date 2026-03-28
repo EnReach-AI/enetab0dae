@@ -22,7 +22,7 @@
         "fullscreen": false,
         "decorations": false,
         "visible": false,
-        "alwaysOnTop": true,
+        "alwaysOnTop": false,
         "visibleOnAllWorkspaces": true,
         "skipTaskbar": false,
         "url": "about:blank"

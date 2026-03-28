@@ -33,6 +33,10 @@ static LAST_PAGE_LOAD_ERROR_AT_MS: std::sync::atomic::AtomicI64 =
 static INITIAL_NODE_INFO_RESOLVED: std::sync::atomic::AtomicBool =
   std::sync::atomic::AtomicBool::new(false);
 
+/// Whether the node is currently in a "Restricted ip" (banned) state.
+static FORBIDDEN: std::sync::atomic::AtomicBool =
+  std::sync::atomic::AtomicBool::new(false);
+
 static LAST_STATUS_OVERLAY_STATE: std::sync::atomic::AtomicU8 =
   std::sync::atomic::AtomicU8::new(1);
 
@@ -944,6 +948,12 @@ fn offline_overlay_html() -> &'static str {
     .bottom-icon { width:14px; height:14px; flex:0 0 14px; }
     .bottom-text { line-height:1.35;font-family:'Poppins', system-ui, -apple-system, Segoe UI, Roboto, sans-serif; }
     .msgTitle { display:flex; justify-content:flex-start}
+    .forbidden-section { display:none; text-align:center; }
+    .forbidden-title { display:flex; align-items:center; justify-content:center; gap:8px; margin-bottom:20px; }
+    .forbidden-title svg { flex:0 0 24px; }
+    .forbidden-title span { font-size:20px; font-weight:bold; }
+    .forbidden-desc { font-size:14px; font-weight:bold; padding:0 20px; line-height:1.5; }
+    .forbidden-desc a { color:#fff; text-decoration:underline; }
     @keyframes spin { to { transform: rotate(360deg); } }
   </style>
 </head>
@@ -956,7 +966,14 @@ fn offline_overlay_html() -> &'static str {
       <div>
       
         <img class="logo" alt="ARO" src="data:image/png;base64,__LOGO_B64__" />
-        <div class="desc">A lightweight desktop app.
+        <div id="forbidden-section" class="forbidden-section">
+          <div class="forbidden-title">
+            <span style="font-size:24px;line-height:1;">&#9888;</span>
+            <span>Service Unavailable</span>
+          </div>
+          <div class="forbidden-desc">Due to legal requirements, our platform cannot provide services in your region. This is based on your IP address detection. For more details on restricted regions, please refer to our <a href="https://aro.network/terms" id="tos-link">Terms of Service</a>.</div>
+        </div>
+        <div id="normal-desc" class="desc">A lightweight desktop app.
 One-click start and forget it.</div>
       </div>
     </div>
@@ -992,18 +1009,37 @@ One-click start and forget it.</div>
         const normalized = state || 'loading';
         const msg = document.getElementById('msg');
         const title = document.getElementById('connecting-text');
+        const forbiddenSection = document.getElementById('forbidden-section');
+        const normalDesc = document.getElementById('normal-desc');
         const isDisconnected = normalized === 'offline' || normalized === 'no_internet';
+        const isForbidden = normalized === 'forbidden';
         if (msg) {
           msg.dataset.state = normalized;
           msg.style.display = isDisconnected ? 'flex' : 'none';
         }
+        if (forbiddenSection) {
+          forbiddenSection.style.display = isForbidden ? 'block' : 'none';
+        }
+        if (normalDesc) {
+          normalDesc.style.display = isForbidden ? 'none' : 'block';
+        }
         if (title) {
-          title.textContent = 'Connecting...';
+          title.textContent = isForbidden ? '' : 'Connecting...';
+          title.style.display = isForbidden ? 'none' : 'block';
         }
       };
 
       // Expose globally so Rust can push state via eval directly.
       window.__setOverlayState = setMsg;
+
+      // Open Terms of Service link in system browser instead of in-overlay navigation.
+      const tosLink = document.getElementById('tos-link');
+      if (tosLink) {
+        tosLink.addEventListener('click', function(e) {
+          e.preventDefault();
+          try { invoke('open_external', { url: 'https://aro.network/terms' }); } catch(_) {}
+        });
+      }
 
       const pendingState = typeof window.__pendingOverlayState === 'string'
         ? window.__pendingOverlayState
@@ -1045,6 +1081,7 @@ One-click start and forget it.</div>
       }, 250);
     })();
   </script>
+  <script>document.addEventListener('contextmenu',function(e){e.preventDefault();},true);document.addEventListener('keydown',function(e){if(e.key==='F12'||(e.ctrlKey&&e.shiftKey&&(e.key==='I'||e.key==='J'||e.key==='C'))){e.preventDefault();}},true);</script>
 </body>
 </html>"#.to_string();
 
@@ -1079,7 +1116,7 @@ fn ensure_offline_overlay_window(app: &tauri::AppHandle) -> Result<(), String> {
     .inner_size(360.0, 640.0)
     .resizable(false)
     .decorations(false)
-    .always_on_top(true)
+    .always_on_top(false)
     .skip_taskbar(true)
     .visible(false)
     .build()
@@ -1110,6 +1147,7 @@ enum StatusOverlayState {
   Loading,
   Offline,
   NoInternet,
+  Forbidden,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -1122,6 +1160,7 @@ fn cache_status_overlay_state(state: StatusOverlayState) {
     StatusOverlayState::Loading => 1,
     StatusOverlayState::Offline => 2,
     StatusOverlayState::NoInternet => 3,
+    StatusOverlayState::Forbidden => 4,
   };
 
   LAST_STATUS_OVERLAY_STATE.store(value, std::sync::atomic::Ordering::Relaxed);
@@ -1131,6 +1170,7 @@ fn current_status_overlay_state() -> StatusOverlayState {
   match LAST_STATUS_OVERLAY_STATE.load(std::sync::atomic::Ordering::Relaxed) {
     2 => StatusOverlayState::Offline,
     3 => StatusOverlayState::NoInternet,
+    4 => StatusOverlayState::Forbidden,
     _ => StatusOverlayState::Loading,
   }
 }
@@ -1148,6 +1188,18 @@ fn mark_initial_node_info_resolved() -> bool {
       std::sync::atomic::Ordering::Relaxed,
     )
     .is_ok()
+}
+
+fn is_forbidden() -> bool {
+  FORBIDDEN.load(std::sync::atomic::Ordering::Relaxed)
+}
+
+fn set_forbidden(value: bool) {
+  FORBIDDEN.store(value, std::sync::atomic::Ordering::Relaxed);
+}
+
+fn reset_initial_node_info() {
+  INITIAL_NODE_INFO_RESOLVED.store(false, std::sync::atomic::Ordering::Relaxed);
 }
 
 fn normalize_status_overlay_state(requested: StatusOverlayState) -> StatusOverlayState {
@@ -1188,6 +1240,7 @@ fn show_status_overlay(
     StatusOverlayState::Loading => "loading",
     StatusOverlayState::Offline => "offline",
     StatusOverlayState::NoInternet => "no_internet",
+    StatusOverlayState::Forbidden => "forbidden",
   };
   let js_push = format!(
     "try {{ window.__pendingOverlayState = '{}'; if (typeof window.__setOverlayState === 'function') window.__setOverlayState('{}'); }} catch(_) {{}}",
@@ -1205,7 +1258,7 @@ fn show_status_overlay(
 
   if let Some(m) = main {
     let _ = m.set_always_on_top(false);
-    let _ = off.set_always_on_top(true);
+    let _ = off.set_always_on_top(false);
     if let Ok(pos) = m.outer_position() {
       let _ = off.set_position(pos);
     }
@@ -1213,7 +1266,7 @@ fn show_status_overlay(
       let _ = off.set_size(size);
     }
   } else {
-    let _ = off.set_always_on_top(true);
+    let _ = off.set_always_on_top(false);
   }
 
   let _ = off.show();
@@ -1249,6 +1302,14 @@ fn cached_connectivity_state() -> Option<NetState> {
 
 fn parse_node_stat_response(resp: &str) -> Option<serde_json::Value> {
   serde_json::from_str::<serde_json::Value>(resp).ok()
+}
+
+fn node_stat_response_is_forbidden(value: &serde_json::Value) -> bool {
+  value
+    .get("data")
+    .and_then(|d| d.get("connect"))
+    .and_then(|c| c.as_str())
+    == Some("Restricted ip")
 }
 
 fn node_stat_response_looks_like_network_failure(value: &serde_json::Value) -> bool {
@@ -1291,15 +1352,95 @@ fn initial_node_info_response_is_ready(value: &serde_json::Value) -> bool {
 }
 
 fn maybe_complete_initial_node_info(app: &tauri::AppHandle, resp: &str) {
-  if !initial_node_info_pending() {
-    return;
-  }
-
   let Some(value) = parse_node_stat_response(resp) else {
     return;
   };
 
-  if !initial_node_info_response_is_ready(&value) {
+  // Keep forbidden state in sync with latest nodeInfo payload.
+  let was_forbidden = is_forbidden();
+  let now_forbidden = node_stat_response_is_forbidden(&value);
+
+  if was_forbidden != now_forbidden {
+    set_forbidden(now_forbidden);
+    log::info!("forbidden state changed: {was_forbidden} -> {now_forbidden}");
+  }
+
+  // Mirror Flutter flow:
+  // 1) evaluate bind/auth readiness,
+  // 2) override by forbidden / just-cleared-forbidden,
+  // 3) complete initial loading only when final decision is true.
+  let mut should_complete_initial_loading = initial_node_info_response_is_ready(&value);
+
+  // When forbidden, keep startup loading blocked and reset initial state so
+  // online branch can continue to prioritize loading before forbidden.
+  if now_forbidden {
+    should_complete_initial_loading = false;
+    if !initial_node_info_pending() {
+      reset_initial_node_info();
+    }
+
+    match cached_connectivity_state() {
+      Some(NetState::Offline) => {
+        show_status_overlay(
+          app,
+          app.get_webview_window("main"),
+          StatusOverlayState::Offline,
+          true,
+        );
+      }
+      Some(NetState::NoInternet) => {
+        show_status_overlay(
+          app,
+          app.get_webview_window("main"),
+          StatusOverlayState::NoInternet,
+          true,
+        );
+      }
+      _ => {
+        show_status_overlay(
+          app,
+          app.get_webview_window("main"),
+          StatusOverlayState::Forbidden,
+          true,
+        );
+      }
+    }
+  }
+
+  // When forbidden just cleared, skip one cycle for fresh bind evaluation.
+  if was_forbidden && !now_forbidden {
+    should_complete_initial_loading = false;
+    log::info!("forbidden just cleared; skipping this cycle for fresh evaluation");
+
+    match cached_connectivity_state() {
+      Some(NetState::Offline) => {
+        show_status_overlay(
+          app,
+          app.get_webview_window("main"),
+          StatusOverlayState::Offline,
+          true,
+        );
+      }
+      Some(NetState::NoInternet) => {
+        show_status_overlay(
+          app,
+          app.get_webview_window("main"),
+          StatusOverlayState::NoInternet,
+          true,
+        );
+      }
+      _ => {
+        show_status_overlay(
+          app,
+          app.get_webview_window("main"),
+          StatusOverlayState::Loading,
+          should_hide_main_for_loading_overlay(),
+        );
+      }
+    }
+  }
+
+  if !should_complete_initial_loading {
     return;
   }
 
@@ -1334,7 +1475,7 @@ fn maybe_complete_initial_node_info(app: &tauri::AppHandle, resp: &str) {
     _ => {
       hide_status_overlay(app);
       if let Some(main) = app.get_webview_window("main") {
-        let _ = main.set_always_on_top(true);
+        let _ = main.set_always_on_top(false);
         let _ = main.show();
         let _ = main.set_focus();
       }
@@ -1681,17 +1822,30 @@ fn start_network_monitor(app: tauri::AppHandle) {
           }
 
           if initial_node_info_pending() {
+            let overlay_state = if is_forbidden() {
+              StatusOverlayState::Forbidden
+            } else {
+              StatusOverlayState::Loading
+            };
             show_status_overlay(
               &app,
               Some(main.clone()),
-              StatusOverlayState::Loading,
+              overlay_state,
               should_hide_main_for_loading_overlay(),
+            );
+          } else if is_forbidden() {
+            // Network is online but IP is restricted — keep forbidden overlay.
+            show_status_overlay(
+              &app,
+              Some(main.clone()),
+              StatusOverlayState::Forbidden,
+              true,
             );
           } else {
             hide_status_overlay(&app);
 
             // Restore main always-on-top behavior (configured in tauri.conf.json).
-            let _ = main.set_always_on_top(true);
+            let _ = main.set_always_on_top(false);
 
             // Always ensure the main window is visible again after recovering from Offline.
             let _ = main.show();
@@ -1749,6 +1903,9 @@ pub fn run() {
   let builder = tauri::Builder::default()
     .plugin(tauri_plugin_shell::init())
     .on_page_load(|window, _payload| {
+      // Disable right-click context menu and DevTools shortcuts on all windows.
+      window.eval(r#"(function(){document.addEventListener('contextmenu',function(e){e.preventDefault();},true);document.addEventListener('keydown',function(e){if(e.key==='F12'||(e.ctrlKey&&e.shiftKey&&(e.key==='I'||e.key==='J'||e.key==='C'))){e.preventDefault();}},true);})()"#).ok();
+
       // Inject scripts on every page load for reliability (remote UI navigation / reloads).
       if window.label() == "offline" {
         // Fill the about:blank window with our offline overlay HTML.
