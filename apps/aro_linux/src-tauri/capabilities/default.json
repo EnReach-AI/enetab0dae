@@ -12,9 +12,11 @@
   },
   "local": true,
   "windows": [
-    "main"
+    "main",
+    "offline"
   ],
   "permissions": [
-    "core:default"
+    "core:default",
+    "shell:allow-open"
   ]
 }

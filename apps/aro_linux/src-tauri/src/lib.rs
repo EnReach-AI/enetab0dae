@@ -968,7 +968,7 @@ fn offline_overlay_html() -> &'static str {
         <img class="logo" alt="ARO" src="data:image/png;base64,__LOGO_B64__" />
         <div id="forbidden-section" class="forbidden-section">
           <div class="forbidden-title">
-            <span style="font-size:24px;line-height:1;">&#9888;</span>
+            <span style="font-size:24px;line-height:1;color:#FFC107;">&#9888;&#65038;</span>
             <span>Service Unavailable</span>
           </div>
           <div class="forbidden-desc">Due to legal requirements, our platform cannot provide services in your region. This is based on your IP address detection. For more details on restricted regions, please refer to our <a href="https://aro.network/terms" id="tos-link">Terms of Service</a>.</div>
@@ -979,7 +979,6 @@ One-click start and forget it.</div>
     </div>
     <div class="connecting" id="connecting-text">Connecting...</div>
     <div class="bottom" id="msg" data-state="loading">
-    <div class="msgTitle">
       <svg class="bottom-icon" id="msg-icon" width="14" height="14" viewBox="0 0 14 14" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
         <path fill-rule="evenodd" clip-rule="evenodd" d="M6.99968 1.75004C4.10018 1.75004 1.74967 4.10055 1.74967 7.00004C1.74967 9.89954 4.10018 12.25 6.99968 12.25C9.89917 12.25 12.2497 9.89954 12.2497 7.00004C12.2497 4.10055 9.89917 1.75004 6.99968 1.75004ZM0.583008 7.00004C0.583008 3.45621 3.45585 0.583374 6.99968 0.583374C10.5435 0.583374 13.4163 3.45621 13.4163 7.00004C13.4163 10.5439 10.5435 13.4167 6.99968 13.4167C3.45585 13.4167 0.583008 10.5439 0.583008 7.00004Z" fill="white"/>
         <path fill-rule="evenodd" clip-rule="evenodd" d="M7.00033 4.08337C7.32249 4.08337 7.58366 4.34454 7.58366 4.66671V7.00004C7.58366 7.32221 7.32249 7.58337 7.00033 7.58337C6.67816 7.58337 6.41699 7.32221 6.41699 7.00004V4.66671C6.41699 4.34454 6.67816 4.08337 7.00033 4.08337Z" fill="white"/>
@@ -1037,7 +1036,15 @@ One-click start and forget it.</div>
       if (tosLink) {
         tosLink.addEventListener('click', function(e) {
           e.preventDefault();
-          try { invoke('open_external', { url: 'https://aro.network/terms' }); } catch(_) {}
+          const url = 'https://aro.network/terms';
+          Promise.resolve(invoke('open_external', { url }))
+            .catch(() => {
+              try {
+                window.location.href = url;
+              } catch (_) {
+                try { window.open(url, '_blank'); } catch (_) {}
+              }
+            });
         });
       }
 
@@ -1111,7 +1118,20 @@ fn ensure_offline_overlay_window(app: &tauri::AppHandle) -> Result<(), String> {
   }
 
   let about_blank = Url::parse("about:blank").map_err(|e| format!("invalid about:blank url: {e}"))?;
+  let app_handle = app.clone();
   let window = tauri::WebviewWindowBuilder::new(app, "offline", tauri::WebviewUrl::External(about_blank))
+    .on_navigation(move |url| {
+      if matches!(url.scheme(), "http" | "https") {
+        if let Err(e) = app_handle.shell().open(url.as_str().to_string(), None) {
+          log::warn!("offline overlay: failed to open external url {}: {e}", url);
+        } else {
+          log::info!("offline overlay: opened external url {}", url);
+        }
+        return false;
+      }
+
+      true
+    })
     .title("ARO Desktop")
     .inner_size(360.0, 640.0)
     .resizable(false)
@@ -1843,6 +1863,7 @@ fn start_network_monitor(app: tauri::AppHandle) {
             );
           } else {
             hide_status_overlay(&app);
+            
 
             // Restore main always-on-top behavior (configured in tauri.conf.json).
             let _ = main.set_always_on_top(false);
