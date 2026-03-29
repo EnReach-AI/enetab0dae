@@ -2386,7 +2386,7 @@ async fn init_libstudy_auto(app: tauri::AppHandle) -> Result<String, String> {
   let init_params = serde_json::json!({
     "appDir": app_data_dir2.to_string_lossy().to_string(),
     "config": {
-      "BaseAPIURL": "https://staging-api.aro.network",
+      "BaseAPIURL": "https://testnet-api.aro.network",
       "BaseWSURL": "staging-ws.aro.network"
     }
   });
