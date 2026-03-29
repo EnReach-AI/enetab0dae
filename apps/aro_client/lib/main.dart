@@ -378,19 +378,24 @@ Future<void> _prepareDesktopWindow() async {
 
   await windowManager.ensureInitialized();
 
-  const windowOptions = WindowOptions(
-    size: Size(360, 640),
-    center: true,
-    minimumSize: Size(360, 640),
-    maximumSize: Size(360, 640),
+  final windowOptions = WindowOptions(
+    size: const Size(360, 640),
+    // On macOS the window is positioned by native code below the tray icon,
+    // so skip centering here.
+    center: !Platform.isMacOS,
+    minimumSize: const Size(360, 640),
+    maximumSize: const Size(360, 640),
     title: 'ARO Desktop',
   );
 
   await windowManager.waitUntilReadyToShow(windowOptions);
 
-  try {
-    await windowManager.show();
-  } catch (_) {}
+  // On macOS the window starts hidden; the tray icon click shows it.
+  if (!Platform.isMacOS) {
+    try {
+      await windowManager.show();
+    } catch (_) {}
+  }
 
   if (Platform.isWindows) {
     try {

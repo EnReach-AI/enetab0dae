@@ -20,11 +20,17 @@ import android.os.SystemClock
 import android.os.UserManager
 import android.util.Log
 import androidx.core.app.NotificationCompat
+import androidx.work.ExistingPeriodicWorkPolicy
+import androidx.work.OneTimeWorkRequestBuilder
+import androidx.work.OutOfQuotaPolicy
+import androidx.work.PeriodicWorkRequestBuilder
+import androidx.work.WorkManager
 import io.flutter.FlutterInjector
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.embedding.engine.dart.DartExecutor
 import io.flutter.plugins.GeneratedPluginRegistrant
 import io.flutter.plugin.common.MethodChannel
+import java.util.concurrent.TimeUnit
 
 class ForegroundService : Service() {
 
@@ -32,9 +38,9 @@ class ForegroundService : Service() {
         const val CHANNEL_NAME = "com.aro.aro_app/foreground"
         const val ACTION_RESTART_APP = "com.aro.aro_mobile.ACTION_RESTART_APP"
         const val ACTION_STOP_FOR_UPDATE = "com.aro.aro_mobile.ACTION_STOP_FOR_UPDATE"
-        private const val ACTION_KEEP_ALIVE_ALARM = "com.aro.aro_mobile.ACTION_KEEP_ALIVE_ALARM"
-        private const val KEEP_ALIVE_INTERVAL_MS = 15 * 60 * 1000L
+        private const val KEEP_ALIVE_INTERVAL_MS = 10 * 60 * 1000L
         private const val KEEP_ALIVE_REQUEST_CODE = 1001
+        private const val RESTART_REQUEST_CODE = 1002
         private const val WAKE_LOCK_TAG = "aro:foreground_wakelock"
 
         @Volatile
@@ -42,6 +48,49 @@ class ForegroundService : Service() {
 
         @Volatile
         private var isRunning = false
+
+        /**
+         * Schedule a one-shot restart alarm from any context (Service, Receiver, Worker).
+         * Uses AlarmManager.setAndAllowWhileIdle so it fires even in Doze.
+         */
+        fun scheduleRestartAlarm(context: Context, delayMs: Long = 2000L) {
+            try {
+                val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
+                val pendingIntent = PendingIntent.getBroadcast(
+                    context,
+                    RESTART_REQUEST_CODE,
+                    Intent(context, ServiceRestartReceiver::class.java).apply {
+                        action = ServiceRestartReceiver.ACTION_RESTART_SERVICE
+                    },
+                    PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+                )
+                alarmManager.setAndAllowWhileIdle(
+                    AlarmManager.ELAPSED_REALTIME_WAKEUP,
+                    SystemClock.elapsedRealtime() + delayMs,
+                    pendingIntent,
+                )
+                Log.i("ForegroundService", "Scheduled restart alarm in ${delayMs}ms")
+            } catch (t: Throwable) {
+                Log.e("ForegroundService", "Failed to schedule restart alarm", t)
+            }
+        }
+
+        /**
+         * Schedule an expedited one-time WorkManager job to restart the service.
+         * WorkManager persists work to a Room DB before returning, so even if the
+         * process is SIGKILL'd immediately after this call, the job survives.
+         */
+        fun scheduleExpeditedRestart(context: Context) {
+            try {
+                val request = OneTimeWorkRequestBuilder<KeepAliveWorker>()
+                    .setExpedited(OutOfQuotaPolicy.RUN_AS_NON_EXPEDITED_WORK_REQUEST)
+                    .build()
+                WorkManager.getInstance(context).enqueue(request)
+                Log.i("ForegroundService", "Scheduled expedited WorkManager restart")
+            } catch (t: Throwable) {
+                Log.e("ForegroundService", "Failed to schedule expedited restart", t)
+            }
+        }
     }
 
     private val CHANNEL_ID = "foreground_service_channel"
@@ -72,6 +121,7 @@ class ForegroundService : Service() {
         createNotificationChannel()
         acquireWakeLock()
         registerNetworkCallback()
+        scheduleWorkManagerKeepAlive()
         Log.i("ForegroundService", "Service created with WakeLock and network monitor")
     }
 
@@ -80,10 +130,11 @@ class ForegroundService : Service() {
             val channel = NotificationChannel(
                 CHANNEL_ID,
                 "Foreground Service Channel",
-                NotificationManager.IMPORTANCE_LOW
+                NotificationManager.IMPORTANCE_DEFAULT
             ).apply {
                 description = "ARO is running in the background"
                 setShowBadge(false)
+                setSound(null, null)
             }
             val manager = getSystemService(NotificationManager::class.java)
             manager.createNotificationChannel(channel)
@@ -91,10 +142,6 @@ class ForegroundService : Service() {
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        if (intent?.action == ACTION_KEEP_ALIVE_ALARM) {
-            Log.i("ForegroundService", "Keep-alive alarm received")
-        }
-
         if (intent?.action == ACTION_STOP_FOR_UPDATE) {
             Log.i("ForegroundService", "Received STOP_FOR_UPDATE action, destroying engine and stopping service")
             destroyBackgroundEngine()
@@ -120,12 +167,11 @@ class ForegroundService : Service() {
 
         val notification: Notification = NotificationCompat.Builder(this, CHANNEL_ID)
             .setContentTitle("ARO is earning for you in the background")
-            .setContentText("Click return App")
             .setSmallIcon(R.mipmap.ic_launcher)
             .setContentIntent(openAppPendingIntent)
             .setOngoing(true)
             .setCategory(NotificationCompat.CATEGORY_SERVICE)
-            .setPriority(NotificationCompat.PRIORITY_LOW)
+            .setPriority(NotificationCompat.PRIORITY_DEFAULT)
             .setSilent(true)
             .build()
 
@@ -215,14 +261,31 @@ class ForegroundService : Service() {
         connectivityManager = null
     }
 
+    private fun scheduleWorkManagerKeepAlive() {
+        try {
+            val keepAliveRequest = PeriodicWorkRequestBuilder<KeepAliveWorker>(
+                15, TimeUnit.MINUTES,
+            ).build()
+
+            WorkManager.getInstance(applicationContext).enqueueUniquePeriodicWork(
+                KeepAliveWorker.WORK_NAME,
+                ExistingPeriodicWorkPolicy.KEEP,
+                keepAliveRequest,
+            )
+            Log.i("ForegroundService", "WorkManager keepalive scheduled")
+        } catch (t: Throwable) {
+            Log.e("ForegroundService", "Failed to schedule WorkManager keepalive", t)
+        }
+    }
+
     private fun scheduleKeepAliveAlarm() {
         try {
             val alarmManager = getSystemService(ALARM_SERVICE) as AlarmManager
-            val pendingIntent = PendingIntent.getService(
+            val pendingIntent = PendingIntent.getBroadcast(
                 this,
                 KEEP_ALIVE_REQUEST_CODE,
-                Intent(this, ForegroundService::class.java).apply {
-                    action = ACTION_KEEP_ALIVE_ALARM
+                Intent(this, ServiceRestartReceiver::class.java).apply {
+                    action = ServiceRestartReceiver.ACTION_RESTART_SERVICE
                 },
                 PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
             )
@@ -235,23 +298,6 @@ class ForegroundService : Service() {
             )
         } catch (t: Throwable) {
             Log.e("ForegroundService", "Failed to schedule keep-alive alarm", t)
-        }
-    }
-
-    private fun cancelKeepAliveAlarm() {
-        try {
-            val alarmManager = getSystemService(ALARM_SERVICE) as AlarmManager
-            val pendingIntent = PendingIntent.getService(
-                this,
-                KEEP_ALIVE_REQUEST_CODE,
-                Intent(this, ForegroundService::class.java).apply {
-                    action = ACTION_KEEP_ALIVE_ALARM
-                },
-                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
-            )
-            alarmManager.cancel(pendingIntent)
-        } catch (t: Throwable) {
-            Log.e("ForegroundService", "Failed to cancel keep-alive alarm", t)
         }
     }
 
@@ -395,15 +441,22 @@ class ForegroundService : Service() {
     }
 
     override fun onTaskRemoved(rootIntent: Intent?) {
-        val restartServiceIntent = Intent(applicationContext, ForegroundService::class.java)
+        // CRITICAL: Schedule alarm FIRST — this must reach AlarmManager before
+        // the system SIGKILLs our process.
+        scheduleRestartAlarm(applicationContext, 1000L)
+        // Expedited WorkManager persists to disk before returning — survives SIGKILL.
+        scheduleExpeditedRestart(applicationContext)
+
+        // Also try in-process restart as a fast path (may not survive SIGKILL).
         try {
+            val restartServiceIntent = Intent(applicationContext, ForegroundService::class.java)
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                 applicationContext.startForegroundService(restartServiceIntent)
             } else {
                 applicationContext.startService(restartServiceIntent)
             }
         } catch (t: Throwable) {
-            Log.e("ForegroundService", "Failed to restart service after task removed", t)
+            Log.e("ForegroundService", "In-process restart failed (expected if process dying)", t)
         }
         super.onTaskRemoved(rootIntent)
     }
@@ -434,8 +487,12 @@ class ForegroundService : Service() {
     }
 
     override fun onDestroy() {
+        // Schedule restart FIRST — onDestroy might be interrupted by SIGKILL.
+        // Do NOT cancel the periodic keep-alive alarm; let it persist as backup.
+        scheduleRestartAlarm(applicationContext, 2000L)
+        scheduleExpeditedRestart(applicationContext)
+
         stopHeartbeatLoop()
-        cancelKeepAliveAlarm()
         unregisterNetworkCallback()
         releaseWakeLock()
         isRunning = false
