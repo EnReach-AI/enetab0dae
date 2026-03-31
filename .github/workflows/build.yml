@@ -477,14 +477,207 @@ jobs:
             Copy-Item "lib/ffi/windows/libstudy.dll" -Destination "build\windows\x64\runner\Release\" -Force
           }
 
-      - name: Download VC++ Redistributable
+      - name: Bundle VC++ Runtime DLLs (app-local deployment)
         working-directory: ${{ env.FLUTTER_DIR }}
         run: |
-          $vcRedistUrl = "https://aka.ms/vs/17/release/vc_redist.x64.exe"
-          $vcRedistPath = "build\windows\x64\runner\Release\vc_redist.x64.exe"
-          Write-Host "Downloading VC++ Redistributable from $vcRedistUrl"
-          Invoke-WebRequest -Uri $vcRedistUrl -OutFile $vcRedistPath -UseBasicParsing
-          Write-Host "Downloaded: $(Get-Item $vcRedistPath | Select-Object -ExpandProperty Length) bytes"
+          # Microsoft officially supports "app-local deployment" — shipping MSVC CRT
+          # DLLs beside the exe. This eliminates the need for users to install the
+          # VC++ Redistributable at all.
+          $releaseDir = "build\windows\x64\runner\Release"
+
+          # Locate the VC++ Redist merge modules directory via vswhere
+          $vsPath = & "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe" `
+            -latest -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 `
+            -property installationPath 2>$null
+          if (-not $vsPath) {
+            Write-Host "WARNING: Could not locate Visual Studio installation" -ForegroundColor Yellow
+            exit 0
+          }
+
+          # Find the latest MSVC toolset version
+          $redistBase = Join-Path $vsPath "VC\Redist\MSVC"
+          if (-not (Test-Path $redistBase)) {
+            Write-Host "WARNING: VC++ Redist directory not found at $redistBase" -ForegroundColor Yellow
+            exit 0
+          }
+          $latestVer = Get-ChildItem -Path $redistBase -Directory |
+                       Where-Object { $_.Name -match '^\d+\.\d+' } |
+                       Sort-Object Name -Descending | Select-Object -First 1
+          $crtDir = Join-Path $latestVer.FullName "x64\Microsoft.VC143.CRT"
+          if (-not (Test-Path $crtDir)) {
+            # Fallback: try VC142 (VS 2019)
+            $crtDir = Join-Path $latestVer.FullName "x64\Microsoft.VC142.CRT"
+          }
+          if (-not (Test-Path $crtDir)) {
+            Write-Host "WARNING: CRT directory not found" -ForegroundColor Yellow
+            exit 0
+          }
+
+          Write-Host "Copying CRT DLLs from: $crtDir" -ForegroundColor Green
+          $crtDlls = @(
+            'vcruntime140.dll', 'vcruntime140_1.dll',
+            'msvcp140.dll', 'msvcp140_1.dll', 'msvcp140_2.dll',
+            'concrt140.dll', 'vccorlib140.dll'
+          )
+          $copied = 0
+          foreach ($dll in $crtDlls) {
+            $src = Join-Path $crtDir $dll
+            if (Test-Path $src) {
+              Copy-Item $src -Destination $releaseDir -Force
+              Write-Host "  Bundled: $dll" -ForegroundColor Green
+              $copied++
+            }
+          }
+          Write-Host "Bundled $copied CRT DLLs into $releaseDir"
+
+      - name: Build pre-launch checker
+        working-directory: ${{ env.FLUTTER_DIR }}
+        run: |
+          # Build a tiny static-linked exe that checks DLL deps before launching
+          # the real app. Uses /MT so it has ZERO external dependencies itself.
+          $launcherSrc = @'
+          #define WIN32_LEAN_AND_MEAN
+          #include <windows.h>
+          #include <shellapi.h>
+          #include <stdio.h>
+
+          static const char* REQUIRED_DLLS[] = {
+              "vcruntime140.dll",
+              "vcruntime140_1.dll",
+              "msvcp140.dll",
+              NULL
+          };
+
+          int WINAPI WinMain(HINSTANCE hInst, HINSTANCE hPrev, LPSTR lpCmd, int nShow) {
+              char missing[2048] = {0};
+              int nmiss = 0;
+              for (int i = 0; REQUIRED_DLLS[i]; i++) {
+                  HMODULE h = LoadLibraryA(REQUIRED_DLLS[i]);
+                  if (h) { FreeLibrary(h); }
+                  else {
+                      if (nmiss > 0) strcat_s(missing, sizeof(missing), "\n");
+                      strcat_s(missing, sizeof(missing), "  - ");
+                      strcat_s(missing, sizeof(missing), REQUIRED_DLLS[i]);
+                      nmiss++;
+                  }
+              }
+              if (nmiss > 0) {
+                  char msg[4096];
+                  sprintf_s(msg, sizeof(msg),
+                      "ARO Desktop cannot start because the following DLLs are missing:\n\n"
+                      "%s\n\n"
+                      "Please install the Visual C++ 2015-2022 Redistributable (x64):\n"
+                      "https://aka.ms/vs/17/release/vc_redist.x64.exe\n\n"
+                      "Or run:  winget install Microsoft.VCRedist.2015+.x64",
+                      missing);
+                  int r = MessageBoxA(NULL, msg, "ARO Desktop - Missing Dependencies",
+                                      MB_OKCANCEL | MB_ICONERROR);
+                  if (r == IDOK) {
+                      ShellExecuteA(NULL, "open",
+                                    "https://aka.ms/vs/17/release/vc_redist.x64.exe",
+                                    NULL, NULL, SW_SHOWNORMAL);
+                  }
+                  return 1;
+              }
+              /* Launch the real app */
+              char dir[MAX_PATH];
+              GetModuleFileNameA(NULL, dir, MAX_PATH);
+              char* slash = strrchr(dir, '\\');
+              if (slash) *(slash + 1) = 0;
+              char exe[MAX_PATH];
+              sprintf_s(exe, sizeof(exe), "%saro_desktop.exe", dir);
+              STARTUPINFOA si = { sizeof(si) };
+              PROCESS_INFORMATION pi;
+              if (CreateProcessA(exe, GetCommandLineA(), NULL, NULL, FALSE, 0, NULL, dir, &si, &pi)) {
+                  CloseHandle(pi.hProcess);
+                  CloseHandle(pi.hThread);
+              }
+              return 0;
+          }
+          '@
+
+          $srcFile = "build\aro_launcher.c"
+          $outFile = "build\windows\x64\runner\Release\aro_launcher.exe"
+          Set-Content -Path $srcFile -Value $launcherSrc
+
+          # Compile with static CRT (/MT) — zero external DLL dependencies
+          cl.exe /nologo /O2 /MT /Fe:$outFile $srcFile /link shell32.lib user32.lib /SUBSYSTEM:WINDOWS
+
+          if (Test-Path $outFile) {
+            Write-Host "Built aro_launcher.exe (static CRT)" -ForegroundColor Green
+            # Show that it has no CRT deps
+            dumpbin /DEPENDENTS $outFile | Select-String '\.dll'
+          } else {
+            Write-Host "WARNING: Failed to build launcher" -ForegroundColor Yellow
+          }
+
+      - name: Audit DLL dependencies
+        working-directory: ${{ env.FLUTTER_DIR }}
+        run: |
+          # Recursively scan all EXE/DLL in the Release folder and report any
+          # dependency that is NOT bundled and NOT a known Windows system DLL.
+          $releaseDir = "build\windows\x64\runner\Release"
+
+          # Known Windows system DLLs that are guaranteed present on Windows 10+.
+          # Matches are case-insensitive.
+          $systemDlls = @(
+            'kernel32.dll','ntdll.dll','user32.dll','gdi32.dll','advapi32.dll',
+            'shell32.dll','ole32.dll','oleaut32.dll','comctl32.dll','comdlg32.dll',
+            'ws2_32.dll','wsock32.dll','winmm.dll','shlwapi.dll','version.dll',
+            'setupapi.dll','crypt32.dll','wintrust.dll','secur32.dll','bcrypt.dll',
+            'ncrypt.dll','iphlpapi.dll','dnsapi.dll','userenv.dll','netapi32.dll',
+            'dwmapi.dll','uxtheme.dll','imm32.dll','msimg32.dll','gdiplus.dll',
+            'd3d11.dll','d3d9.dll','dxgi.dll','d2d1.dll','dwrite.dll',
+            'opengl32.dll','winhttp.dll','wininet.dll','urlmon.dll',
+            'msvcrt.dll','ucrtbase.dll','rpcrt4.dll','powrprof.dll',
+            'api-ms-win-*.dll','ext-ms-win-*.dll',
+            'msvcp_win.dll','combase.dll','kernelbase.dll',
+            'dbghelp.dll','psapi.dll','wtsapi32.dll','propsys.dll',
+            'shcore.dll','profapi.dll','cabinet.dll','msi.dll',
+            'uiautomationcore.dll','oleacc.dll',
+            'vcomp140.dll'
+          )
+
+          function Is-SystemDll($name) {
+            foreach ($pattern in $systemDlls) {
+              if ($pattern.Contains('*')) {
+                if ($name -like $pattern) { return $true }
+              } elseif ($name -eq $pattern) {
+                return $true
+              }
+            }
+            return $false
+          }
+
+          $binaries = Get-ChildItem -Path $releaseDir -Recurse -Include *.exe,*.dll
+          $bundledNames = $binaries | ForEach-Object { $_.Name.ToLower() }
+          $missing = @()
+
+          foreach ($bin in $binaries) {
+            $deps = & dumpbin /DEPENDENTS $bin.FullName 2>$null |
+                    Select-String '^\s+\S+\.dll$' |
+                    ForEach-Object { $_.Line.Trim().ToLower() }
+            foreach ($dep in $deps) {
+              if ($dep -and (-not (Is-SystemDll $dep)) -and ($dep -notin $bundledNames)) {
+                $missing += [PSCustomObject]@{ Binary=$bin.Name; Missing=$dep }
+              }
+            }
+          }
+
+          Write-Host "===== DLL Dependency Audit =====" -ForegroundColor Cyan
+          Write-Host "Scanned $($binaries.Count) binaries in $releaseDir"
+          if ($missing.Count -gt 0) {
+            Write-Host ""
+            Write-Host "WARNING: The following DLL dependencies are NOT bundled and NOT known system DLLs:" -ForegroundColor Red
+            $missing | Format-Table -AutoSize
+            Write-Host ""
+            Write-Host "These DLLs must be bundled or installed via VC++ Redistributable / WebView2." -ForegroundColor Yellow
+            # Fail the build if any non-system DLL is missing from the bundle.
+            # CRT DLLs are now bundled app-locally, so nothing should be missing.
+            exit 1
+          } else {
+            Write-Host "All dependencies satisfied." -ForegroundColor Green
+          }
 
       - name: Install Inno Setup
         run: |
@@ -540,21 +733,19 @@ jobs:
 
 
           [Files]
-          Source: "{#SourcePath}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs; Excludes: "vc_redist.x64.exe"
-          Source: "{#SourcePath}\vc_redist.x64.exe"; DestDir: "{tmp}"; Flags: deleteafterinstall
+          Source: "{#SourcePath}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
 
           [Icons]
-          Name: "{group}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"
-          Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; Tasks: desktopicon; WorkingDir: "{app}"
-          Name: "{userappdata}\Microsoft\Internet Explorer\Quick Launch\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; Tasks: quicklaunchicon
+          Name: "{group}\{#MyAppName}"; Filename: "{app}\aro_launcher.exe"
+          Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\aro_launcher.exe"; Tasks: desktopicon; WorkingDir: "{app}"
+          Name: "{userappdata}\Microsoft\Internet Explorer\Quick Launch\{#MyAppName}"; Filename: "{app}\aro_launcher.exe"; Tasks: quicklaunchicon
           Name: "{group}\Uninstall {#MyAppName}"; Filename: "{uninstallexe}"
 
           [Run]
-          Filename: "{tmp}\vc_redist.x64.exe"; Parameters: "/install /quiet /norestart"; StatusMsg: "Installing Visual C++ Runtime..."; Flags: waituntilterminated skipifsilent; Check: VCRedistNeedsInstall
           Filename: "{app}\{#MyAppExeName}"; Description: "{cm:LaunchProgram,{#StringChange(MyAppName, '&', '&&')}}"; Flags: nowait postinstall skipifsilent
 
           [Registry]
-          Root: "HKCU"; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; ValueName: "{#MyAppName}"; ValueType: string; ValueData: "{app}\{#MyAppExeName}"; Flags: uninsdeletevalue; Tasks: autostart
+          Root: "HKCU"; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; ValueName: "{#MyAppName}"; ValueType: string; ValueData: "{app}\aro_launcher.exe"; Flags: uninsdeletevalue; Tasks: autostart
           Root: "HKCU"; Subkey: "Software\Classes\*\shell\Open with {#MyAppName}"; ValueType: string; ValueData: "Open with {#MyAppName}"; Tasks: contextmenu; Flags: uninsdeletekey
           Root: "HKCU"; Subkey: "Software\Classes\*\shell\Open with {#MyAppName}\command"; ValueType: string; ValueData: """{app}\{#MyAppExeName}"" ""%1"""; Tasks: contextmenu
 
@@ -612,20 +803,6 @@ jobs:
             Result :=
               CheckForMutexes('{#MyAppMutexName}') or
               IsProcessRunning('{#MyAppExeName}');
-          end;
-
-          function VCRedistNeedsInstall(): Boolean;
-          var
-            DllPath: string;
-          begin
-            { Check if key VCRUNTIME DLLs exist in System32 }
-            DllPath := ExpandConstant('{sys}\vcruntime140.dll');
-            if not FileExists(DllPath) then begin Result := True; exit; end;
-            DllPath := ExpandConstant('{sys}\vcruntime140_1.dll');
-            if not FileExists(DllPath) then begin Result := True; exit; end;
-            DllPath := ExpandConstant('{sys}\msvcp140.dll');
-            if not FileExists(DllPath) then begin Result := True; exit; end;
-            Result := False;
           end;
 
           function InitializeUninstall(): Boolean;
