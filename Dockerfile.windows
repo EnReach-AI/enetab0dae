@@ -7,7 +7,9 @@ WORKDIR /build
 COPY core /build
 
 RUN CC=x86_64-w64-mingw32-gcc CGO_ENABLED=1 GOOS=windows GOARCH=amd64 go build \
-    -buildmode=c-shared -o /build/libstudy.dll ./pkg/libstudy && \
+    -buildmode=c-shared -trimpath \
+    -ldflags="-s -w -extldflags '-static-libgcc'" \
+    -o /build/libstudy.dll ./pkg/libstudy && \
     cp /build/pkg/libstudy/libstudy.h /build/
 
 CMD ["echo", "Windows build complete"]
