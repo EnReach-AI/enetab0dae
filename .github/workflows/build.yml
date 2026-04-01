@@ -838,11 +838,6 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - distro: "ubuntu:22.04"
-            artifact_suffix: "ubuntu"
-            bundle_target: "deb"
-            tauri_config: "src-tauri/tauri.ubuntu.conf.json"
-
           - distro: "debian:12"
             artifact_suffix: "debian-12"
             bundle_target: "deb"
@@ -1046,93 +1041,4 @@ jobs:
           path: apps/aro_linux/src-tauri/target/release/bundle/${{ matrix.bundle_target }}/*.${{ matrix.bundle_target }}
           if-no-files-found: error
 
-  build-flatpak:
-    needs: [prepare, build-core-linux, build-core-linux-arm64]
-    if: needs.prepare.outputs.build_core == 'true'
-
-    name: Build Flatpak (ARO Desktop)
-    runs-on: ubuntu-latest
-
-    defaults:
-      run:
-        shell: bash
-
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Download Linux x64 Core Library
-        uses: actions/download-artifact@v4
-        with:
-          name: libstudy-linux
-          path: plugins/linux
-
-      - name: Copy Core Library to Tauri Resources
-        run: |
-          set -euo pipefail
-          mkdir -p apps/aro_linux/src-tauri/resources
-          cp plugins/linux/libstudy.so apps/aro_linux/src-tauri/resources/libstudy.so
-          ls -lah apps/aro_linux/src-tauri/resources/libstudy.so
-
-      - name: Install build dependencies (Ubuntu)
-        run: |
-          set -euo pipefail
-          sudo apt-get update
-          sudo apt-get install -y --no-install-recommends \
-            git curl jq ca-certificates \
-            clang build-essential pkg-config \
-            libssl-dev libgtk-3-dev libglib2.0-dev patchelf \
-            libwebkit2gtk-4.1-dev libayatana-appindicator3-dev
-
-      - name: Set up Rust
-        uses: dtolnay/rust-toolchain@stable
-
-      - name: Cache Cargo
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/.cargo/registry
-            ~/.cargo/git
-            apps/aro_linux/src-tauri/target
-          key: ${{ runner.os }}-cargo-flatpak-${{ hashFiles('apps/aro_linux/src-tauri/Cargo.lock') }}
-          restore-keys: |
-            ${{ runner.os }}-cargo-flatpak-
-
-      - name: Build Linux binary (release)
-        working-directory: apps/aro_linux/src-tauri
-        run: |
-          set -euo pipefail
-          cargo build --release
-
-      - name: Stage Flatpak inputs
-        run: |
-          set -euo pipefail
-          mkdir -p apps/aro_linux/flatpak/stage
-          cp apps/aro_linux/src-tauri/target/release/ARO apps/aro_linux/flatpak/stage/ARO
-          cp apps/aro_linux/src-tauri/resources/libstudy.so apps/aro_linux/flatpak/stage/libstudy.so
-
-          # Keep the Flatpak source small (avoid copying full Cargo target dir into flatpak-builder).
-          rm -rf apps/aro_linux/src-tauri/target
-
-      - name: Install Flatpak tooling
-        run: |
-          set -euo pipefail
-          # flatpak-builder uses eu-strip (elfutils) for stripping/debug split.
-          sudo apt-get install -y --no-install-recommends flatpak flatpak-builder elfutils
-          sudo flatpak remote-add --if-not-exists flathub https://flathub.org/repo/flathub.flatpakrepo
-          sudo flatpak install -y flathub org.gnome.Platform//47 org.gnome.Sdk//47
-
-      - name: Build Flatpak bundle
-        run: |
-          set -euo pipefail
-          flatpak-builder --force-clean --repo=flatpak-repo --default-branch=stable --arch=x86_64 \
-            flatpak-build apps/aro_linux/flatpak/com.aro.ARONetwork.yml
-          flatpak build-bundle flatpak-repo aro-desktop.flatpak com.aro.ARONetwork stable \
-            --runtime-repo=https://flathub.org/repo/flathub.flatpakrepo
-          ls -lah aro-desktop.flatpak
-
-      - name: Upload Flatpak
-        uses: actions/upload-artifact@v4
-        with:
-          name: aro-desktop-flatpak
-          path: aro-desktop.flatpak
-          if-no-files-found: error
+ 
