@@ -1,4 +1,5 @@
 import 'dart:ffi';
+import 'dart:io' show Platform;
 import 'package:ffi/ffi.dart';
 import 'study_lib.dart';
 
@@ -29,10 +30,13 @@ typedef ChdirDart = int Function(Pointer<Utf8>);
 
 class StudyBindings {
   static final _lib = StudyLibrary.instance;
-  // Use DynamicLibrary.process() for standard C functions like chdir
-  static final _stdlib = DynamicLibrary.process();
+  // Use DynamicLibrary.process() on Linux/macOS/Android, msvcrt.dll on Windows
+  static final _stdlib = Platform.isWindows
+      ? DynamicLibrary.open('msvcrt.dll')
+      : DynamicLibrary.process();
 
-  static final chdir = _stdlib.lookupFunction<ChdirC, ChdirDart>('chdir');
+  static final chdir = _stdlib.lookupFunction<ChdirC, ChdirDart>(
+      Platform.isWindows ? '_chdir' : 'chdir');
 
   static final nodeSignUp =
       _lib.lookupFunction<NodeSignUpC, NodeSignUpDart>('NodeSignUp');
