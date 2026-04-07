@@ -70,7 +70,6 @@ Filename: "{app}\{#MyAppExeName}"; Description: "Launch {#MyAppName}"; Flags: no
 
 [UninstallDelete]
 
-; 删除 WebView2 缓存
 Type: filesandordirs; Name: "{app}\{#MyAppExeName}.WebView2"
 Type: filesandordirs; Name: "{app}\{#MyAppExeName}.webview2"
 Type: filesandordirs; Name: "{app}\{#MyAppExeBase}.WebView2"
@@ -92,10 +91,8 @@ Type: filesandordirs; Name: "{userappdata}\{#MyAppName}\{#MyAppExeName}.webview2
 Type: filesandordirs; Name: "{userappdata}\{#MyAppName}\{#MyAppExeBase}.WebView2"
 Type: filesandordirs; Name: "{userappdata}\{#MyAppName}\{#MyAppExeBase}.webview2"
 
-; 删除安装目录
 Type: filesandordirs; Name: "{app}"
 
-; 删除 AppData 缓存
 Type: filesandordirs; Name: "{localappdata}\{#MyAppName}"
 Type: filesandordirs; Name: "{appdata}\{#MyAppName}"
 
