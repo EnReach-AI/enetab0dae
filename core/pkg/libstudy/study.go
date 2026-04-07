@@ -5,9 +5,40 @@ package main
 #cgo linux LDFLAGS: -shared
 #cgo darwin LDFLAGS: -shared
 #cgo windows LDFLAGS: -shared
-#cgo android LDFLAGS: -shared
+#cgo android LDFLAGS: -shared -llog
 #include <stdlib.h>
 #include <string.h>
+
+#if defined(__ANDROID__) && defined(__arm__)
+#include <signal.h>
+#include <sys/ucontext.h>
+#include <android/log.h>
+
+// Android 32-bit ARM seccomp workaround.
+// Go 1.24 runtime uses syscalls (e.g. clone3) that may be blocked by
+// Android's seccomp filter on 32-bit processes.  Without this handler
+// the kernel delivers SIGSYS and the process is killed.  We intercept
+// SIGSYS, log the blocked syscall number, and return -ENOSYS so that
+// Go (and libc) can fall back to older syscall alternatives.
+static void _libstudy_sigsys_handler(int sig, siginfo_t *info, void *ctx) {
+    ucontext_t *uc = (ucontext_t *)ctx;
+    __android_log_print(ANDROID_LOG_WARN, "libstudy",
+        "seccomp: blocked syscall %d on arm32, returning ENOSYS",
+        info->si_syscall);
+    uc->uc_mcontext.arm_r0 = (unsigned long)(-38); // -ENOSYS
+}
+
+static void _libstudy_install_sigsys_handler(void) {
+    struct sigaction sa;
+    memset(&sa, 0, sizeof(sa));
+    sa.sa_sigaction = _libstudy_sigsys_handler;
+    sa.sa_flags = SA_SIGINFO;
+    sigemptyset(&sa.sa_mask);
+    sigaction(31, &sa, NULL); // 31 = SIGSYS
+}
+#else
+static void _libstudy_install_sigsys_handler(void) {}
+#endif
 */
 import "C"
 
@@ -30,6 +61,10 @@ import (
 	agentConstant "github.com/aro-network/aro-edge-agent/agent/constant"
 	"github.com/sirupsen/logrus"
 )
+
+func init() {
+	C._libstudy_install_sigsys_handler()
+}
 
 var cfg = config.GetConfig()
 

@@ -1,6 +1,7 @@
 import 'dart:ffi';
 import 'dart:io';
 import 'package:aro_client/components/path_provider.dart';
+import 'package:aro_client/ffi/study_bindings.dart';
 import 'package:aro_client/services/logger_service.dart';
 import 'package:ffi/ffi.dart';
 
@@ -51,6 +52,7 @@ class StudyLibrary {
     final lib = DynamicLibrary.open(newPath);
     _lib = lib;
     _overridePath = newPath;
+    StudyBindings.reset();
     LoggerService().info('[StudyLib] Hot-reload successful');
   }
 

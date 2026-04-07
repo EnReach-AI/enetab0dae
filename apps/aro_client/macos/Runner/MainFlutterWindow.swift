@@ -10,7 +10,7 @@ class MainFlutterWindow: NSWindow {
 
     self.titleVisibility = .hidden
     self.titlebarAppearsTransparent = true
-    self.isMovableByWindowBackground = true
+    self.isMovableByWindowBackground = false
 
     if let closeButton = standardWindowButton(.closeButton) {
         closeButton.isHidden = true
@@ -23,6 +23,8 @@ class MainFlutterWindow: NSWindow {
     }
 
     self.styleMask.insert(.fullSizeContentView)
+    self.level = .statusBar
+    self.collectionBehavior = [.canJoinAllSpaces, .stationary]
 
     RegisterGeneratedPlugins(registry: flutterViewController)
     super.awakeFromNib()

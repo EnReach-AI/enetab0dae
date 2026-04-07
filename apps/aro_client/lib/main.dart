@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:ffi' show Abi;
 import 'dart:isolate';
+import 'dart:ui';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -13,6 +14,7 @@ import 'package:aro_client/services/lib_update_service.dart';
 import 'package:aro_client/services/connectivity_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:permission_handler/permission_handler.dart';
+import 'package:package_info_plus/package_info_plus.dart';
 import 'package:window_manager/window_manager.dart';
 import 'dart:io';
 import 'package:webview_flutter/webview_flutter.dart';
@@ -24,6 +26,7 @@ import 'package:aro_client/utils/config.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart' as inapp;
 import 'package:url_launcher/url_launcher.dart';
 import 'package:aro_client/services/webview_memory_manager.dart';
+import 'package:sentry_flutter/sentry_flutter.dart';
 
 String? _studyLibraryOverridePathCache;
 
@@ -368,7 +371,41 @@ void main(List<String> args) async {
   await _prepareDesktopWindow();
   // await ConnectivityService().initialize();
 
-  runApp(const MyApp());
+  await SentryFlutter.init(
+    (options) {
+      options.dsn =
+          'https://1b2b5f6c11938af2e6f3a52cefe276cb@o4511155205373952.ingest.us.sentry.io/4511155211599872';
+      // Capture 100% of transactions for performance monitoring
+      options.tracesSampleRate = 1.0;
+      // Capture all sessions for crash-free rate tracking
+      options.enableAutoSessionTracking = true;
+      // Report uncaught async errors from all isolates
+      options.enableAppHangTracking = true;
+      // Attach screenshots on crash
+      options.attachScreenshot = true;
+      // Capture HTTP breadcrumbs automatically
+      options.enableAutoNativeBreadcrumbs = true;
+      // Report native (C/C++) crashes (ANR, SIGABRT, etc.)
+      options.autoInitializeNativeSdk = true;
+      // Debug mode – turn off for production
+      options.debug = false;
+    },
+    appRunner: () {
+      // Catch Flutter framework errors (widget build errors, etc.)
+      FlutterError.onError = (details) {
+        FlutterError.presentError(details);
+        Sentry.captureException(details.exception, stackTrace: details.stack);
+      };
+
+      // Catch all uncaught async errors in the root Zone
+      PlatformDispatcher.instance.onError = (error, stack) {
+        Sentry.captureException(error, stackTrace: stack);
+        return true;
+      };
+
+      runApp(SentryWidget(child: const MyApp()));
+    },
+  );
 }
 
 Future<void> _prepareDesktopWindow() async {
@@ -410,7 +447,23 @@ Future<void> _prepareDesktopWindow() async {
 void backgroundMain() async {
   print('[backgroundMain] starting');
   WidgetsFlutterBinding.ensureInitialized();
-  await _runBackgroundInit();
+
+  await SentryFlutter.init(
+    (options) {
+      options.dsn =
+          'https://1b2b5f6c11938af2e6f3a52cefe276cb@o4511155205373952.ingest.us.sentry.io/4511155211599872';
+      options.tracesSampleRate = 1.0;
+      options.autoInitializeNativeSdk = true;
+    },
+    appRunner: () async {
+      try {
+        await _runBackgroundInit();
+      } catch (e, s) {
+        await Sentry.captureException(e, stackTrace: s);
+        rethrow;
+      }
+    },
+  );
 }
 
 Future<void> _runBackgroundInit() async {
@@ -729,6 +782,27 @@ class _MyHomePageState extends State<MyHomePage>
     // print('connect status: $status');
   }
 
+  Future<Map<String, dynamic>> _getAppVersionPayload() async {
+    try {
+      final packageInfo = await PackageInfo.fromPlatform();
+      return {
+        'code': 200,
+        'data': {
+          'appName': packageInfo.appName,
+          'packageName': packageInfo.packageName,
+          'version': packageInfo.version,
+          'buildNumber': packageInfo.buildNumber,
+        },
+      };
+    } catch (e, s) {
+      LoggerService().error('Failed to get app version', e, s);
+      return {
+        'code': 500,
+        'message': 'Failed to get app version',
+      };
+    }
+  }
+
   Future<void> _restartApp() async {
     if (Platform.isWindows) {
       final exePath = Platform.resolvedExecutable;
@@ -882,6 +956,9 @@ class _MyHomePageState extends State<MyHomePage>
   void handleWebMessage(String message) async {
     print('messagehandleWebMessage $message');
     LoggerService().info('Received web message: $message');
+
+    final appVersionPayload = await _getAppVersionPayload();
+    print('getAppVersion $appVersionPayload');
     // Try to decode JSON messages from the web first
     Map<String, dynamic>? msgMap;
     try {
@@ -1072,7 +1149,15 @@ class _MyHomePageState extends State<MyHomePage>
       } catch (e) {
         print('getVersion error $e');
       }
+    } else if (message == 'getAppVersion') {
+      final appVersionPayload = await _getAppVersionPayload();
+      print('getAppVersion $appVersionPayload');
+      sendMessageToWeb({
+        'type': 'getAppVersion',
+        'payload': appVersionPayload,
+      });
     }
+
     // else if (message == 'getWSClientStatus') {
     //   final status = service.getWSClientStatus();
     //   final statusMap = jsonDecode(status);
@@ -1857,18 +1942,22 @@ class _MyHomePageState extends State<MyHomePage>
     }
     // String errorMessage = 'Failed to load page';
 
+    final baseWebViewWidgetParams = PlatformWebViewWidgetCreationParams(
+      controller: _controller!.platform,
+    );
+    final platformWebViewWidgetParams = Platform.isAndroid
+        ? AndroidWebViewWidgetCreationParams
+            .fromPlatformWebViewWidgetCreationParams(
+            baseWebViewWidgetParams,
+            displayWithHybridComposition: true,
+          )
+        : baseWebViewWidgetParams;
+
     return Scaffold(
       body: Stack(
         children: [
           WebViewWidget.fromPlatformCreationParams(
-            params: (Platform.isAndroid)
-                ? AndroidWebViewWidgetCreationParams(
-                    controller: _controller!.platform,
-                    displayWithHybridComposition: true,
-                  )
-                : PlatformWebViewWidgetCreationParams(
-                    controller: _controller!.platform,
-                  ),
+            params: platformWebViewWidgetParams,
           ),
           if (_isWebViewLoading && !_shouldShowStartupNodeInfoLoading)
             Container(
