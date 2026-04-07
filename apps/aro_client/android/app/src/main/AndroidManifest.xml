@@ -26,7 +26,6 @@
         <service
             android:name=".ForegroundService"
             android:exported="false"
-            android:process=":bg"
             android:foregroundServiceType="remoteMessaging"
             android:stopWithTask="false" />
 
@@ -46,8 +45,7 @@
         <receiver
             android:name=".ServiceRestartReceiver"
             android:enabled="true"
-            android:exported="false"
-            android:permission="com.aro.aro_mobile.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION">
+            android:exported="false">
             <intent-filter>
                 <action android:name="com.aro.aro_mobile.ACTION_RESTART_SERVICE" />
             </intent-filter>
