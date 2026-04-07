@@ -470,16 +470,26 @@ jobs:
 
           # Sentry native SDK (crashpad) requires cloning zlib from
           # chromium.googlesource.com which returns 403 on GitHub Actions.
-          # Replace the plugin's Windows CMakeLists.txt with a no-op stub.
-          # Dart-level Sentry error reporting is unaffected.
-          $sentryWinCmake = "build\windows\flutter\ephemeral\.plugin_symlinks\sentry_flutter\windows\CMakeLists.txt"
-          if (Test-Path $sentryWinCmake) {
-            @"
+          # Patch the CMakeLists.txt directly in the pub cache (where all
+          # plugin_symlinks point to). Dart-level Sentry is unaffected.
+          $pubCache = if ($env:PUB_CACHE) { $env:PUB_CACHE } else { "$env:LOCALAPPDATA\Pub\Cache" }
+          $sentryPkg = Get-ChildItem -Path "$pubCache\hosted\pub.dev" -Directory -Filter "sentry_flutter-*" |
+                       Sort-Object Name -Descending | Select-Object -First 1
+          if ($sentryPkg) {
+            $cmakePath = Join-Path $sentryPkg.FullName "windows\CMakeLists.txt"
+            if (Test-Path $cmakePath) {
+              $stub = @"
           cmake_minimum_required(VERSION 3.14)
           add_library(sentry_flutter_plugin INTERFACE)
           set(sentry_flutter_bundled_libraries "" PARENT_SCOPE)
-          "@ | Set-Content -Path $sentryWinCmake
-            Write-Host "Patched sentry_flutter Windows CMakeLists.txt (native SDK disabled)"
+          "@
+              Set-Content -Path $cmakePath -Value $stub
+              Write-Host "Patched $cmakePath (sentry native SDK disabled)"
+            } else {
+              Write-Host "WARNING: sentry_flutter Windows CMakeLists.txt not found at $cmakePath"
+            }
+          } else {
+            Write-Host "WARNING: sentry_flutter package not found in pub cache at $pubCache"
           }
 
           flutter build windows --release
