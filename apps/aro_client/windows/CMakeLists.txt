@@ -72,6 +72,10 @@ endif()
 set(INSTALL_BUNDLE_DATA_DIR "${CMAKE_INSTALL_PREFIX}/data")
 set(INSTALL_BUNDLE_LIB_DIR "${CMAKE_INSTALL_PREFIX}")
 
+# Bundle VC++ Runtime DLLs so end-users don't need to install the Redistributable
+set(CMAKE_INSTALL_SYSTEM_RUNTIME_DESTINATION "${INSTALL_BUNDLE_LIB_DIR}")
+include(InstallRequiredSystemLibraries)
+
 # Copy libstudy.dll to the bundle
 if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/../lib/ffi/windows/libstudy.dll")
   install(FILES "${CMAKE_CURRENT_SOURCE_DIR}/../lib/ffi/windows/libstudy.dll"

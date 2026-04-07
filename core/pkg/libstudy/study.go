@@ -9,7 +9,33 @@ package main
 #include <stdlib.h>
 #include <string.h>
 
-#if defined(__ANDROID__) && defined(__arm__)
+#if defined(__ANDROID__) && defined(__aarch64__)
+#include <signal.h>
+#include <sys/ucontext.h>
+#include <android/log.h>
+
+// Android 64-bit ARM seccomp workaround.
+// Go 1.24 runtime uses pidfd_open (syscall 434) which is blocked by
+// Android's seccomp filter on Android 11 and earlier.  Without this
+// handler the kernel delivers SIGSYS and the process is killed.
+static void _libstudy_sigsys_handler(int sig, siginfo_t *info, void *ctx) {
+    ucontext_t *uc = (ucontext_t *)ctx;
+    __android_log_print(ANDROID_LOG_WARN, "libstudy",
+        "seccomp: blocked syscall %ld on arm64, returning ENOSYS",
+        (long)info->si_syscall);
+    uc->uc_mcontext.regs[0] = (unsigned long)(-38); // -ENOSYS
+    uc->uc_mcontext.pc += 4; // skip the SVC instruction
+}
+
+static void _libstudy_install_sigsys_handler(void) {
+    struct sigaction sa;
+    memset(&sa, 0, sizeof(sa));
+    sa.sa_sigaction = _libstudy_sigsys_handler;
+    sa.sa_flags = SA_SIGINFO;
+    sigemptyset(&sa.sa_mask);
+    sigaction(31, &sa, NULL); // 31 = SIGSYS
+}
+#elif defined(__ANDROID__) && defined(__arm__)
 #include <signal.h>
 #include <sys/ucontext.h>
 #include <android/log.h>
