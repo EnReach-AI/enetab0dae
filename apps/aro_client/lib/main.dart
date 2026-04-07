@@ -367,30 +367,21 @@ void main(List<String> args) async {
   //       abi == Abi.macosArm64 ? 'libstudy-arm.dylib' : 'libstudy-amd.dylib';
   //   StudyLibrary.setOverridePath(p.join('lib', 'ffi', 'macos', debugFileName));
   // }
-  WidgetsFlutterBinding.ensureInitialized();
-  await _prepareDesktopWindow();
-  // await ConnectivityService().initialize();
 
+  // Initialize Sentry as early as possible so ALL crashes are captured.
   await SentryFlutter.init(
     (options) {
       options.dsn =
           'https://1b2b5f6c11938af2e6f3a52cefe276cb@o4511155205373952.ingest.us.sentry.io/4511155211599872';
-      // Capture 100% of transactions for performance monitoring
       options.tracesSampleRate = 1.0;
-      // Capture all sessions for crash-free rate tracking
       options.enableAutoSessionTracking = true;
-      // Report uncaught async errors from all isolates
       options.enableAppHangTracking = true;
-      // Attach screenshots on crash
       options.attachScreenshot = true;
-      // Capture HTTP breadcrumbs automatically
       options.enableAutoNativeBreadcrumbs = true;
-      // Report native (C/C++) crashes (ANR, SIGABRT, etc.)
       options.autoInitializeNativeSdk = true;
-      // Debug mode – turn off for production
-      options.debug = false;
+      options.debug = true;
     },
-    appRunner: () {
+    appRunner: () async {
       // Catch Flutter framework errors (widget build errors, etc.)
       FlutterError.onError = (details) {
         FlutterError.presentError(details);
@@ -402,6 +393,12 @@ void main(List<String> args) async {
         Sentry.captureException(error, stackTrace: stack);
         return true;
       };
+
+      try {
+        await _prepareDesktopWindow();
+      } catch (e, s) {
+        await Sentry.captureException(e, stackTrace: s);
+      }
 
       runApp(SentryWidget(child: const MyApp()));
     },
@@ -1215,19 +1212,26 @@ class _MyHomePageState extends State<MyHomePage>
       });
       print('initializing node: $initResult');
       LoggerService().info('Init result: $initResult ------- ');
-    } catch (e) {
+    } catch (e, s) {
       print('Error initializing node: $e');
       LoggerService().error('Error initializing node', e);
+      await Sentry.captureException(e, stackTrace: s);
     }
   }
 
   void sendToWeb(Map<String, dynamic> data) {
     final json = jsonEncode(data);
     final script = 'window.onFlutterMessage($json);';
+    LoggerService().info('[WebView] sendToWeb type=${data['type']}');
     if (Platform.isWindows || Platform.isLinux) {
       _desktopController?.evaluateJavascript(source: script);
     } else {
-      _controller?.runJavaScript(script);
+      _controller?.runJavaScript(script).then((_) {
+        LoggerService().info('[WebView] runJavaScript OK type=${data['type']}');
+      }).catchError((e) {
+        LoggerService()
+            .error('[WebView] runJavaScript FAILED type=${data['type']}', e);
+      });
     }
   }
 
@@ -1334,8 +1338,9 @@ class _MyHomePageState extends State<MyHomePage>
           await _showBatteryOptimizationDialog();
         });
       }
-    } catch (e) {
-      LoggerService().error('Failed _asyncInit', e);
+    } catch (e, s) {
+      LoggerService().error('Failed _asyncInit', e, s);
+      await Sentry.captureException(e, stackTrace: s);
 
       setState(() {
         _isInitializing = false;
@@ -1670,7 +1675,7 @@ class _MyHomePageState extends State<MyHomePage>
             final url = _resolveMobileWebViewUrl(_mobileWebViewCurrentUrl);
             final isMainFrame = error.isForMainFrame != false;
             final message =
-                'WebView error: ${error.description} (${error.errorCode}) '
+                '[WebView] error: ${error.description} (${error.errorCode}) '
                 'type=${error.errorType} mainFrame=$isMainFrame url=$url';
 
             if (isMainFrame) {
@@ -1717,7 +1722,10 @@ class _MyHomePageState extends State<MyHomePage>
               });
             }
           },
-          onPageFinished: (_) {
+          onPageFinished: (url) {
+            LoggerService().info('[WebView] onPageFinished url=$url');
+            print('[WebView] onPageFinished url=$url');
+
             setState(() {
               _hasInitialWebViewContentLoaded = true;
               _isWebViewLoading = false;
@@ -1726,6 +1734,21 @@ class _MyHomePageState extends State<MyHomePage>
             unawaited(_syncConnectivityIcon());
 
             _mobileWebViewTimeoutRetryCount = 0;
+
+            // Fallback: if the web page never sends nodeInfo within 10s
+            // after loading, force-dismiss the overlay so the user can
+            // interact with the WebView content.
+            if (_isInitialNodeInfoLoading) {
+              LoggerService()
+                  .info('[WebView] starting nodeInfo fallback timer (10s)');
+              Future.delayed(const Duration(seconds: 10), () {
+                if (mounted && _isInitialNodeInfoLoading) {
+                  LoggerService().warning(
+                      '[WebView] nodeInfo timeout — force-dismissing overlay');
+                  _completeInitialNodeInfoFlow(didReceiveNodeInfo: true);
+                }
+              });
+            }
 
             // Disable context menu and right-click on mobile
             _controller?.runJavaScript('''

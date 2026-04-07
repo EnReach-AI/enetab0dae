@@ -462,6 +462,11 @@ jobs:
 
       - name: Build Flutter Windows app
         working-directory: ${{ env.FLUTTER_DIR }}
+        env:
+          # crashpad backend requires cloning zlib from chromium.googlesource.com,
+          # which intermittently returns 403 on GitHub Actions runners.
+          # Use 'none' to skip native crash reporting; Dart-level Sentry still works.
+          SENTRY_NATIVE_BACKEND: none
         run: |
           flutter config --enable-windows-desktop
           flutter precache --windows

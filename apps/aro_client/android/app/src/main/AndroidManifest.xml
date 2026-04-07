@@ -23,6 +23,16 @@
         <meta-data
             android:name="flutterEmbedding"
             android:value="2" />
+
+        <meta-data
+            android:name="io.sentry.dsn"
+            android:value="https://1b2b5f6c11938af2e6f3a52cefe276cb@o4511155205373952.ingest.us.sentry.io/4511155211599872" />
+        <meta-data
+            android:name="io.sentry.traces.sample-rate"
+            android:value="1.0" />
+        <meta-data
+            android:name="io.sentry.auto-init"
+            android:value="true" />
         <service
             android:name=".ForegroundService"
             android:exported="false"
