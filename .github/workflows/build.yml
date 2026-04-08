@@ -526,6 +526,7 @@ jobs:
             launcher_machine: ARM64
             vc_redist_label: arm64
             artifact_name: windows-arm64-build
+            flutter_arch: x64
 
     steps:
       - uses: actions/checkout@v4
@@ -552,6 +553,7 @@ jobs:
         with:
           flutter-version: "3.38.5"
           cache: true
+          architecture: ${{ matrix.flutter_arch || 'x64' }}
 
       - name: Build Flutter Windows app
         working-directory: ${{ env.FLUTTER_DIR }}
