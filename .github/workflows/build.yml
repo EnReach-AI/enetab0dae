@@ -261,20 +261,35 @@ jobs:
           go env -w GOPRIVATE=github.com/aro-network/*
           git config --global url."git@github.com:".insteadOf "https://github.com/"
 
-      - name: Install llvm-mingw (ARM64 cross-compiler)
-        run: |
-          LLVM_MINGW_VERSION="20260407"
-          LLVM_MINGW_URL="https://github.com/mstorsjo/llvm-mingw/releases/download/${LLVM_MINGW_VERSION}/llvm-mingw-${LLVM_MINGW_VERSION}-ucrt-ubuntu-22.04-x86_64.tar.xz"
-          curl -fSL "$LLVM_MINGW_URL" -o /tmp/llvm-mingw.tar.xz
-          sudo tar xf /tmp/llvm-mingw.tar.xz -C /opt
-          echo "/opt/llvm-mingw-${LLVM_MINGW_VERSION}-ucrt-ubuntu-22.04-x86_64/bin" >> $GITHUB_PATH
+      - name: Install Zig (ARM64 cross-compiler)
+        uses: mlugg/setup-zig@v2
+        with:
+          version: 0.14.0
 
       - name: Build Windows ARM64
         run: |
+          # Create zig cc wrapper for Go CGO compatibility
+          # Zig handles MinGW/GCC runtime internally, so filter out those linker flags
+          cat > /tmp/zcc-aarch64-w64 <<'WRAPPER'
+          #!/bin/bash
+          args=()
+          for arg in "$@"; do
+            case "$arg" in
+              -lgcc|-lgcc_s|-lgcc_eh|-lmingwex|-lmingw32|-lmsvcrt|-lucrtbase|-lpthread)
+                ;;
+              *)
+                args+=("$arg")
+                ;;
+            esac
+          done
+          exec zig cc -target aarch64-windows-gnu "${args[@]}"
+          WRAPPER
+          chmod +x /tmp/zcc-aarch64-w64
+
           cd core
-          CC=aarch64-w64-mingw32-gcc CGO_ENABLED=1 GOOS=windows GOARCH=arm64 go build \
+          CC=/tmp/zcc-aarch64-w64 CGO_ENABLED=1 GOOS=windows GOARCH=arm64 go build \
             -buildmode=c-shared -trimpath \
-            -ldflags="-s -w -buildid= -extldflags '-static-libgcc'" \
+            -ldflags="-s -w -buildid=" \
             -o ../plugins/windows-arm64/libstudy.dll ./pkg/libstudy
           ls -lh ../plugins/windows-arm64/libstudy.dll
 
@@ -486,15 +501,15 @@ jobs:
     needs: [prepare, build-core-windows, build-core-windows-arm64]
     if: needs.prepare.outputs.build_core == 'true'
     name: Build Windows (${{ matrix.arch }})
-    runs-on: windows-latest
+    runs-on: ${{ matrix.runner }}
     strategy:
       fail-fast: false
       matrix:
         include:
           - arch: x64
+            runner: windows-latest
             msvc_arch: ""
             core_artifact: libstudy-windows
-            flutter_target: ""
             release_dir: build\windows\x64\runner\Release
             crt_arch: x64
             vswhere_component: Microsoft.VisualStudio.Component.VC.Tools.x86.x64
@@ -502,9 +517,9 @@ jobs:
             vc_redist_label: x64
             artifact_name: windows-x64-build
           - arch: arm64
-            msvc_arch: amd64_arm64
+            runner: windows-11-arm
+            msvc_arch: ""
             core_artifact: libstudy-windows-arm64
-            flutter_target: "--target-platform windows-arm64"
             release_dir: build\windows\arm64\runner\Release
             crt_arch: arm64
             vswhere_component: Microsoft.VisualStudio.Component.VC.Tools.ARM64
@@ -565,7 +580,7 @@ jobs:
             }
           }
 
-          flutter build windows --release ${{ matrix.flutter_target }}
+          flutter build windows --release
 
       - name: Copy DLL next to executable
         working-directory: ${{ env.FLUTTER_DIR }}
