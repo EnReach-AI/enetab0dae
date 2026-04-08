@@ -71,8 +71,8 @@ class StudyBindings {
       _nodeReportBaseInfo ??= _tryLookup(
         _lib,
         'NodeReportBaseInfo',
-        (lib) => lib
-            .lookupFunction<NodeReportBaseInfoC, NodeReportBaseInfoDart>(
+        (lib) =>
+            lib.lookupFunction<NodeReportBaseInfoC, NodeReportBaseInfoDart>(
                 'NodeReportBaseInfo'),
       )!;
 
@@ -88,16 +88,15 @@ class StudyBindings {
   static GetRewardsDart get getRewards => _getRewards ??= _tryLookup(
         _lib,
         'GetRewards',
-        (lib) =>
-            lib.lookupFunction<GetRewardsC, GetRewardsDart>('GetRewards'),
+        (lib) => lib.lookupFunction<GetRewardsC, GetRewardsDart>('GetRewards'),
       )!;
 
   static InitLibstudyDart? _initLibstudy;
   static InitLibstudyDart get initLibstudy => _initLibstudy ??= _tryLookup(
         _lib,
         'InitLibstudy',
-        (lib) => lib
-            .lookupFunction<InitLibstudyC, InitLibstudyDart>('InitLibstudy'),
+        (lib) =>
+            lib.lookupFunction<InitLibstudyC, InitLibstudyDart>('InitLibstudy'),
       )!;
 
   static GetCurrentVersionDart? _getCurrentVersion;
@@ -105,9 +104,8 @@ class StudyBindings {
       _getCurrentVersion ??= _tryLookup(
         _lib,
         'GetCurrentVersion',
-        (lib) => lib
-            .lookupFunction<GetCurrentVersionC, GetCurrentVersionDart>(
-                'GetCurrentVersion'),
+        (lib) => lib.lookupFunction<GetCurrentVersionC, GetCurrentVersionDart>(
+            'GetCurrentVersion'),
       )!;
 
   static GetLastVersionDart? _getLastVersion;

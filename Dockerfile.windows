@@ -6,10 +6,23 @@ RUN apk add --no-cache mingw-w64-gcc
 WORKDIR /build
 COPY core /build
 
+# Windows amd64
 RUN CC=x86_64-w64-mingw32-gcc CGO_ENABLED=1 GOOS=windows GOARCH=amd64 go build \
     -buildmode=c-shared -trimpath \
     -ldflags="-s -w -extldflags '-static-libgcc'" \
-    -o /build/libstudy.dll ./pkg/libstudy && \
-    cp /build/pkg/libstudy/libstudy.h /build/
+    -o /build/libstudy_amd64.dll ./pkg/libstudy
+
+# Windows arm64 (requires llvm-mingw)
+RUN apk add --no-cache llvm-mingw || true
+RUN if command -v aarch64-w64-mingw32-gcc >/dev/null 2>&1; then \
+      CC=aarch64-w64-mingw32-gcc CGO_ENABLED=1 GOOS=windows GOARCH=arm64 go build \
+        -buildmode=c-shared -trimpath \
+        -ldflags="-s -w -extldflags '-static-libgcc'" \
+        -o /build/libstudy_arm64.dll ./pkg/libstudy; \
+    else \
+      echo "aarch64-w64-mingw32-gcc not available, skipping Windows ARM64 build"; \
+    fi
+
+RUN cp /build/pkg/libstudy/libstudy.h /build/
 
 CMD ["echo", "Windows build complete"]

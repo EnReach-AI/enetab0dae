@@ -954,8 +954,6 @@ class _MyHomePageState extends State<MyHomePage>
     print('messagehandleWebMessage $message');
     LoggerService().info('Received web message: $message');
 
-    final appVersionPayload = await _getAppVersionPayload();
-    print('getAppVersion $appVersionPayload');
     // Try to decode JSON messages from the web first
     Map<String, dynamic>? msgMap;
     try {
