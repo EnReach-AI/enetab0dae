@@ -480,7 +480,7 @@ jobs:
             if (Test-Path $cmakePath) {
               $stub = @"
           cmake_minimum_required(VERSION 3.14)
-          file(WRITE "`${CMAKE_CURRENT_BINARY_DIR}/sentry_stub.c" "void sentry_stub(void) {}")
+          file(WRITE "`${CMAKE_CURRENT_BINARY_DIR}/sentry_stub.c" "__declspec(dllexport) void sentry_stub(void) {}")
           add_library(sentry_flutter_plugin SHARED "`${CMAKE_CURRENT_BINARY_DIR}/sentry_stub.c")
           target_include_directories(sentry_flutter_plugin PUBLIC "`${CMAKE_CURRENT_LIST_DIR}")
           set(sentry_flutter_bundled_libraries "" PARENT_SCOPE)
