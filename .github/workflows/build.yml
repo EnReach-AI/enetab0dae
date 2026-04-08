@@ -237,74 +237,6 @@ jobs:
           name: libstudy-windows
           path: plugins/windows/
 
-  build-core-windows-arm64:
-    needs: prepare
-    if: needs.prepare.outputs.build_core == 'true'
-    name: Build Core Windows ARM64
-    runs-on: ubuntu-latest
-
-    steps:
-      - uses: actions/checkout@v3
-
-      - name: Set up SSH key for private repos
-        uses: webfactory/ssh-agent@v0.9.0
-        with:
-          ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
-
-      - name: Set up Go
-        uses: actions/setup-go@v4
-        with:
-          go-version: "1.25"
-
-      - name: Configure private repository access
-        run: |
-          go env -w GOPRIVATE=github.com/aro-network/*
-          git config --global url."git@github.com:".insteadOf "https://github.com/"
-
-      - name: Install Zig (ARM64 cross-compiler)
-        uses: mlugg/setup-zig@v2
-        with:
-          version: 0.14.0
-
-      - name: Build Windows ARM64
-        run: |
-          # Create zig cc wrapper for Go CGO compatibility
-          # Zig handles MinGW/GCC runtime internally, so filter out those linker flags
-          cat > /tmp/zcc-aarch64-w64 <<'WRAPPER'
-          #!/bin/bash
-          args=()
-          for arg in "$@"; do
-            case "$arg" in
-              -lgcc|-lgcc_s|-lgcc_eh|-lmingwex|-lmingw32|-lmsvcrt|-lucrtbase|-lpthread)
-                ;;
-              *)
-                args+=("$arg")
-                ;;
-            esac
-          done
-          exec zig cc -target aarch64-windows-gnu "${args[@]}"
-          WRAPPER
-          chmod +x /tmp/zcc-aarch64-w64
-
-          cd core
-          CC=/tmp/zcc-aarch64-w64 CGO_ENABLED=1 GOOS=windows GOARCH=arm64 go build \
-            -buildmode=c-shared -trimpath \
-            -ldflags="-s -w -buildid=" \
-            -o ../plugins/windows-arm64/libstudy.dll ./pkg/libstudy
-          ls -lh ../plugins/windows-arm64/libstudy.dll
-
-      - name: Copy library to Flutter FFI directory
-        run: |
-          mkdir -p apps/aro_client/lib/ffi/windows-arm64
-          cp plugins/windows-arm64/libstudy.dll apps/aro_client/lib/ffi/windows-arm64/
-          ls -lh apps/aro_client/lib/ffi/windows-arm64/libstudy.dll
-
-      - name: Upload artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: libstudy-windows-arm64
-          path: plugins/windows-arm64/
-
   build-core-macos-arm64:
     needs: prepare
     if: needs.prepare.outputs.build_core == 'true'
@@ -498,51 +430,25 @@ jobs:
   # ============================================================
 
   build-windows:
-    needs: [prepare, build-core-windows, build-core-windows-arm64]
+    needs: [prepare, build-core-windows]
     if: needs.prepare.outputs.build_core == 'true'
-    name: Build Windows (${{ matrix.arch }})
-    runs-on: ${{ matrix.runner }}
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - arch: x64
-            runner: windows-latest
-            msvc_arch: ""
-            core_artifact: libstudy-windows
-            release_dir: build\windows\x64\runner\Release
-            crt_arch: x64
-            vswhere_component: Microsoft.VisualStudio.Component.VC.Tools.x86.x64
-            launcher_machine: X64
-            vc_redist_label: x64
-            artifact_name: windows-x64-build
-          - arch: arm64
-            runner: windows-11-arm
-            msvc_arch: ""
-            core_artifact: libstudy-windows-arm64
-            release_dir: build\windows\arm64\runner\Release
-            crt_arch: arm64
-            vswhere_component: Microsoft.VisualStudio.Component.VC.Tools.ARM64
-            launcher_machine: ARM64
-            vc_redist_label: arm64
-            artifact_name: windows-arm64-build
-            flutter_arch: x64
-
+    name: Build Windows
+    runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
 
       - name: Install Visual Studio Build Tools
         uses: ilammy/msvc-dev-cmd@v1
-        with:
-          arch: ${{ matrix.msvc_arch || 'x64' }}
 
-      - name: Download Windows DLL
+      - name: Download Windows DLL if build_core is true
+        if: needs.prepare.outputs.build_core == 'true'
         uses: actions/download-artifact@v4
         with:
-          name: ${{ matrix.core_artifact }}
+          name: libstudy-windows
           path: windows-dll
 
       - name: Copy DLL to project
+        if: needs.prepare.outputs.build_core == 'true'
         run: |
           if (Test-Path "windows-dll/libstudy.dll") {
             New-Item -ItemType Directory -Force -Path "${{ env.FLUTTER_DIR }}/lib/ffi/windows"
@@ -553,7 +459,6 @@ jobs:
         with:
           flutter-version: "3.38.5"
           cache: true
-          architecture: ${{ matrix.flutter_arch || 'x64' }}
 
       - name: Build Flutter Windows app
         working-directory: ${{ env.FLUTTER_DIR }}
@@ -563,7 +468,10 @@ jobs:
           flutter clean
           flutter pub get
 
-          # Patch sentry_flutter native SDK (crashpad zlib clone fails on GH Actions)
+          # Sentry native SDK (crashpad) requires cloning zlib from
+          # chromium.googlesource.com which returns 403 on GitHub Actions.
+          # Patch the CMakeLists.txt directly in the pub cache (where all
+          # plugin_symlinks point to). Dart-level Sentry is unaffected.
           $pubCache = if ($env:PUB_CACHE) { $env:PUB_CACHE } else { "$env:LOCALAPPDATA\Pub\Cache" }
           $sentryPkg = Get-ChildItem -Path "$pubCache\hosted\pub.dev" -Directory -Filter "sentry_flutter-*" |
                        Sort-Object Name -Descending | Select-Object -First 1
@@ -579,46 +487,53 @@ jobs:
           "@
               Set-Content -Path $cmakePath -Value $stub
               Write-Host "Patched $cmakePath (sentry native SDK disabled)"
+            } else {
+              Write-Host "WARNING: sentry_flutter Windows CMakeLists.txt not found at $cmakePath"
             }
+          } else {
+            Write-Host "WARNING: sentry_flutter package not found in pub cache at $pubCache"
           }
 
           flutter build windows --release
 
       - name: Copy DLL next to executable
+        if: needs.prepare.outputs.build_core == 'true'
         working-directory: ${{ env.FLUTTER_DIR }}
         run: |
           if (Test-Path "lib/ffi/windows/libstudy.dll") {
-            Copy-Item "lib/ffi/windows/libstudy.dll" -Destination "${{ matrix.release_dir }}\" -Force
+            Copy-Item "lib/ffi/windows/libstudy.dll" -Destination "build\windows\x64\runner\Release\" -Force
           }
 
       - name: Bundle VC++ Runtime DLLs (app-local deployment)
         working-directory: ${{ env.FLUTTER_DIR }}
         run: |
-          $releaseDir = "${{ matrix.release_dir }}"
+          # Microsoft officially supports "app-local deployment" — shipping MSVC CRT
+          # DLLs beside the exe. This eliminates the need for users to install the
+          # VC++ Redistributable at all.
+          $releaseDir = "build\windows\x64\runner\Release"
 
+          # Locate the VC++ Redist merge modules directory via vswhere
           $vsPath = & "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe" `
-            -latest -requires ${{ matrix.vswhere_component }} `
+            -latest -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 `
             -property installationPath 2>$null
-          if (-not $vsPath) {
-            $vsPath = & "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe" `
-              -latest -property installationPath 2>$null
-          }
           if (-not $vsPath) {
             Write-Host "WARNING: Could not locate Visual Studio installation" -ForegroundColor Yellow
             exit 0
           }
 
+          # Find the latest MSVC toolset version
           $redistBase = Join-Path $vsPath "VC\Redist\MSVC"
           if (-not (Test-Path $redistBase)) {
-            Write-Host "WARNING: VC++ Redist directory not found" -ForegroundColor Yellow
+            Write-Host "WARNING: VC++ Redist directory not found at $redistBase" -ForegroundColor Yellow
             exit 0
           }
           $latestVer = Get-ChildItem -Path $redistBase -Directory |
                        Where-Object { $_.Name -match '^\d+\.\d+' } |
                        Sort-Object Name -Descending | Select-Object -First 1
-          $crtDir = Join-Path $latestVer.FullName "${{ matrix.crt_arch }}\Microsoft.VC143.CRT"
+          $crtDir = Join-Path $latestVer.FullName "x64\Microsoft.VC143.CRT"
           if (-not (Test-Path $crtDir)) {
-            $crtDir = Join-Path $latestVer.FullName "${{ matrix.crt_arch }}\Microsoft.VC142.CRT"
+            # Fallback: try VC142 (VS 2019)
+            $crtDir = Join-Path $latestVer.FullName "x64\Microsoft.VC142.CRT"
           }
           if (-not (Test-Path $crtDir)) {
             Write-Host "WARNING: CRT directory not found" -ForegroundColor Yellow
@@ -645,6 +560,8 @@ jobs:
       - name: Build pre-launch checker
         working-directory: ${{ env.FLUTTER_DIR }}
         run: |
+          # Build a tiny static-linked exe that checks DLL deps before launching
+          # the real app. Uses /MT so it has ZERO external dependencies itself.
           $launcherSrc = @'
           #define WIN32_LEAN_AND_MEAN
           #include <windows.h>
@@ -676,19 +593,20 @@ jobs:
                   sprintf_s(msg, sizeof(msg),
                       "ARO Desktop cannot start because the following DLLs are missing:\n\n"
                       "%s\n\n"
-                      "Please install the Visual C++ 2015-2022 Redistributable:\n"
-                      "https://aka.ms/vs/17/release/vc_redist.${{ matrix.vc_redist_label }}.exe\n\n"
-                      "Or run:  winget install Microsoft.VCRedist.2015+.${{ matrix.vc_redist_label }}",
+                      "Please install the Visual C++ 2015-2022 Redistributable (x64):\n"
+                      "https://aka.ms/vs/17/release/vc_redist.x64.exe\n\n"
+                      "Or run:  winget install Microsoft.VCRedist.2015+.x64",
                       missing);
                   int r = MessageBoxA(NULL, msg, "ARO Desktop - Missing Dependencies",
                                       MB_OKCANCEL | MB_ICONERROR);
                   if (r == IDOK) {
                       ShellExecuteA(NULL, "open",
-                                    "https://aka.ms/vs/17/release/vc_redist.${{ matrix.vc_redist_label }}.exe",
+                                    "https://aka.ms/vs/17/release/vc_redist.x64.exe",
                                     NULL, NULL, SW_SHOWNORMAL);
                   }
                   return 1;
               }
+              /* Launch the real app */
               char dir[MAX_PATH];
               GetModuleFileNameA(NULL, dir, MAX_PATH);
               char* slash = strrchr(dir, '\\');
@@ -708,17 +626,22 @@ jobs:
           $srcFile = "build\aro_launcher.c"
           $rcFile  = "build\aro_launcher.rc"
           $resFile = "build\aro_launcher.res"
-          $outFile = "${{ matrix.release_dir }}\aro_launcher.exe"
+          $outFile = "build\windows\x64\runner\Release\aro_launcher.exe"
           Set-Content -Path $srcFile -Value $launcherSrc
 
+          # Create a resource file that embeds the app icon into the exe.
+          # IDI_ICON1 (id=1) is the icon Windows uses for the exe in Explorer
+          # and desktop shortcuts.
           $icoPath = (Resolve-Path "windows\runner\resources\app_icon.ico").Path -replace '\\','\\'
           Set-Content -Path $rcFile -Value "1 ICON `"$icoPath`""
           rc.exe /nologo /fo $resFile $rcFile
 
-          cl.exe /nologo /O2 /MT /Fe:$outFile $srcFile $resFile /link shell32.lib user32.lib /SUBSYSTEM:WINDOWS /MACHINE:${{ matrix.launcher_machine }}
+          # Compile with static CRT (/MT) — zero external DLL dependencies
+          cl.exe /nologo /O2 /MT /Fe:$outFile $srcFile $resFile /link shell32.lib user32.lib /SUBSYSTEM:WINDOWS
 
           if (Test-Path $outFile) {
-            Write-Host "Built aro_launcher.exe (${{ matrix.arch }}, static CRT)" -ForegroundColor Green
+            Write-Host "Built aro_launcher.exe (static CRT)" -ForegroundColor Green
+            # Show that it has no CRT deps
             dumpbin /DEPENDENTS $outFile | Select-String '\.dll'
           } else {
             Write-Host "WARNING: Failed to build launcher" -ForegroundColor Yellow
@@ -727,14 +650,21 @@ jobs:
       - name: Audit DLL dependencies
         working-directory: ${{ env.FLUTTER_DIR }}
         run: |
-          $releaseDir = "${{ matrix.release_dir }}"
+          # Recursively scan all EXE/DLL in the Release folder and report any
+          # dependency that is NOT bundled and NOT a known Windows system DLL.
+          $releaseDir = "build\windows\x64\runner\Release"
 
+          # dartjni.dll is from the `jni` Dart package (Java Native Interface)
+          # — only relevant on Android. Flutter's build may bundle it on
+          # Windows where no JVM exists, so remove it before the audit.
           Get-ChildItem -Path $releaseDir -Recurse -Filter "dartjni.dll" |
             ForEach-Object {
               Write-Host "Removing Android-only $($_.Name) from Release bundle"
               Remove-Item $_.FullName -Force
             }
 
+          # Known Windows system DLLs that are guaranteed present on Windows 10+.
+          # Matches are case-insensitive.
           $systemDlls = @(
             'kernel32.dll','ntdll.dll','user32.dll','gdi32.dll','advapi32.dll',
             'shell32.dll','ole32.dll','oleaut32.dll','comctl32.dll','comdlg32.dll',
@@ -779,61 +709,33 @@ jobs:
             }
           }
 
-          Write-Host "===== DLL Dependency Audit (${{ matrix.arch }}) =====" -ForegroundColor Cyan
+          Write-Host "===== DLL Dependency Audit =====" -ForegroundColor Cyan
           Write-Host "Scanned $($binaries.Count) binaries in $releaseDir"
           if ($missing.Count -gt 0) {
             Write-Host ""
-            Write-Host "WARNING: Missing DLL dependencies:" -ForegroundColor Red
+            Write-Host "WARNING: The following DLL dependencies are NOT bundled and NOT known system DLLs:" -ForegroundColor Red
             $missing | Format-Table -AutoSize
+            Write-Host ""
+            Write-Host "These DLLs must be bundled or installed via VC++ Redistributable / WebView2." -ForegroundColor Yellow
+            # Fail the build if any non-system DLL is missing from the bundle.
+            # CRT DLLs are now bundled app-locally, so nothing should be missing.
             exit 1
           } else {
             Write-Host "All dependencies satisfied." -ForegroundColor Green
           }
 
-      - name: Upload Windows ${{ matrix.arch }} build
-        uses: actions/upload-artifact@v4
-        with:
-          name: ${{ matrix.artifact_name }}
-          path: ${{ env.FLUTTER_DIR }}/${{ matrix.release_dir }}/
-
-  package-windows-installer:
-    needs: [prepare, build-windows]
-    if: needs.prepare.outputs.build_core == 'true'
-    name: Package Windows Installer (x64 + ARM64)
-    runs-on: windows-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Download Windows x64 build
-        uses: actions/download-artifact@v4
-        with:
-          name: windows-x64-build
-          path: staging/x64
-
-      - name: Download Windows ARM64 build
-        uses: actions/download-artifact@v4
-        with:
-          name: windows-arm64-build
-          path: staging/arm64
-
-      - name: Verify downloads
-        run: |
-          Write-Host "=== x64 build ===" -ForegroundColor Cyan
-          Get-ChildItem -Path staging/x64 -Recurse | Select-Object FullName, Length
-          Write-Host "=== ARM64 build ===" -ForegroundColor Cyan
-          Get-ChildItem -Path staging/arm64 -Recurse | Select-Object FullName, Length
-
       - name: Install Inno Setup
         run: |
           choco install innosetup -y
-
-      - name: Create unified installer script
+      - name: Create installer script
+        working-directory: ${{ env.FLUTTER_DIR }}
         run: |
           $installerScript = @"
           #define MyAppName "ARO Desktop"
           #define MyAppVersion "1.0.0"
           #define MyAppExeName "aro_desktop.exe"
           #define MyAppMutexName "AROClientMutex"
+          #define SourcePath ".\build\windows\x64\runner\Release\"
 
           [Setup]
           AppId={{12345678-1234-1234-1234-123456789012}
@@ -848,9 +750,7 @@ jobs:
           Compression=lzma
           SolidCompression=yes
           PrivilegesRequired=lowest
-          ; Allow installer to run on both x64 and ARM64 Windows
-          ArchitecturesAllowed=x64compatible arm64
-          ArchitecturesInstallIn64BitMode=x64compatible arm64
+          ArchitecturesInstallIn64BitMode=x64
           DisableDirPage=no
           AllowUNCPath=no
           AllowNoIcons=yes
@@ -859,6 +759,9 @@ jobs:
           Uninstallable=yes
 
           ; IMPORTANT: We want to BLOCK uninstall when the app is running.
+          ; If CloseApplications is enabled, Windows Restart Manager may close
+          ; the app before InitializeUninstall() runs, making it look like
+          ; uninstall is allowed.
           CloseApplications=no
           RestartApplications=no
 
@@ -869,14 +772,13 @@ jobs:
           Name: "desktopicon"; Description: "Create a desktop icon"; GroupDescription: "Additional icons";
           Name: "quicklaunchicon"; Description: "Create a Quick Launch icon"; GroupDescription: "Additional icons"; Flags: unchecked; OnlyBelowVersion: 6.1
           Name: "startmenu"; Description: "Create Start Menu shortcuts"; GroupDescription: "Additional icons";
-          Name: "autostart"; Description: "Run at startup"; GroupDescription: "Launch options";
+          Name: "autostart"; Description: "Run at startup"; GroupDescription: "Launch options"; 
           Name: "contextmenu"; Description: "Add context menu shortcuts"; GroupDescription: "Shell integration";
 
+
+
           [Files]
-          ; Install x64 files on x64 systems
-          Source: "staging\x64\*"; DestDir: "{app}"; Check: not IsArm64; Flags: ignoreversion recursesubdirs createallsubdirs
-          ; Install ARM64 files on native ARM64 systems
-          Source: "staging\arm64\*"; DestDir: "{app}"; Check: IsArm64; Flags: ignoreversion recursesubdirs createallsubdirs solidbreak
+          Source: "{#SourcePath}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
 
           [Icons]
           Name: "{group}\{#MyAppName}"; Filename: "{app}\aro_launcher.exe"
@@ -893,12 +795,14 @@ jobs:
           Root: "HKCU"; Subkey: "Software\Classes\*\shell\Open with {#MyAppName}\command"; ValueType: string; ValueData: """{app}\{#MyAppExeName}"" ""%1"""; Tasks: contextmenu
 
           [UninstallDelete]
-          Type: filesandordirs; Name: "{userappdata}\com.aro\ARO Desktop"
-          Type: filesandordirs; Name: "{localappdata}\com.aro\ARO Desktop"
-          Type: filesandordirs; Name: "{userappdata}\com.aro\aro_client"
-          Type: filesandordirs; Name: "{localappdata}\com.aro\aro_client"
-          Type: dirifempty; Name: "{userappdata}\com.aro"
-          Type: dirifempty; Name: "{localappdata}\com.aro"
+           ; Remove app data stored under vendor folder (best-effort)
+           Type: filesandordirs; Name: "{userappdata}\com.aro\ARO Desktop"
+           Type: filesandordirs; Name: "{localappdata}\com.aro\ARO Desktop"
+           Type: filesandordirs; Name: "{userappdata}\com.aro\aro_client"
+           Type: filesandordirs; Name: "{localappdata}\com.aro\aro_client"
+           ; Remove vendor folder only if empty (avoid deleting other apps' data)
+           Type: dirifempty; Name: "{userappdata}\com.aro"
+           Type: dirifempty; Name: "{localappdata}\com.aro"
           Type: dirifempty; Name: "{app}"
 
           [Code]
@@ -917,6 +821,9 @@ jobs:
             Text :=
               '{#MyAppName} is currently running and cannot be uninstalled.' + #13#10 + #13#10 +
               'Please quit/close {#MyAppName} (including the system tray icon), then run the uninstaller again.';
+
+            { Use Win32 MessageBoxW so the message still appears even when the
+              uninstaller is launched with /SUPPRESSMSGBOXES (quiet uninstall flows). }
             MessageBoxW(0, Text, '{#MyAppName}', MB_OK or MB_ICONINFORMATION_FLAG or MB_TOPMOST_FLAG);
           end;
 
@@ -926,9 +833,12 @@ jobs:
             Cmd: string;
           begin
             Result := False;
+
+            { Locale/encoding-independent check: rely on exit code only }
             Cmd :=
               'tasklist /FI "IMAGENAME eq ' + ProcessName + '" /NH '
               + '| find /I "' + ProcessName + '" >nul';
+
             if Exec('cmd.exe', '/c ' + Cmd, '', SW_HIDE, ewWaitUntilTerminated, ResultCode) then
               Result := ResultCode = 0;
           end;
@@ -948,22 +858,22 @@ jobs:
               Result := False;
               exit;
             end;
+
             Result := True;
           end;
           "@
 
           Set-Content -Path "aro_installer.iss" -Value $installerScript
-
-      - name: Build unified installer with Inno Setup
+      - name: Build installer with Inno Setup
+        working-directory: ${{ env.FLUTTER_DIR }}
         run: |
           & "C:\Program Files (x86)\Inno Setup 6\iscc.exe" aro_installer.iss
-
       - name: Upload Windows Installer
         uses: actions/upload-artifact@v4
         with:
           name: windows-installer
-          path: AROClient-Setup.exe
-          if-no-files-found: error
+          path: ${{ env.FLUTTER_DIR }}/AROClient-Setup.exe
+          if-no-files-found: warn
 
   build-linux2:
     needs: [prepare, build-core-linux, build-core-linux-arm64]
