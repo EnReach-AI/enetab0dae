@@ -645,6 +645,15 @@ jobs:
           # dependency that is NOT bundled and NOT a known Windows system DLL.
           $releaseDir = "build\windows\x64\runner\Release"
 
+          # dartjni.dll is from the `jni` Dart package (Java Native Interface)
+          # — only relevant on Android. Flutter's build may bundle it on
+          # Windows where no JVM exists, so remove it before the audit.
+          Get-ChildItem -Path $releaseDir -Recurse -Filter "dartjni.dll" |
+            ForEach-Object {
+              Write-Host "Removing Android-only $($_.Name) from Release bundle"
+              Remove-Item $_.FullName -Force
+            }
+
           # Known Windows system DLLs that are guaranteed present on Windows 10+.
           # Matches are case-insensitive.
           $systemDlls = @(
