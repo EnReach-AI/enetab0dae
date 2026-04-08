@@ -624,11 +624,20 @@ jobs:
           '@
 
           $srcFile = "build\aro_launcher.c"
+          $rcFile  = "build\aro_launcher.rc"
+          $resFile = "build\aro_launcher.res"
           $outFile = "build\windows\x64\runner\Release\aro_launcher.exe"
           Set-Content -Path $srcFile -Value $launcherSrc
 
+          # Create a resource file that embeds the app icon into the exe.
+          # IDI_ICON1 (id=1) is the icon Windows uses for the exe in Explorer
+          # and desktop shortcuts.
+          $icoPath = (Resolve-Path "windows\runner\resources\app_icon.ico").Path -replace '\\','\\'
+          Set-Content -Path $rcFile -Value "1 ICON `"$icoPath`""
+          rc.exe /nologo /fo $resFile $rcFile
+
           # Compile with static CRT (/MT) — zero external DLL dependencies
-          cl.exe /nologo /O2 /MT /Fe:$outFile $srcFile /link shell32.lib user32.lib /SUBSYSTEM:WINDOWS
+          cl.exe /nologo /O2 /MT /Fe:$outFile $srcFile $resFile /link shell32.lib user32.lib /SUBSYSTEM:WINDOWS
 
           if (Test-Path $outFile) {
             Write-Host "Built aro_launcher.exe (static CRT)" -ForegroundColor Green
