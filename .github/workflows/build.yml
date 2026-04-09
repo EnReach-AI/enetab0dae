@@ -221,7 +221,7 @@ jobs:
           cd core
           CC=x86_64-w64-mingw32-gcc CGO_ENABLED=1 GOOS=windows GOARCH=amd64 go build \
             -buildmode=c-shared -trimpath \
-            -ldflags="-s -w -buildid= -extldflags '-static-libgcc'" \
+            -ldflags="-s -w -buildid= -extldflags '-static'" \
             -o ../plugins/windows/libstudy.dll ./pkg/libstudy
           ls -lh ../plugins/windows/libstudy.dll
 

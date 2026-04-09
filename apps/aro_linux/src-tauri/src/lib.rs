@@ -824,6 +824,13 @@ const FLUTTER_COMPAT_BRIDGE_JS: &str = r#"
           return;
         }
 
+        if (messageType === 'getAppVersion') {
+          const resp = await invoke('get_app_version');
+          const map = safeJsonParse(resp);
+          sendToWeb({ type: 'getAppVersion', payload: map });
+          return;
+        }
+
        
       } catch (e) {
         sendError(e);
@@ -2230,6 +2237,7 @@ pub fn run() {
       get_node_stat,
       get_rewards,
       // get_ws_client_status,
+      get_app_version,
       get_current_version,
       get_last_version,
       libstudy_info,
@@ -2532,6 +2540,25 @@ async fn get_rewards() -> Result<String, String> {
   println!("[get_rewards] response={resp}");
   log::info!("get_rewards response={resp}");
   Ok(resp)
+}
+
+#[tauri::command]
+async fn get_app_version(app: tauri::AppHandle) -> Result<String, String> {
+  let version = app.config().version.clone().unwrap_or_default();
+  let app_name = app.config().product_name.clone().unwrap_or_default();
+  let identifier = app.config().identifier.clone();
+  let payload = serde_json::json!({
+    "code": 200,
+    "data": {
+      "appName": app_name,
+      "packageName": identifier,
+      "version": version,
+      "buildNumber": version,
+    }
+  });
+  println!("[get_app_version] response={payload}");
+  log::info!("get_app_version response={payload}");
+  Ok(payload.to_string())
 }
 
 #[tauri::command]
