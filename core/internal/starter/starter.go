@@ -3,6 +3,7 @@ package starter
 import (
 	"context"
 	"log"
+	"math/rand"
 	"time"
 
 	internalService "aro-ext-app/core/internal/agent_service"
@@ -26,9 +27,12 @@ var cfg = config.GetConfig()
 const (
 	pollInterval      = 30 * time.Second
 	errorRetryDelay   = 30 * time.Second
-	bindCheckInterval = 30 * time.Second
 	maxBindCheckError = 5
 )
+
+// 已绑定后的绑定/BanIP 状态轮询间隔: 60s 基础 + 每进程 0~20s 随机偏移, 打散全网客户端的 /keeper/report 请求。
+// 后端对同一节点 60s 内只写一次库(KEEPER_REPORT_THROTTLE_SEC), 更密的轮询只会增加入口负载。
+var bindCheckInterval = 60*time.Second + time.Duration(rand.Intn(21))*time.Second
 
 func RunBackendThread() {
 

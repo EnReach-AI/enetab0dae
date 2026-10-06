@@ -200,23 +200,27 @@ func GetLastVersion(program constant.OtaProgram, env string) (*APIResponse, erro
 	}
 
 	path := fmt.Sprintf("/api/keeper/ota/%s/%s/%d/%s/lastest", program, env, isa, runtime.GOOS)
-	backendService := NewBackendService(agentConstant.DEVICE_INFO)
-	log.Printf("GetLastVersion params: program=%s, env=%s, isa=%d, os=%s, path=%s", program, env, isa, runtime.GOOS, path)
-	apiResponse, err := backendService.get(path)
-	if err != nil {
-		return nil, err
-	}
-	log.Printf("getLastVersion apiResponse:%+v", apiResponse)
-	return apiResponse, nil
+	return cachedGet("lastVersion:"+path, lastVersionCacheTTL, func() (*APIResponse, error) {
+		backendService := NewBackendService(agentConstant.DEVICE_INFO)
+		log.Printf("GetLastVersion params: program=%s, env=%s, isa=%d, os=%s, path=%s", program, env, isa, runtime.GOOS, path)
+		apiResponse, err := backendService.get(path)
+		if err != nil {
+			return nil, err
+		}
+		log.Printf("getLastVersion apiResponse:%+v", apiResponse)
+		return apiResponse, nil
+	})
 }
 
 func GetRewards() (*APIResponse, error) {
-	backendService := NewBackendService(agentConstant.DEVICE_INFO)
-	apiResponse, err := backendService.get("/api/keeper/rewards")
-	if err != nil {
-		return nil, err
-	}
-	return apiResponse, nil
+	return cachedGet("rewards:"+agentConstant.DEVICE_INFO.SerialNumber, rewardsCacheTTL, func() (*APIResponse, error) {
+		backendService := NewBackendService(agentConstant.DEVICE_INFO)
+		apiResponse, err := backendService.get("/api/keeper/rewards")
+		if err != nil {
+			return nil, err
+		}
+		return apiResponse, nil
+	})
 }
 func (b *BackendService) ReportPubKey() (string, error) {
 	client := httputil.NewClient(agentConstant.HTTP_SERVER_ENDPOINT, b.authToken)
